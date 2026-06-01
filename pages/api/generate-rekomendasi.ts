@@ -1,31 +1,51 @@
 import type { NextApiRequest, NextApiResponse } from 'next'
 import { createClient } from '@supabase/supabase-js'
-import fs from 'fs'
-import path from 'path'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 )
 
+const PROMPT_TEMPLATE = `Kamu adalah sistem analisis komunitas untuk platform COMENG — alat monitoring efektivitas Ranger dalam membina komunitas agen WhatsApp (WAG).
+
+Konteks bisnis:
+- Ranger adalah freelancer yang membina komunitas agen pengguna EDC Mini ATM
+- Ranger mendapat fee per transaksi agen — makin aktif agen bertransaksi, makin besar pendapatan Ranger
+- Masalah utama: Ranger cenderung fokus akuisisi agen baru, tapi kurang membina agen yang sudah ada
+- COMENG mengukur efektivitas Ranger dari aktivitas di WAG sebagai leading indicator
+
+Data komunitas:
+
+{{DATA}}
+
+Berdasarkan data di atas, berikan rekomendasi coaching yang spesifik dan actionable untuk setiap Ranger.
+
+Respond HANYA dengan JSON array berikut, tanpa penjelasan tambahan, tanpa markdown backticks:
+[
+  {
+    "ranger": "nama ranger",
+    "priority": "critical|warning|positive",
+    "title": "judul rekomendasi singkat",
+    "body": "analisis situasi dalam 2-3 kalimat, spesifik berdasarkan data",
+    "actions": ["action item 1", "action item 2", "action item 3"]
+  }
+]`
+
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
 
   try {
-    // Step 1: Fetch rangers
     console.log('Step 1: fetch rangers')
     const { data: rangers, error: rangerError } = await supabase
       .from('rangers')
       .select('id, full_name, display_name, wags(id, name), weekly_metrics(week_key, active_days, total_messages, participation_rate, status)')
       .eq('status', 'active')
 
-    console.log('Rangers count:', rangers?.length, 'Error:', rangerError?.message)
-
+    console.log('Rangers:', rangers?.length, 'Error:', rangerError?.message)
     if (!rangers || rangers.length === 0) {
       return res.status(400).json({ error: 'Belum ada data Ranger' })
     }
 
-    // Step 2: Build summaries
     console.log('Step 2: build summaries')
     const summaries = []
 
@@ -80,16 +100,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       })
     }
 
-    console.log('Summaries built:', summaries.length)
+    console.log('Summaries:', summaries.length)
 
-    // Step 3: Read prompt file
-    console.log('Step 3: read prompt file')
-    const promptPath = path.join(process.cwd(), 'lib', 'prompts', 'rekomendasi.txt')
-    console.log('Prompt path:', promptPath)
-    const template = fs.readFileSync(promptPath, 'utf-8')
-    console.log('Template loaded, length:', template.length)
-
-    // Step 4: Build prompt
+    console.log('Step 3: build prompt')
     const data = summaries.map(r => `
 Ranger: ${r.full_name} (${r.display_name})
 WAG: ${r.wag_name}
@@ -101,12 +114,11 @@ Tren aktivitas minggu ke minggu:
 ${r.metrics.map(m => `  ${m.week_key}: ${m.total_messages} pesan Ranger, ${m.active_days} hari aktif, participation ${m.participation_rate}%, status: ${m.status}`).join('\n')}
 `).join('\n---\n')
 
-    const prompt = template.replace('{{DATA}}', data)
+    const prompt = PROMPT_TEMPLATE.replace('{{DATA}}', data)
+    console.log('Prompt length:', prompt.length)
 
-    // Step 5: Call Claude API
-    console.log('Step 5: call Claude API')
+    console.log('Step 4: call Claude API')
     console.log('API Key exists:', !!process.env.ANTHROPIC_API_KEY)
-    console.log('API Key prefix:', process.env.ANTHROPIC_API_KEY?.slice(0, 10))
 
     const claudeRes = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
@@ -127,12 +139,11 @@ ${r.metrics.map(m => `  ${m.week_key}: ${m.total_messages} pesan Ranger, ${m.act
     console.log('Claude response:', JSON.stringify(claudeData).slice(0, 500))
 
     const text = claudeData.content?.[0]?.text || ''
-    console.log('Claude text length:', text.length)
-    console.log('Claude text preview:', text.slice(0, 200))
+    console.log('Text length:', text.length)
+    console.log('Text preview:', text.slice(0, 200))
 
-    // Step 6: Parse JSON
     const jsonMatch = text.match(/\[[\s\S]*\]/)
-    if (!jsonMatch) throw new Error(`Response tidak mengandung JSON valid. Raw: ${text.slice(0, 200)}`)
+    if (!jsonMatch) throw new Error(`Tidak ada JSON valid. Raw: ${text.slice(0, 200)}`)
     const recommendations = JSON.parse(jsonMatch[0])
 
     return res.status(200).json({ recommendations, summaries_count: summaries.length })
