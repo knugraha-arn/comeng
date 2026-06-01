@@ -1,8 +1,8 @@
-import { createClient } from '@/lib/supabase'
+import Image from 'next/image'
+import { supabase } from '@/lib/supabase'
 
 export default function LoginPage() {
   const handleLogin = async () => {
-    const supabase = createClient()
     await supabase.auth.signInWithOAuth({
       provider: 'google',
       options: {
@@ -30,10 +30,15 @@ export default function LoginPage() {
         maxWidth: '400px',
         width: '100%',
       }}>
-        <h1 style={{ fontSize: '24px', fontWeight: '600', marginBottom: '8px' }}>
+        <img
+          src="/arranet-logo-black.png"
+          alt="Arranet"
+          style={{ width: '140px', marginBottom: '24px' }}
+        />
+        <h1 style={{ fontSize: '18px', fontWeight: '600', marginBottom: '4px' }}>
           COMENG
         </h1>
-        <p style={{ color: '#666', marginBottom: '32px', fontSize: '14px' }}>
+        <p style={{ color: '#888', marginBottom: '32px', fontSize: '13px' }}>
           Community Engagement Monitoring Platform
         </p>
         <button
