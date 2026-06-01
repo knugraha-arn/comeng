@@ -30,3 +30,11 @@ export async function middleware(request: NextRequest) {
 
   if (session && request.nextUrl.pathname === '/login') {
     return NextResponse.redirect(new URL('/', request.url))
+  }
+
+  return response
+}
+
+export const config = {
+  matcher: ['/((?!_next/static|_next/image|favicon.ico).*)'],
+}
