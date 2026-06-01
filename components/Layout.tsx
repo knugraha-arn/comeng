@@ -46,7 +46,7 @@ export default function Layout({ children, title }: { children: React.ReactNode;
         <div style={{ padding: '20px 16px', borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
           <img src="/arranet-logo-black.png" alt="Arranet" style={{ width: '100px', filter: 'invert(1)' }} />
           <div style={{ fontSize: '10px', color: '#D1EA2C', marginTop: '6px', letterSpacing: '0.1em', fontWeight: '600' }}>
-            COMENG
+            AMARIS
           </div>
         </div>
 
