@@ -8,13 +8,23 @@ export default function AuthCallback() {
   useEffect(() => {
     const supabase = createClient()
 
-    supabase.auth.exchangeCodeForSession(window.location.href).then(({ error }) => {
-      if (error) {
-        router.push('/login')
-      } else {
-        router.push('/')
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === 'SIGNED_IN' && session) {
+        subscription.unsubscribe()
+        router.replace('/')
       }
     })
+
+    // Fallback: cek session langsung
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (session) {
+        router.replace('/')
+      }
+    })
+
+    return () => {
+      subscription.unsubscribe()
+    }
   }, [router])
 
   return (
