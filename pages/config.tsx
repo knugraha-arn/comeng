@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import Layout from '@/components/Layout'
 import { supabase } from '@/lib/supabase'
 
-type Wag = { id: string; name: string; status: string; created_at: string }
+type Wag = { id: string; name: string; description: string; status: string; created_at: string }
 type Ranger = { id: string; wag_id: string; full_name: string; display_name: string; phone_number: string; status: string }
 type User = { id: string; email: string; full_name: string; role: string; last_login_at: string }
 
