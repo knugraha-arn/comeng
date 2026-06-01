@@ -43,6 +43,7 @@ export default function RangerDetail() {
   const { id } = router.query
   const [ranger, setRanger] = useState<RangerDetail | null>(null)
   const [members, setMembers] = useState<Member[]>([])
+  const [topMembers, setTopMembers] = useState<{ display_name: string; total: number }[]>([])
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
@@ -60,15 +61,26 @@ export default function RangerDetail() {
     if (rangerData) {
       setRanger(rangerData as unknown as RangerDetail)
 
-      // Fetch members di WAG ini
       const wagId = (rangerData as unknown as RangerDetail).wags?.id
       if (wagId) {
-        const { data: memberData } = await supabase
-          .from('members')
-          .select('id, display_name, status, last_active_at, joined_at, greeted_at')
-          .eq('wag_id', wagId)
-          .order('last_active_at', { ascending: false })
-        if (memberData) setMembers(memberData as Member[])
+        const [memberRes, msgRes] = await Promise.all([
+          supabase.from('members').select('id, display_name, status, last_active_at, joined_at, greeted_at').eq('wag_id', wagId).order('last_active_at', { ascending: false }),
+          supabase.from('messages').select('sender_name').eq('wag_id', wagId).eq('sender_type', 'member'),
+        ])
+
+        if (memberRes.data) setMembers(memberRes.data as Member[])
+
+        if (msgRes.data) {
+          const counts = msgRes.data.reduce((acc: Record<string, number>, m) => {
+            acc[m.sender_name] = (acc[m.sender_name] || 0) + 1
+            return acc
+          }, {})
+          const sorted = Object.entries(counts)
+            .map(([display_name, total]) => ({ display_name, total }))
+            .sort((a, b) => b.total - a.total)
+            .slice(0, 3)
+          setTopMembers(sorted)
+        }
       }
     }
     setLoading(false)
@@ -93,10 +105,10 @@ export default function RangerDetail() {
   const maxMsg = Math.max(...sortedMetrics.map(m => m.total_messages), 1)
 
   const barMetrics = [
-    { label: 'Hari aktif', value: latest?.active_days ?? 0, max: 7, pct: ((latest?.active_days ?? 0) / 7) * 100 },
-    { label: 'Total pesan', value: latest?.total_messages ?? 0, max: 50, pct: ((latest?.total_messages ?? 0) / 50) * 100 },
-    { label: 'Proactive posts', value: latest?.proactive_posts ?? 0, max: 30, pct: ((latest?.proactive_posts ?? 0) / 30) * 100 },
-    { label: 'Participation rate', value: `${latest?.participation_rate ?? 0}%`, max: 100, pct: latest?.participation_rate ?? 0 },
+    { label: 'Hari aktif', value: latest?.active_days ?? 0, pct: ((latest?.active_days ?? 0) / 7) * 100 },
+    { label: 'Total pesan', value: latest?.total_messages ?? 0, pct: ((latest?.total_messages ?? 0) / 50) * 100 },
+    { label: 'Proactive posts', value: latest?.proactive_posts ?? 0, pct: ((latest?.proactive_posts ?? 0) / 30) * 100 },
+    { label: 'Participation rate', value: `${latest?.participation_rate ?? 0}%`, pct: latest?.participation_rate ?? 0 },
   ]
 
   const dormantMembers = members.filter(m => {
@@ -192,13 +204,13 @@ export default function RangerDetail() {
         </div>
       </div>
 
-      {/* Member alerts */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
+      {/* Bottom row */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '14px' }}>
 
         {/* Dormant members */}
         <div style={{ background: '#FFFFFF', border: '1px solid #e5e5e5', borderRadius: '10px', padding: '18px' }}>
           <div style={{ fontSize: '13px', fontWeight: '500', marginBottom: '12px' }}>
-            Agen tidak aktif &gt; 14 hari
+            Tidak aktif &gt; 14 hari
             <span style={{ marginLeft: '8px', fontSize: '11px', padding: '2px 8px', borderRadius: '999px', background: dormantMembers.length > 0 ? '#FDECEA' : '#EAF3DE', color: dormantMembers.length > 0 ? '#B00020' : '#27500A' }}>
               {dormantMembers.length}
             </span>
@@ -210,7 +222,7 @@ export default function RangerDetail() {
               <div key={m.id} style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0', borderBottom: '1px solid #f5f5f5', fontSize: '12px' }}>
                 <span style={{ fontWeight: '500' }}>{m.display_name}</span>
                 <span style={{ color: '#999' }}>
-                  {m.last_active_at ? `${Math.floor((Date.now() - new Date(m.last_active_at).getTime()) / (1000 * 60 * 60 * 24))} hari lalu` : 'Belum pernah aktif'}
+                  {m.last_active_at ? `${Math.floor((Date.now() - new Date(m.last_active_at).getTime()) / (1000 * 60 * 60 * 24))} hari` : 'Belum aktif'}
                 </span>
               </div>
             ))
@@ -220,7 +232,7 @@ export default function RangerDetail() {
         {/* Ungreeted members */}
         <div style={{ background: '#FFFFFF', border: '1px solid #e5e5e5', borderRadius: '10px', padding: '18px' }}>
           <div style={{ fontSize: '13px', fontWeight: '500', marginBottom: '12px' }}>
-            Agen belum disambut
+            Belum disambut
             <span style={{ marginLeft: '8px', fontSize: '11px', padding: '2px 8px', borderRadius: '999px', background: ungretedMembers.length > 0 ? '#FFF3CD' : '#EAF3DE', color: ungretedMembers.length > 0 ? '#856404' : '#27500A' }}>
               {ungretedMembers.length}
             </span>
@@ -232,14 +244,38 @@ export default function RangerDetail() {
               <div key={m.id} style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0', borderBottom: '1px solid #f5f5f5', fontSize: '12px' }}>
                 <span style={{ fontWeight: '500' }}>{m.display_name}</span>
                 <span style={{ color: '#999' }}>
-                  {m.joined_at ? `join ${new Date(m.joined_at).toLocaleDateString('id-ID')}` : '—'}
+                  {m.joined_at ? new Date(m.joined_at).toLocaleDateString('id-ID') : '—'}
                 </span>
               </div>
             ))
           )}
-          <div style={{ fontSize: '11px', color: '#999', marginTop: '10px' }}>
-            * Deteksi onboarding otomatis belum aktif — data join dari pesan sistem WA
+        </div>
+
+        {/* Top 3 agen */}
+        <div style={{ background: '#FFFFFF', border: '1px solid #e5e5e5', borderRadius: '10px', padding: '18px' }}>
+          <div style={{ fontSize: '13px', fontWeight: '500', marginBottom: '12px' }}>
+            Top 3 agen paling aktif
+            <span style={{ marginLeft: '8px', fontSize: '11px', color: '#999', fontWeight: '400' }}>all time</span>
           </div>
+          {topMembers.length === 0 ? (
+            <div style={{ fontSize: '12px', color: '#999' }}>Belum ada data</div>
+          ) : (
+            topMembers.map((m, i) => (
+              <div key={m.display_name} style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '10px 0', borderBottom: i < topMembers.length - 1 ? '1px solid #f5f5f5' : 'none' }}>
+                <div style={{
+                  width: '22px', height: '22px', borderRadius: '50%',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  background: i === 0 ? '#D1EA2C' : i === 1 ? '#e5e5e5' : '#F8F9FB',
+                  color: i === 0 ? '#1A1F2E' : '#555',
+                  fontSize: '11px', fontWeight: '700', minWidth: '22px',
+                }}>
+                  {i + 1}
+                </div>
+                <div style={{ flex: 1, fontSize: '13px', fontWeight: '500', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{m.display_name}</div>
+                <div style={{ fontSize: '12px', color: '#999', whiteSpace: 'nowrap' }}>{m.total} pesan</div>
+              </div>
+            ))
+          )}
         </div>
       </div>
 
