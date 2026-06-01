@@ -1,5 +1,36 @@
+import { useEffect, useState } from 'react'
 import { useRouter } from 'next/router'
 import Layout from '@/components/Layout'
+import { supabase } from '@/lib/supabase'
+
+type Metric = {
+  week_key: string
+  active_days: number
+  total_messages: number
+  participation_rate: number
+  proactive_posts: number
+  dormant_actioned: number
+  avg_response_hrs: number
+  status: string
+}
+
+type RangerDetail = {
+  id: string
+  full_name: string
+  display_name: string
+  phone_number: string
+  wags: { id: string; name: string }
+  weekly_metrics: Metric[]
+}
+
+type Member = {
+  id: string
+  display_name: string
+  status: string
+  last_active_at: string
+  joined_at: string
+  greeted_at: string | null
+}
 
 const statusConfig = {
   critical: { label: 'Kritis', bg: '#FDECEA', color: '#B00020' },
@@ -7,48 +38,78 @@ const statusConfig = {
   healthy: { label: 'Sehat', bg: '#EAF3DE', color: '#27500A' },
 }
 
-const sampleData = {
-  critical: { days: 1, onboarding: 30, response: '>24j', proactive: 1, dormant: 0, status: 'critical' },
-  warning: { days: 3, onboarding: 55, response: '12j', proactive: 4, dormant: 1, status: 'warning' },
-  healthy: { days: 6, onboarding: 87, response: '3.2j', proactive: 11, dormant: 3, status: 'healthy' },
-}
-
-const weeklyTrend = [
-  { week: '12 Mei', days: 5 },
-  { week: '19 Mei', days: 4 },
-  { week: '26 Mei', days: 2 },
-  { week: '2 Jun', days: 1 },
-]
-
 export default function RangerDetail() {
   const router = useRouter()
   const { id } = router.query
-  const idNum = parseInt(id as string) || 1
+  const [ranger, setRanger] = useState<RangerDetail | null>(null)
+  const [members, setMembers] = useState<Member[]>([])
+  const [loading, setLoading] = useState(true)
 
-  const names = ['Andi','Budi','Citra','Dedi','Eka','Fajar','Gina','Hadi','Indah','Joko','Kiki','Lina','Mira','Nana','Oki','Prita','Rudi','Sari','Tono','Umar','Vivi','Wati','Yudi','Zara','Agus','Bela','Dian','Erni','Gita','Hendra','Ika','Jaya','Koko','Lia','Miko','Nina','Oscar','Putri','Raka','Sinta','Tedi','Vera','Wira','Yoga','Zahra','Bayu','Ciko','Dewi','Fandi','Gilang']
-  const statuses = ['critical','critical','warning','warning','warning','healthy','healthy','healthy','healthy','healthy']
-  const status = statuses[(idNum - 1) % statuses.length] as keyof typeof statusConfig
-  const data = sampleData[status]
+  useEffect(() => {
+    if (!id) return
+    fetchRanger(id as string)
+  }, [id])
+
+  const fetchRanger = async (rangerId: string) => {
+    const { data: rangerData } = await supabase
+      .from('rangers')
+      .select('id, full_name, display_name, phone_number, wags(id, name), weekly_metrics(week_key, active_days, total_messages, participation_rate, proactive_posts, dormant_actioned, avg_response_hrs, status)')
+      .eq('id', rangerId)
+      .single()
+
+    if (rangerData) {
+      setRanger(rangerData as unknown as RangerDetail)
+
+      // Fetch members di WAG ini
+      const wagId = (rangerData as unknown as RangerDetail).wags?.id
+      if (wagId) {
+        const { data: memberData } = await supabase
+          .from('members')
+          .select('id, display_name, status, last_active_at, joined_at, greeted_at')
+          .eq('wag_id', wagId)
+          .order('last_active_at', { ascending: false })
+        if (memberData) setMembers(memberData as Member[])
+      }
+    }
+    setLoading(false)
+  }
+
+  if (loading) return (
+    <Layout title="Detail Ranger">
+      <div style={{ color: '#999', fontSize: '13px' }}>Memuat data...</div>
+    </Layout>
+  )
+
+  if (!ranger) return (
+    <Layout title="Detail Ranger">
+      <div style={{ color: '#999', fontSize: '13px' }}>Ranger tidak ditemukan</div>
+    </Layout>
+  )
+
+  const sortedMetrics = [...(ranger.weekly_metrics || [])].sort((a, b) => a.week_key.localeCompare(b.week_key))
+  const latest = sortedMetrics[sortedMetrics.length - 1]
+  const status = (latest?.status || 'healthy') as keyof typeof statusConfig
   const s = statusConfig[status]
-  const name = `Ranger ${names[(idNum - 1) % names.length]}`
-
-  const metrics = [
-    { label: 'Hari aktif minggu ini', value: `${data.days}/7`, color: data.days <= 2 ? '#B00020' : data.days <= 4 ? '#856404' : '#27500A' },
-    { label: 'Onboarding rate', value: `${data.onboarding}%`, color: data.onboarding < 40 ? '#B00020' : data.onboarding < 70 ? '#856404' : '#27500A' },
-    { label: 'Avg respons', value: data.response, color: data.response === '>24j' ? '#B00020' : '#27500A' },
-  ]
+  const maxMsg = Math.max(...sortedMetrics.map(m => m.total_messages), 1)
 
   const barMetrics = [
-    { label: 'Hari aktif', value: data.days, max: 7, pct: (data.days / 7) * 100 },
-    { label: 'Onboarding rate', value: `${data.onboarding}%`, max: 100, pct: data.onboarding },
-    { label: 'Proactive posts', value: data.proactive, max: 20, pct: (data.proactive / 20) * 100 },
-    { label: 'Reaktivasi dormant', value: data.dormant, max: 10, pct: (data.dormant / 10) * 100 },
+    { label: 'Hari aktif', value: latest?.active_days ?? 0, max: 7, pct: ((latest?.active_days ?? 0) / 7) * 100 },
+    { label: 'Total pesan', value: latest?.total_messages ?? 0, max: 50, pct: ((latest?.total_messages ?? 0) / 50) * 100 },
+    { label: 'Proactive posts', value: latest?.proactive_posts ?? 0, max: 30, pct: ((latest?.proactive_posts ?? 0) / 30) * 100 },
+    { label: 'Participation rate', value: `${latest?.participation_rate ?? 0}%`, max: 100, pct: latest?.participation_rate ?? 0 },
   ]
 
-  const maxDays = Math.max(...weeklyTrend.map(w => w.days))
+  const dormantMembers = members.filter(m => {
+    if (!m.last_active_at) return true
+    const daysSince = (Date.now() - new Date(m.last_active_at).getTime()) / (1000 * 60 * 60 * 24)
+    return daysSince > 14
+  })
+
+  const ungretedMembers = members.filter(m => !m.greeted_at)
 
   return (
-    <Layout title={name}>
+    <Layout title={ranger.full_name}>
+
       {/* Back */}
       <div
         onClick={() => router.push('/ranger')}
@@ -65,63 +126,123 @@ export default function RangerDetail() {
           display: 'flex', alignItems: 'center', justifyContent: 'center',
           fontSize: '16px', fontWeight: '600',
         }}>
-          {name.split(' ').map(w => w[0]).join('').slice(0, 2)}
+          {ranger.full_name.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase()}
         </div>
         <div>
-          <div style={{ fontSize: '18px', fontWeight: '600' }}>{name}</div>
-          <div style={{ fontSize: '12px', color: '#999' }}>WAG Jakarta · {Math.floor(Math.random() * 20) + 10} agen</div>
+          <div style={{ fontSize: '18px', fontWeight: '600' }}>{ranger.full_name}</div>
+          <div style={{ fontSize: '12px', color: '#999', marginTop: '2px' }}>
+            {ranger.wags?.name} &nbsp;·&nbsp; {members.length} agen &nbsp;·&nbsp; display: {ranger.display_name}
+          </div>
         </div>
-        <span style={{ marginLeft: 'auto', fontSize: '12px', padding: '4px 12px', borderRadius: '999px', background: s.bg, color: s.color, fontWeight: '500' }}>
+        <span style={{ marginLeft: 'auto', fontSize: '12px', padding: '4px 14px', borderRadius: '999px', background: s.bg, color: s.color, fontWeight: '500' }}>
           {s.label}
         </span>
       </div>
 
       {/* Metric cards */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '12px', marginBottom: '20px' }}>
-        {metrics.map((m) => (
+        {[
+          { label: 'Hari aktif (minggu ini)', value: `${latest?.active_days ?? 0}/7`, color: (latest?.active_days ?? 0) <= 2 ? '#B00020' : (latest?.active_days ?? 0) <= 4 ? '#856404' : '#27500A' },
+          { label: 'Total pesan (minggu ini)', value: latest?.total_messages ?? 0, color: (latest?.total_messages ?? 0) < 3 ? '#B00020' : (latest?.total_messages ?? 0) < 10 ? '#856404' : '#27500A' },
+          { label: 'Participation rate', value: `${latest?.participation_rate ?? 0}%`, color: (latest?.participation_rate ?? 0) < 40 ? '#B00020' : '#27500A' },
+        ].map(m => (
           <div key={m.label} style={{ background: '#FFFFFF', border: '1px solid #e5e5e5', borderRadius: '10px', padding: '16px' }}>
             <div style={{ fontSize: '11px', color: '#999', marginBottom: '6px' }}>{m.label}</div>
-            <div style={{ fontSize: '24px', fontWeight: '600', color: m.color }}>{m.value}</div>
+            <div style={{ fontSize: '26px', fontWeight: '600', color: m.color }}>{m.value}</div>
           </div>
         ))}
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px', marginBottom: '14px' }}>
+
         {/* Bar metrics */}
         <div style={{ background: '#FFFFFF', border: '1px solid #e5e5e5', borderRadius: '10px', padding: '18px' }}>
-          <div style={{ fontSize: '13px', fontWeight: '500', marginBottom: '14px' }}>Metrik minggu ini</div>
-          {barMetrics.map((m) => (
+          <div style={{ fontSize: '13px', fontWeight: '500', marginBottom: '14px' }}>Metrik minggu terakhir</div>
+          {barMetrics.map(m => (
             <div key={m.label} style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '12px' }}>
               <div style={{ fontSize: '12px', color: '#999', width: '120px', flexShrink: 0 }}>{m.label}</div>
               <div style={{ flex: 1, height: '6px', background: '#F8F9FB', borderRadius: '3px', overflow: 'hidden' }}>
-                <div style={{ width: `${m.pct}%`, height: '100%', background: m.pct < 30 ? '#B00020' : m.pct < 60 ? '#FFC128' : '#0344D8', borderRadius: '3px' }} />
+                <div style={{ width: `${Math.min(m.pct, 100)}%`, height: '100%', background: m.pct < 30 ? '#E24B4A' : m.pct < 60 ? '#FFC128' : '#0344D8', borderRadius: '3px' }} />
               </div>
-              <div style={{ fontSize: '12px', fontWeight: '500', width: '32px', textAlign: 'right' }}>{m.value}</div>
+              <div style={{ fontSize: '12px', fontWeight: '500', width: '36px', textAlign: 'right' }}>{m.value}</div>
             </div>
           ))}
         </div>
 
-        {/* Weekly trend chart */}
+        {/* Weekly trend */}
         <div style={{ background: '#FFFFFF', border: '1px solid #e5e5e5', borderRadius: '10px', padding: '18px' }}>
-          <div style={{ fontSize: '13px', fontWeight: '500', marginBottom: '14px' }}>Tren 4 minggu — hari aktif</div>
-          <div style={{ display: 'flex', alignItems: 'flex-end', gap: '12px', height: '80px' }}>
-            {weeklyTrend.map((w) => {
-              const pct = (w.days / maxDays) * 100
-              const barColor = w.days <= 2 ? '#B00020' : w.days <= 4 ? '#FFC128' : '#0344D8'
-              return (
-                <div key={w.week} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px', height: '100%', justifyContent: 'flex-end' }}>
-                  <div style={{ fontSize: '11px', fontWeight: '500', color: barColor }}>{w.days}</div>
-                  <div style={{ width: '100%', height: `${pct}%`, background: barColor, borderRadius: '4px 4px 0 0', minHeight: '4px' }} />
-                  <div style={{ fontSize: '10px', color: '#999', whiteSpace: 'nowrap' }}>{w.week}</div>
-                </div>
-              )
-            })}
+          <div style={{ fontSize: '13px', fontWeight: '500', marginBottom: '14px' }}>Tren total pesan — {sortedMetrics.length} minggu</div>
+          {sortedMetrics.length === 0 ? (
+            <div style={{ fontSize: '12px', color: '#999' }}>Belum ada data</div>
+          ) : (
+            <div style={{ display: 'flex', alignItems: 'flex-end', gap: '8px', height: '80px' }}>
+              {sortedMetrics.map(m => {
+                const pct = (m.total_messages / maxMsg) * 100
+                const barColor = m.status === 'critical' ? '#E24B4A' : m.status === 'warning' ? '#FFC128' : '#0344D8'
+                return (
+                  <div key={m.week_key} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '3px', height: '100%', justifyContent: 'flex-end' }}>
+                    <div style={{ fontSize: '10px', fontWeight: '500', color: barColor }}>{m.total_messages}</div>
+                    <div style={{ width: '100%', height: `${Math.max(pct, 5)}%`, background: barColor, borderRadius: '3px 3px 0 0' }} />
+                    <div style={{ fontSize: '9px', color: '#999', whiteSpace: 'nowrap' }}>{m.week_key.replace('2026-', '')}</div>
+                  </div>
+                )
+              })}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Member alerts */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
+
+        {/* Dormant members */}
+        <div style={{ background: '#FFFFFF', border: '1px solid #e5e5e5', borderRadius: '10px', padding: '18px' }}>
+          <div style={{ fontSize: '13px', fontWeight: '500', marginBottom: '12px' }}>
+            Agen tidak aktif &gt; 14 hari
+            <span style={{ marginLeft: '8px', fontSize: '11px', padding: '2px 8px', borderRadius: '999px', background: dormantMembers.length > 0 ? '#FDECEA' : '#EAF3DE', color: dormantMembers.length > 0 ? '#B00020' : '#27500A' }}>
+              {dormantMembers.length}
+            </span>
           </div>
-          <div style={{ fontSize: '11px', color: '#999', marginTop: '10px', textAlign: 'center' }}>
-            {data.days <= 2 ? 'Tren menurun — perlu perhatian segera' : data.days <= 4 ? 'Tren tidak konsisten' : 'Konsisten aktif'}
+          {dormantMembers.length === 0 ? (
+            <div style={{ fontSize: '12px', color: '#999' }}>Semua agen aktif 👍</div>
+          ) : (
+            dormantMembers.slice(0, 5).map(m => (
+              <div key={m.id} style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0', borderBottom: '1px solid #f5f5f5', fontSize: '12px' }}>
+                <span style={{ fontWeight: '500' }}>{m.display_name}</span>
+                <span style={{ color: '#999' }}>
+                  {m.last_active_at ? `${Math.floor((Date.now() - new Date(m.last_active_at).getTime()) / (1000 * 60 * 60 * 24))} hari lalu` : 'Belum pernah aktif'}
+                </span>
+              </div>
+            ))
+          )}
+        </div>
+
+        {/* Ungreeted members */}
+        <div style={{ background: '#FFFFFF', border: '1px solid #e5e5e5', borderRadius: '10px', padding: '18px' }}>
+          <div style={{ fontSize: '13px', fontWeight: '500', marginBottom: '12px' }}>
+            Agen belum disambut
+            <span style={{ marginLeft: '8px', fontSize: '11px', padding: '2px 8px', borderRadius: '999px', background: ungretedMembers.length > 0 ? '#FFF3CD' : '#EAF3DE', color: ungretedMembers.length > 0 ? '#856404' : '#27500A' }}>
+              {ungretedMembers.length}
+            </span>
+          </div>
+          {ungretedMembers.length === 0 ? (
+            <div style={{ fontSize: '12px', color: '#999' }}>Semua agen sudah disambut 👍</div>
+          ) : (
+            ungretedMembers.slice(0, 5).map(m => (
+              <div key={m.id} style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0', borderBottom: '1px solid #f5f5f5', fontSize: '12px' }}>
+                <span style={{ fontWeight: '500' }}>{m.display_name}</span>
+                <span style={{ color: '#999' }}>
+                  {m.joined_at ? `join ${new Date(m.joined_at).toLocaleDateString('id-ID')}` : '—'}
+                </span>
+              </div>
+            ))
+          )}
+          <div style={{ fontSize: '11px', color: '#999', marginTop: '10px' }}>
+            * Deteksi onboarding otomatis belum aktif — data join dari pesan sistem WA
           </div>
         </div>
       </div>
+
     </Layout>
   )
 }
