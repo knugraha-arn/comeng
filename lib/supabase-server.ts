@@ -14,7 +14,7 @@ export function createServerSideClient(req: IncomingMessage, res: ServerResponse
             return { name: name.trim(), value: rest.join('=').trim() }
           })
         },
-        setAll(cookiesToSet) {
+        setAll(cookiesToSet: { name: string; value: string; options?: Record<string, unknown> }[]) {
           const existing = res.getHeader('Set-Cookie')
           const existingArray = existing
             ? Array.isArray(existing)
