@@ -3,7 +3,16 @@ import Layout from '@/components/Layout'
 import { supabase } from '@/lib/supabase'
 
 type Wag = { id: string; name: string }
-type UploadRecord = { id: string; filename: string; file_size_kb: number; messages_parsed: number; messages_skipped: number; status: string; uploaded_at: string; wags: { name: string } }
+type UploadRecord = {
+  id: string
+  filename: string
+  file_size_kb: number
+  messages_parsed: number
+  messages_skipped: number
+  status: string
+  uploaded_at: string
+  wags: { name: string }
+}
 
 export default function UploadPage() {
   const [wags, setWags] = useState<Wag[]>([])
@@ -60,46 +69,69 @@ export default function UploadPage() {
     if (!selectedWagId) { setMessage('Pilih WAG tujuan terlebih dahulu'); return }
 
     setStatus('uploading')
-    setMessage('')
+    setMessage('Mengupload file...')
 
     try {
+      // 1. Upload ke Supabase Storage
       const filename = `${selectedWagId}/${Date.now()}_${file.name}`
       const { error: storageError } = await supabase.storage
         .from('wag-exports')
         .upload(filename, file)
       if (storageError) throw storageError
 
+      // 2. Dapatkan session
       const { data: { session } } = await supabase.auth.getSession()
       if (!session) throw new Error('Session tidak ditemukan')
 
-      const { error: dbError } = await supabase.from('uploads').insert({
-        wag_id: selectedWagId,
-        uploaded_by: session.user.id,
-        filename: file.name,
-        file_path: filename,
-        file_size_kb: Math.round(file.size / 1024),
-        status: 'pending',
-      })
+      // 3. Simpan record upload
+      const { data: uploadData, error: dbError } = await supabase
+        .from('uploads')
+        .insert({
+          wag_id: selectedWagId,
+          uploaded_by: session.user.id,
+          filename: file.name,
+          file_path: filename,
+          file_size_kb: Math.round(file.size / 1024),
+          status: 'pending',
+        })
+        .select('id')
+        .single()
       if (dbError) throw dbError
 
+      setMessage('File terupload — memproses pesan...')
+
+      // 4. Panggil parser
+      const parseRes = await fetch('/api/parse-upload', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ upload_id: uploadData.id }),
+      })
+
+      const parseResult = await parseRes.json()
+
+      if (!parseRes.ok) throw new Error(parseResult.error || 'Gagal memproses file')
+
       setStatus('success')
-      setMessage('File berhasil diupload. Sistem akan memproses pesan baru segera.')
+      setMessage(`Selesai — ${parseResult.messages_parsed} pesan baru, ${parseResult.messages_skipped} dilewati.`)
       setFile(null)
       setSelectedWagId('')
       fetchHistory()
 
     } catch (err: unknown) {
       setStatus('error')
-      setMessage(err instanceof Error ? err.message : 'Terjadi kesalahan saat upload')
+      setMessage(err instanceof Error ? err.message : 'Terjadi kesalahan')
     }
   }
 
-  const statusColor = { idle: '', uploading: '#856404', success: '#27500A', error: '#B00020' }
-  const statusBg = { idle: '', uploading: '#FFF3CD', success: '#EAF3DE', error: '#FDECEA' }
+  const statusColor: Record<string, string> = {
+    idle: '#856404', uploading: '#856404', success: '#27500A', error: '#B00020'
+  }
+  const statusBg: Record<string, string> = {
+    idle: '#FFF3CD', uploading: '#FFF3CD', success: '#EAF3DE', error: '#FDECEA'
+  }
 
   return (
     <Layout title="Upload WAG Mingguan">
-
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', alignItems: 'start' }}>
 
         {/* Upload form */}
@@ -161,18 +193,24 @@ export default function UploadPage() {
               onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFile(f) }}
               style={{ display: 'none' }}
             />
-            <div style={{ fontSize: '28px', marginBottom: '8px' }}>{dragging ? '📂' : file ? '📄' : '📁'}</div>
+            <div style={{ fontSize: '28px', marginBottom: '8px' }}>
+              {dragging ? '📂' : file ? '📄' : '📁'}
+            </div>
             {file ? (
               <>
                 <div style={{ fontSize: '13px', fontWeight: '500', color: '#0344D8' }}>{file.name}</div>
-                <div style={{ fontSize: '11px', color: '#999', marginTop: '4px' }}>{Math.round(file.size / 1024)} KB · Klik untuk ganti file</div>
+                <div style={{ fontSize: '11px', color: '#999', marginTop: '4px' }}>
+                  {Math.round(file.size / 1024)} KB · Klik untuk ganti file
+                </div>
               </>
             ) : (
               <>
                 <div style={{ fontSize: '13px', fontWeight: '500', marginBottom: '4px' }}>
                   {dragging ? 'Lepaskan file di sini' : 'Drag & drop atau klik untuk pilih file'}
                 </div>
-                <div style={{ fontSize: '11px', color: '#999' }}>Export WhatsApp (.txt) tanpa media · Maks 10MB</div>
+                <div style={{ fontSize: '11px', color: '#999' }}>
+                  Export WhatsApp (.txt) tanpa media · Maks 10MB
+                </div>
               </>
             )}
           </div>
@@ -184,8 +222,8 @@ export default function UploadPage() {
               borderRadius: '8px',
               fontSize: '12px',
               marginBottom: '16px',
-              background: statusBg[status] || '#FFF3CD',
-              color: statusColor[status] || '#856404',
+              background: statusBg[status],
+              color: statusColor[status],
             }}>
               {message}
             </div>
@@ -207,7 +245,7 @@ export default function UploadPage() {
               cursor: status === 'uploading' ? 'not-allowed' : 'pointer',
             }}
           >
-            {status === 'uploading' ? 'Mengupload...' : 'Upload File'}
+            {status === 'uploading' ? 'Memproses...' : 'Upload & Proses File'}
           </button>
         </div>
 
@@ -230,20 +268,25 @@ export default function UploadPage() {
             ))}
           </div>
 
-          {/* Riwayat upload */}
+          {/* Riwayat */}
           <div style={{ background: '#FFFFFF', border: '1px solid #e5e5e5', borderRadius: '10px', overflow: 'hidden' }}>
-            <div style={{ padding: '14px 16px', borderBottom: '1px solid #e5e5e5', fontSize: '13px', fontWeight: '500' }}>Riwayat upload</div>
+            <div style={{ padding: '14px 16px', borderBottom: '1px solid #e5e5e5', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span style={{ fontSize: '13px', fontWeight: '500' }}>Riwayat upload</span>
+              <button onClick={fetchHistory} style={{ fontSize: '11px', color: '#0344D8', background: 'none', border: 'none', cursor: 'pointer' }}>Refresh</button>
+            </div>
             {history.length === 0 ? (
               <div style={{ padding: '20px', textAlign: 'center', fontSize: '12px', color: '#999' }}>Belum ada upload</div>
             ) : (
               history.map(h => (
                 <div key={h.id} style={{ padding: '10px 16px', borderBottom: '1px solid #f5f5f5', fontSize: '12px' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <div style={{ fontWeight: '500', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '180px' }}>{h.filename}</div>
+                    <div style={{ fontWeight: '500', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '180px' }}>
+                      {h.filename}
+                    </div>
                     <span style={{
                       fontSize: '10px', padding: '2px 8px', borderRadius: '999px',
-                      background: h.status === 'done' ? '#EAF3DE' : h.status === 'error' ? '#FDECEA' : '#FFF3CD',
-                      color: h.status === 'done' ? '#27500A' : h.status === 'error' ? '#B00020' : '#856404',
+                      background: h.status === 'done' ? '#EAF3DE' : h.status === 'error' ? '#FDECEA' : h.status === 'processing' ? '#E8F0FE' : '#FFF3CD',
+                      color: h.status === 'done' ? '#27500A' : h.status === 'error' ? '#B00020' : h.status === 'processing' ? '#0344D8' : '#856404',
                     }}>
                       {h.status === 'done' ? 'Selesai' : h.status === 'error' ? 'Error' : h.status === 'processing' ? 'Diproses' : 'Pending'}
                     </span>
@@ -255,6 +298,9 @@ export default function UploadPage() {
                     <div style={{ color: '#27500A', marginTop: '2px' }}>
                       {h.messages_parsed} pesan baru · {h.messages_skipped} dilewati
                     </div>
+                  )}
+                  {h.status === 'error' && (
+                    <div style={{ color: '#B00020', marginTop: '2px' }}>Gagal diproses</div>
                   )}
                 </div>
               ))
