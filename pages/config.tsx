@@ -323,7 +323,7 @@ export default function ConfigPage() {
                     <td style={{ padding: '12px 14px', fontWeight: '500' }}>{u.email}</td>
                     <td style={{ padding: '12px 14px', color: '#555' }}>{u.full_name || '—'}</td>
                     <td style={{ padding: '12px 14px' }}>
-                      <span style={{ fontSize: '11px', padding: '3px 10px', borderRadius: '999px', background: u.role === 'admin' ? '#E8F0FE' : '#F8F9FB', color: u.role === 'admin' ? '#0344D8' : '#555'
+                      <span style={{ fontSize: '11px', padding: '3px 10px', borderRadius: '999px', background: u.role === 'admin' ? '#E8F0FE' : '#F8F9FB', color: u.role === 'admin' ? '#0344D8' : '#555' }}>
                         {u.role}
                       </span>
                     </td>
