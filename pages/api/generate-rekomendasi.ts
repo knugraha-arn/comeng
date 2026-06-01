@@ -109,6 +109,8 @@ ${r.metrics.map(m => `  ${m.week_key}: ${m.total_messages} pesan Ranger, ${m.act
     })
 
     const claudeData = await claudeRes.json()
+    console.log('Claude status:', claudeRes.status)
+    console.log('Claude response:', JSON.stringify(claudeData).slice(0, 500))
     const text = claudeData.content?.[0]?.text || ''
 
     // Ekstrak JSON dari response
