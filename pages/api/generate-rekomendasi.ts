@@ -12,16 +12,21 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
 
   try {
-    // 1. Ambil data semua Ranger aktif
-    const { data: rangers } = await supabase
+    // Step 1: Fetch rangers
+    console.log('Step 1: fetch rangers')
+    const { data: rangers, error: rangerError } = await supabase
       .from('rangers')
       .select('id, full_name, display_name, wags(id, name), weekly_metrics(week_key, active_days, total_messages, participation_rate, status)')
       .eq('status', 'active')
+
+    console.log('Rangers count:', rangers?.length, 'Error:', rangerError?.message)
 
     if (!rangers || rangers.length === 0) {
       return res.status(400).json({ error: 'Belum ada data Ranger' })
     }
 
+    // Step 2: Build summaries
+    console.log('Step 2: build summaries')
     const summaries = []
 
     for (const r of rangers) {
@@ -75,11 +80,16 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       })
     }
 
-    // 2. Baca prompt template dari file
-    const promptPath = path.join(process.cwd(), 'lib', 'prompts', 'rekomendasi.txt')
-    const template = fs.readFileSync(promptPath, 'utf-8')
+    console.log('Summaries built:', summaries.length)
 
-    // 3. Inject data ke template
+    // Step 3: Read prompt file
+    console.log('Step 3: read prompt file')
+    const promptPath = path.join(process.cwd(), 'lib', 'prompts', 'rekomendasi.txt')
+    console.log('Prompt path:', promptPath)
+    const template = fs.readFileSync(promptPath, 'utf-8')
+    console.log('Template loaded, length:', template.length)
+
+    // Step 4: Build prompt
     const data = summaries.map(r => `
 Ranger: ${r.full_name} (${r.display_name})
 WAG: ${r.wag_name}
@@ -93,13 +103,17 @@ ${r.metrics.map(m => `  ${m.week_key}: ${m.total_messages} pesan Ranger, ${m.act
 
     const prompt = template.replace('{{DATA}}', data)
 
-    // 4. Panggil Claude API
+    // Step 5: Call Claude API
+    console.log('Step 5: call Claude API')
+    console.log('API Key exists:', !!process.env.ANTHROPIC_API_KEY)
+    console.log('API Key prefix:', process.env.ANTHROPIC_API_KEY?.slice(0, 10))
+
     const claudeRes = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
-     headers: {
-      'Content-Type': 'application/json',
-      'x-api-key': process.env.ANTHROPIC_API_KEY!,
-      'anthropic-version': '2023-06-01',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': process.env.ANTHROPIC_API_KEY!,
+        'anthropic-version': '2023-06-01',
       },
       body: JSON.stringify({
         model: 'claude-sonnet-4-20250514',
@@ -108,12 +122,15 @@ ${r.metrics.map(m => `  ${m.week_key}: ${m.total_messages} pesan Ranger, ${m.act
       }),
     })
 
-    const claudeData = await claudeRes.json()
     console.log('Claude status:', claudeRes.status)
+    const claudeData = await claudeRes.json()
     console.log('Claude response:', JSON.stringify(claudeData).slice(0, 500))
-    const text = claudeData.content?.[0]?.text || ''
 
-    // Ekstrak JSON dari response
+    const text = claudeData.content?.[0]?.text || ''
+    console.log('Claude text length:', text.length)
+    console.log('Claude text preview:', text.slice(0, 200))
+
+    // Step 6: Parse JSON
     const jsonMatch = text.match(/\[[\s\S]*\]/)
     if (!jsonMatch) throw new Error(`Response tidak mengandung JSON valid. Raw: ${text.slice(0, 200)}`)
     const recommendations = JSON.parse(jsonMatch[0])
@@ -121,6 +138,7 @@ ${r.metrics.map(m => `  ${m.week_key}: ${m.total_messages} pesan Ranger, ${m.act
     return res.status(200).json({ recommendations, summaries_count: summaries.length })
 
   } catch (err: unknown) {
+    console.error('Error:', err instanceof Error ? err.message : err)
     return res.status(500).json({ error: err instanceof Error ? err.message : 'Unknown error' })
   }
 }
