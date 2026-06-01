@@ -4,6 +4,7 @@ import { createClient } from '@supabase/supabase-js'
 export const config = {
   maxDuration: 30,
 }
+
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.SUPABASE_SERVICE_ROLE_KEY!
@@ -38,18 +39,18 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
 
   try {
-    console.log('Step 1: fetch rangers')
+    // Step 1: Fetch rangers
     const { data: rangers, error: rangerError } = await supabase
       .from('rangers')
       .select('id, full_name, display_name, wags(id, name), weekly_metrics(week_key, active_days, total_messages, participation_rate, status)')
       .eq('status', 'active')
 
-    console.log('Rangers:', rangers?.length, 'Error:', rangerError?.message)
+    if (rangerError) throw new Error(`Fetch rangers error: ${rangerError.message}`)
     if (!rangers || rangers.length === 0) {
       return res.status(400).json({ error: 'Belum ada data Ranger' })
     }
 
-    console.log('Step 2: build summaries')
+    // Step 2: Build summaries
     const summaries = []
 
     for (const r of rangers) {
@@ -103,9 +104,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       })
     }
 
-    console.log('Summaries:', summaries.length)
-
-    console.log('Step 3: build prompt')
+    // Step 3: Build prompt
     const data = summaries.map(r => `
 Ranger: ${r.full_name} (${r.display_name})
 WAG: ${r.wag_name}
@@ -118,11 +117,8 @@ ${r.metrics.map(m => `  ${m.week_key}: ${m.total_messages} pesan Ranger, ${m.act
 `).join('\n---\n')
 
     const prompt = PROMPT_TEMPLATE.replace('{{DATA}}', data)
-    console.log('Prompt length:', prompt.length)
 
-    console.log('Step 4: call Claude API')
-    console.log('API Key exists:', !!process.env.ANTHROPIC_API_KEY)
-
+    // Step 4: Call Claude API
     const claudeRes = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: {
@@ -137,19 +133,28 @@ ${r.metrics.map(m => `  ${m.week_key}: ${m.total_messages} pesan Ranger, ${m.act
       }),
     })
 
-    console.log('Claude status:', claudeRes.status)
     const claudeData = await claudeRes.json()
-    console.log('Claude response:', JSON.stringify(claudeData).slice(0, 500))
-
     const text = claudeData.content?.[0]?.text || ''
-    console.log('Text length:', text.length)
-    console.log('Text preview:', text.slice(0, 200))
 
     const jsonMatch = text.match(/\[[\s\S]*\]/)
-    if (!jsonMatch) throw new Error(`Tidak ada JSON valid. Raw: ${text.slice(0, 200)}`)
+    if (!jsonMatch) throw new Error(`Response tidak mengandung JSON valid. Raw: ${text.slice(0, 200)}`)
     const recommendations = JSON.parse(jsonMatch[0])
 
-    return res.status(200).json({ recommendations, summaries_count: summaries.length })
+    // Step 5: Simpan ke database
+    const weekKey = new Date().toISOString().slice(0, 10)
+    const userId = req.headers['x-user-id'] as string | undefined
+
+    await supabase.from('recommendations').insert({
+      week_key: weekKey,
+      generated_by: userId || null,
+      items: recommendations,
+    })
+
+    return res.status(200).json({
+      recommendations,
+      summaries_count: summaries.length,
+      saved: true,
+    })
 
   } catch (err: unknown) {
     console.error('Error:', err instanceof Error ? err.message : err)
