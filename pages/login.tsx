@@ -36,10 +36,10 @@ export default function LoginPage() {
           style={{ width: '140px', marginBottom: '24px' }}
         />
         <h1 style={{ fontSize: '18px', fontWeight: '600', marginBottom: '4px' }}>
-          COMENG
+          AMARIS
         </h1>
         <p style={{ color: '#888', marginBottom: '32px', fontSize: '13px' }}>
-          Community Engagement Monitoring Platform
+          AI-driven Monitoring, Action, Retention, and Intelligent Smart Engagement
         </p>
         <button
           onClick={handleLogin}
