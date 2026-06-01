@@ -5,6 +5,7 @@ import { supabase } from '@/lib/supabase'
 type Wag = { id: string; name: string; description: string; status: string; created_at: string }
 type Ranger = { id: string; wag_id: string; full_name: string; display_name: string; phone_number: string; status: string }
 type User = { id: string; email: string; full_name: string; role: string; last_login_at: string }
+type Observer = { id: string; wag_id: string; display_name: string; note: string; created_at: string }
 
 export default function ConfigPage() {
   const [tab, setTab] = useState<'wag' | 'ranger' | 'users'>('wag')
@@ -13,6 +14,11 @@ export default function ConfigPage() {
   const [users, setUsers] = useState<User[]>([])
   const [showWagForm, setShowWagForm] = useState(false)
   const [showRangerForm, setShowRangerForm] = useState(false)
+  const [observers, setObservers] = useState<Observer[]>([])
+  const [showObserverForm, setShowObserverForm] = useState(false)
+  const [observerDisplayName, setObserverDisplayName] = useState('')
+  const [observerNote, setObserverNote] = useState('')
+  const [observerWagId, setObserverWagId] = useState('')
   const [loading, setLoading] = useState(false)
   const [message, setMessage] = useState({ text: '', type: '' })
 
