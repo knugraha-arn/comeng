@@ -1,22 +1,33 @@
-import { GetServerSideProps } from 'next'
-import { createServerSideClient } from '@/lib/supabase-server'
-
-export const getServerSideProps: GetServerSideProps = async ({ req, res, query }) => {
-  const code = query.code as string
-
-  if (code) {
-    const supabase = createServerSideClient(req, res)
-    await supabase.auth.exchangeCodeForSession(code)
-  }
-
-  return {
-    redirect: {
-      destination: '/',
-      permanent: false,
-    },
-  }
-}
+import { useEffect } from 'react'
+import { useRouter } from 'next/router'
+import { supabase } from '@/lib/supabase'
 
 export default function AuthCallback() {
-  return null
+  const router = useRouter()
+
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (session) {
+        router.replace('/')
+      } else {
+        supabase.auth.onAuthStateChange((event, session) => {
+          if (session) {
+            router.replace('/')
+          }
+        })
+      }
+    })
+  }, [router])
+
+  return (
+    <main style={{
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      minHeight: '100vh',
+      fontFamily: 'system-ui, sans-serif',
+    }}>
+      <p style={{ color: '#666' }}>Memproses login...</p>
+    </main>
+  )
 }
