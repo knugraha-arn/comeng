@@ -8,43 +8,40 @@ type User = { id: string; email: string; full_name: string; role: string; last_l
 type Observer = { id: string; wag_id: string; display_name: string; note: string; created_at: string }
 
 export default function ConfigPage() {
-  const [tab, setTab] = useState<'wag' | 'ranger' | 'users'>('wag')
+  const [tab, setTab] = useState<'wag' | 'ranger' | 'users' | 'observer'>('wag')
   const [wags, setWags] = useState<Wag[]>([])
   const [rangers, setRangers] = useState<Ranger[]>([])
   const [users, setUsers] = useState<User[]>([])
+  const [observers, setObservers] = useState<Observer[]>([])
   const [showWagForm, setShowWagForm] = useState(false)
   const [showRangerForm, setShowRangerForm] = useState(false)
-  const [observers, setObservers] = useState<Observer[]>([])
   const [showObserverForm, setShowObserverForm] = useState(false)
-  const [observerDisplayName, setObserverDisplayName] = useState('')
-  const [observerNote, setObserverNote] = useState('')
-  const [observerWagId, setObserverWagId] = useState('')
   const [loading, setLoading] = useState(false)
   const [message, setMessage] = useState({ text: '', type: '' })
 
-  // WAG form
   const [wagName, setWagName] = useState('')
   const [wagDesc, setWagDesc] = useState('')
-
-  // Ranger form
   const [rangerFullName, setRangerFullName] = useState('')
   const [rangerDisplayName, setRangerDisplayName] = useState('')
   const [rangerPhone, setRangerPhone] = useState('')
   const [rangerWagId, setRangerWagId] = useState('')
+  const [observerDisplayName, setObserverDisplayName] = useState('')
+  const [observerNote, setObserverNote] = useState('')
+  const [observerWagId, setObserverWagId] = useState('')
 
-  useEffect(() => {
-    fetchAll()
-  }, [])
+  useEffect(() => { fetchAll() }, [])
 
   const fetchAll = async () => {
-    const [wagRes, rangerRes, userRes] = await Promise.all([
+    const [wagRes, rangerRes, userRes, observerRes] = await Promise.all([
       supabase.from('wags').select('*').order('created_at', { ascending: false }),
       supabase.from('rangers').select('*').order('created_at', { ascending: false }),
       supabase.from('users').select('*').order('created_at', { ascending: false }),
+      supabase.from('observers').select('*').order('created_at', { ascending: false }),
     ])
     if (wagRes.data) setWags(wagRes.data)
     if (rangerRes.data) setRangers(rangerRes.data)
     if (userRes.data) setUsers(userRes.data)
+    if (observerRes.data) setObservers(observerRes.data)
   }
 
   const showMsg = (text: string, type: string) => {
@@ -59,13 +56,12 @@ export default function ConfigPage() {
     setLoading(false)
     if (error) { showMsg(error.message, 'error'); return }
     showMsg('WAG berhasil ditambahkan', 'success')
-    setWagName(''); setWagDesc(''); setShowWagForm(false)
-    fetchAll()
+    setWagName(''); setWagDesc(''); setShowWagForm(false); fetchAll()
   }
 
   const handleAddRanger = async () => {
     if (!rangerFullName.trim()) { showMsg('Nama lengkap wajib diisi', 'error'); return }
-    if (!rangerDisplayName.trim()) { showMsg('Nama display di WAG wajib diisi', 'error'); return }
+    if (!rangerDisplayName.trim()) { showMsg('Nama display wajib diisi', 'error'); return }
     if (!rangerPhone.trim()) { showMsg('No HP wajib diisi', 'error'); return }
     if (!rangerWagId) { showMsg('Pilih WAG terlebih dahulu', 'error'); return }
     setLoading(true)
@@ -80,33 +76,47 @@ export default function ConfigPage() {
     if (error) { showMsg(error.message, 'error'); return }
     showMsg('Ranger berhasil ditambahkan', 'success')
     setRangerFullName(''); setRangerDisplayName(''); setRangerPhone(''); setRangerWagId('')
-    setShowRangerForm(false)
-    fetchAll()
+    setShowRangerForm(false); fetchAll()
+  }
+
+  const handleAddObserver = async () => {
+    if (!observerDisplayName.trim()) { showMsg('Nama display wajib diisi', 'error'); return }
+    if (!observerWagId) { showMsg('Pilih WAG terlebih dahulu', 'error'); return }
+    setLoading(true)
+    const { error } = await supabase.from('observers').insert({
+      display_name: observerDisplayName.trim(),
+      note: observerNote.trim(),
+      wag_id: observerWagId,
+    })
+    setLoading(false)
+    if (error) { showMsg(error.message, 'error'); return }
+    showMsg('Observer berhasil ditambahkan', 'success')
+    setObserverDisplayName(''); setObserverNote(''); setObserverWagId('')
+    setShowObserverForm(false); fetchAll()
   }
 
   const handleDeactivateWag = async (id: string) => {
-    await supabase.from('wags').update({ status: 'inactive' }).eq('id', id)
-    fetchAll()
+    await supabase.from('wags').update({ status: 'inactive' }).eq('id', id); fetchAll()
   }
 
   const handleDeactivateRanger = async (id: string) => {
-    await supabase.from('rangers').update({ status: 'inactive' }).eq('id', id)
-    fetchAll()
+    await supabase.from('rangers').update({ status: 'inactive' }).eq('id', id); fetchAll()
+  }
+
+  const handleDeleteObserver = async (id: string) => {
+    await supabase.from('observers').delete().eq('id', id); fetchAll()
   }
 
   const inputStyle = {
-    width: '100%',
-    padding: '8px 12px',
-    borderRadius: '8px',
-    border: '1px solid #e5e5e5',
-    fontSize: '13px',
-    outline: 'none',
+    width: '100%', padding: '8px 12px', borderRadius: '8px',
+    border: '1px solid #e5e5e5', fontSize: '13px', outline: 'none',
     boxSizing: 'border-box' as const,
   }
 
   const tabs = [
     { key: 'wag', label: 'WAG' },
     { key: 'ranger', label: 'Ranger' },
+    { key: 'observer', label: 'Observer' },
     { key: 'users', label: 'Akun Pengguna' },
   ]
 
@@ -116,21 +126,8 @@ export default function ConfigPage() {
       {/* Tabs */}
       <div style={{ display: 'flex', gap: '4px', marginBottom: '20px', background: '#F8F9FB', padding: '4px', borderRadius: '10px', width: 'fit-content', border: '1px solid #e5e5e5' }}>
         {tabs.map((t) => (
-          <button
-            key={t.key}
-            onClick={() => setTab(t.key as 'wag' | 'ranger' | 'users')}
-            style={{
-              padding: '7px 20px',
-              borderRadius: '8px',
-              border: 'none',
-              background: tab === t.key ? '#FFFFFF' : 'transparent',
-              color: tab === t.key ? '#000000' : '#999',
-              fontSize: '13px',
-              fontWeight: tab === t.key ? '500' : '400',
-              cursor: 'pointer',
-              boxShadow: tab === t.key ? '0 1px 3px rgba(0,0,0,0.08)' : 'none',
-            }}
-          >
+          <button key={t.key} onClick={() => setTab(t.key as 'wag' | 'ranger' | 'users' | 'observer')}
+            style={{ padding: '7px 20px', borderRadius: '8px', border: 'none', background: tab === t.key ? '#FFFFFF' : 'transparent', color: tab === t.key ? '#000000' : '#999', fontSize: '13px', fontWeight: tab === t.key ? '500' : '400', cursor: 'pointer', boxShadow: tab === t.key ? '0 1px 3px rgba(0,0,0,0.08)' : 'none' }}>
             {t.label}
           </button>
         ))}
@@ -138,14 +135,7 @@ export default function ConfigPage() {
 
       {/* Message */}
       {message.text && (
-        <div style={{
-          padding: '10px 14px',
-          borderRadius: '8px',
-          fontSize: '12px',
-          marginBottom: '16px',
-          background: message.type === 'success' ? '#EAF3DE' : '#FDECEA',
-          color: message.type === 'success' ? '#27500A' : '#B00020',
-        }}>
+        <div style={{ padding: '10px 14px', borderRadius: '8px', fontSize: '12px', marginBottom: '16px', background: message.type === 'success' ? '#EAF3DE' : '#FDECEA', color: message.type === 'success' ? '#27500A' : '#B00020' }}>
           {message.text}
         </div>
       )}
@@ -153,13 +143,10 @@ export default function ConfigPage() {
       {/* WAG Tab */}
       {tab === 'wag' && (
         <div>
-          <button
-            onClick={() => setShowWagForm(!showWagForm)}
-            style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '8px 16px', borderRadius: '8px', border: '1px solid #e5e5e5', background: '#FFFFFF', fontSize: '13px', cursor: 'pointer', marginBottom: '14px', fontWeight: '500' }}
-          >
+          <button onClick={() => setShowWagForm(!showWagForm)}
+            style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '8px 16px', borderRadius: '8px', border: '1px solid #e5e5e5', background: '#FFFFFF', fontSize: '13px', cursor: 'pointer', marginBottom: '14px', fontWeight: '500' }}>
             + Tambah WAG Baru
           </button>
-
           {showWagForm && (
             <div style={{ background: '#F8F9FB', border: '1px solid #e5e5e5', borderRadius: '10px', padding: '18px', marginBottom: '16px' }}>
               <div style={{ fontSize: '13px', fontWeight: '500', marginBottom: '14px' }}>Form tambah WAG</div>
@@ -177,13 +164,10 @@ export default function ConfigPage() {
                 <button onClick={handleAddWag} disabled={loading} style={{ padding: '8px 20px', background: '#0344D8', color: '#FFFFFF', border: 'none', borderRadius: '8px', fontSize: '13px', fontWeight: '500', cursor: 'pointer' }}>
                   {loading ? 'Menyimpan...' : 'Simpan WAG'}
                 </button>
-                <button onClick={() => setShowWagForm(false)} style={{ padding: '8px 16px', background: 'transparent', border: '1px solid #e5e5e5', borderRadius: '8px', fontSize: '13px', cursor: 'pointer' }}>
-                  Batal
-                </button>
+                <button onClick={() => setShowWagForm(false)} style={{ padding: '8px 16px', background: 'transparent', border: '1px solid #e5e5e5', borderRadius: '8px', fontSize: '13px', cursor: 'pointer' }}>Batal</button>
               </div>
             </div>
           )}
-
           <div style={{ background: '#FFFFFF', border: '1px solid #e5e5e5', borderRadius: '10px', overflow: 'hidden' }}>
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
               <thead>
@@ -194,9 +178,7 @@ export default function ConfigPage() {
                 </tr>
               </thead>
               <tbody>
-                {wags.length === 0 && (
-                  <tr><td colSpan={5} style={{ padding: '24px', textAlign: 'center', color: '#999', fontSize: '13px' }}>Belum ada WAG — tambahkan WAG pertama</td></tr>
-                )}
+                {wags.length === 0 && <tr><td colSpan={5} style={{ padding: '24px', textAlign: 'center', color: '#999', fontSize: '13px' }}>Belum ada WAG</td></tr>}
                 {wags.map(w => (
                   <tr key={w.id} style={{ borderBottom: '1px solid #f5f5f5' }}>
                     <td style={{ padding: '12px 14px', fontWeight: '500' }}>{w.name}</td>
@@ -209,9 +191,7 @@ export default function ConfigPage() {
                     <td style={{ padding: '12px 14px', color: '#999', fontSize: '12px' }}>{new Date(w.created_at).toLocaleDateString('id-ID')}</td>
                     <td style={{ padding: '12px 14px' }}>
                       {w.status === 'active' && (
-                        <button onClick={() => handleDeactivateWag(w.id)} style={{ fontSize: '11px', padding: '4px 10px', borderRadius: '6px', border: '1px solid #FDECEA', background: 'transparent', color: '#B00020', cursor: 'pointer' }}>
-                          Nonaktifkan
-                        </button>
+                        <button onClick={() => handleDeactivateWag(w.id)} style={{ fontSize: '11px', padding: '4px 10px', borderRadius: '6px', border: '1px solid #FDECEA', background: 'transparent', color: '#B00020', cursor: 'pointer' }}>Nonaktifkan</button>
                       )}
                     </td>
                   </tr>
@@ -225,13 +205,10 @@ export default function ConfigPage() {
       {/* Ranger Tab */}
       {tab === 'ranger' && (
         <div>
-          <button
-            onClick={() => setShowRangerForm(!showRangerForm)}
-            style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '8px 16px', borderRadius: '8px', border: '1px solid #e5e5e5', background: '#FFFFFF', fontSize: '13px', cursor: 'pointer', marginBottom: '14px', fontWeight: '500' }}
-          >
+          <button onClick={() => setShowRangerForm(!showRangerForm)}
+            style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '8px 16px', borderRadius: '8px', border: '1px solid #e5e5e5', background: '#FFFFFF', fontSize: '13px', cursor: 'pointer', marginBottom: '14px', fontWeight: '500' }}>
             + Tambah Ranger Baru
           </button>
-
           {showRangerForm && (
             <div style={{ background: '#F8F9FB', border: '1px solid #e5e5e5', borderRadius: '10px', padding: '18px', marginBottom: '16px' }}>
               <div style={{ fontSize: '13px', fontWeight: '500', marginBottom: '14px' }}>Form tambah Ranger</div>
@@ -242,7 +219,7 @@ export default function ConfigPage() {
                 </div>
                 <div>
                   <div style={{ fontSize: '11px', color: '#999', marginBottom: '5px' }}>Nama display di WAG <span style={{ color: '#B00020' }}>*</span></div>
-                  <input style={inputStyle} placeholder="cth: Auditto" value={rangerDisplayName} onChange={e => setRangerDisplayName(e.target.value)} />
+                  <input style={inputStyle} placeholder="cth: ARN-Auditto" value={rangerDisplayName} onChange={e => setRangerDisplayName(e.target.value)} />
                 </div>
                 <div>
                   <div style={{ fontSize: '11px', color: '#999', marginBottom: '5px' }}>No HP <span style={{ color: '#B00020' }}>*</span></div>
@@ -258,20 +235,17 @@ export default function ConfigPage() {
                   </select>
                 </div>
               </div>
-              <div style={{ fontSize: '11px', color: '#FFC128', background: '#FFF8E1', padding: '8px 12px', borderRadius: '6px', marginBottom: '12px' }}>
+              <div style={{ fontSize: '11px', color: '#856404', background: '#FFF3CD', padding: '8px 12px', borderRadius: '6px', marginBottom: '12px' }}>
                 ⚠ Nama display harus sama persis dengan nama yang muncul di export chat WhatsApp
               </div>
               <div style={{ display: 'flex', gap: '8px' }}>
                 <button onClick={handleAddRanger} disabled={loading} style={{ padding: '8px 20px', background: '#0344D8', color: '#FFFFFF', border: 'none', borderRadius: '8px', fontSize: '13px', fontWeight: '500', cursor: 'pointer' }}>
                   {loading ? 'Menyimpan...' : 'Simpan Ranger'}
                 </button>
-                <button onClick={() => setShowRangerForm(false)} style={{ padding: '8px 16px', background: 'transparent', border: '1px solid #e5e5e5', borderRadius: '8px', fontSize: '13px', cursor: 'pointer' }}>
-                  Batal
-                </button>
+                <button onClick={() => setShowRangerForm(false)} style={{ padding: '8px 16px', background: 'transparent', border: '1px solid #e5e5e5', borderRadius: '8px', fontSize: '13px', cursor: 'pointer' }}>Batal</button>
               </div>
             </div>
           )}
-
           <div style={{ background: '#FFFFFF', border: '1px solid #e5e5e5', borderRadius: '10px', overflow: 'hidden' }}>
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
               <thead>
@@ -282,9 +256,7 @@ export default function ConfigPage() {
                 </tr>
               </thead>
               <tbody>
-                {rangers.length === 0 && (
-                  <tr><td colSpan={6} style={{ padding: '24px', textAlign: 'center', color: '#999', fontSize: '13px' }}>Belum ada Ranger — tambahkan Ranger pertama</td></tr>
-                )}
+                {rangers.length === 0 && <tr><td colSpan={6} style={{ padding: '24px', textAlign: 'center', color: '#999', fontSize: '13px' }}>Belum ada Ranger</td></tr>}
                 {rangers.map(r => (
                   <tr key={r.id} style={{ borderBottom: '1px solid #f5f5f5' }}>
                     <td style={{ padding: '12px 14px', fontWeight: '500' }}>{r.full_name}</td>
@@ -298,10 +270,76 @@ export default function ConfigPage() {
                     </td>
                     <td style={{ padding: '12px 14px' }}>
                       {r.status === 'active' && (
-                        <button onClick={() => handleDeactivateRanger(r.id)} style={{ fontSize: '11px', padding: '4px 10px', borderRadius: '6px', border: '1px solid #FDECEA', background: 'transparent', color: '#B00020', cursor: 'pointer' }}>
-                          Nonaktifkan
-                        </button>
+                        <button onClick={() => handleDeactivateRanger(r.id)} style={{ fontSize: '11px', padding: '4px 10px', borderRadius: '6px', border: '1px solid #FDECEA', background: 'transparent', color: '#B00020', cursor: 'pointer' }}>Nonaktifkan</button>
                       )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* Observer Tab */}
+      {tab === 'observer' && (
+        <div>
+          <div style={{ fontSize: '12px', color: '#856404', marginBottom: '14px', background: '#FFF3CD', padding: '10px 14px', borderRadius: '8px', border: '1px solid #FAC775' }}>
+            ⚠ Observer adalah anggota WAG yang bukan agen — pesan mereka akan di-skip saat parsing. Contoh: tim marketing, staf kantor pusat.
+          </div>
+          <button onClick={() => setShowObserverForm(!showObserverForm)}
+            style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '8px 16px', borderRadius: '8px', border: '1px solid #e5e5e5', background: '#FFFFFF', fontSize: '13px', cursor: 'pointer', marginBottom: '14px', fontWeight: '500' }}>
+            + Tambah Observer
+          </button>
+          {showObserverForm && (
+            <div style={{ background: '#F8F9FB', border: '1px solid #e5e5e5', borderRadius: '10px', padding: '18px', marginBottom: '16px' }}>
+              <div style={{ fontSize: '13px', fontWeight: '500', marginBottom: '14px' }}>Form tambah Observer</div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '12px' }}>
+                <div>
+                  <div style={{ fontSize: '11px', color: '#999', marginBottom: '5px' }}>Nama display di WAG <span style={{ color: '#B00020' }}>*</span></div>
+                  <input style={inputStyle} placeholder="cth: ARN-Knugraha" value={observerDisplayName} onChange={e => setObserverDisplayName(e.target.value)} />
+                </div>
+                <div>
+                  <div style={{ fontSize: '11px', color: '#999', marginBottom: '5px' }}>WAG <span style={{ color: '#B00020' }}>*</span></div>
+                  <select style={inputStyle} value={observerWagId} onChange={e => setObserverWagId(e.target.value)}>
+                    <option value="">— Pilih WAG —</option>
+                    {wags.filter(w => w.status === 'active').map(w => (
+                      <option key={w.id} value={w.id}>{w.name}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <div style={{ fontSize: '11px', color: '#999', marginBottom: '5px' }}>Keterangan (opsional)</div>
+                  <input style={inputStyle} placeholder="cth: Marketing Arranet" value={observerNote} onChange={e => setObserverNote(e.target.value)} />
+                </div>
+              </div>
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <button onClick={handleAddObserver} disabled={loading} style={{ padding: '8px 20px', background: '#0344D8', color: '#FFFFFF', border: 'none', borderRadius: '8px', fontSize: '13px', fontWeight: '500', cursor: 'pointer' }}>
+                  {loading ? 'Menyimpan...' : 'Simpan Observer'}
+                </button>
+                <button onClick={() => setShowObserverForm(false)} style={{ padding: '8px 16px', background: 'transparent', border: '1px solid #e5e5e5', borderRadius: '8px', fontSize: '13px', cursor: 'pointer' }}>Batal</button>
+              </div>
+            </div>
+          )}
+          <div style={{ background: '#FFFFFF', border: '1px solid #e5e5e5', borderRadius: '10px', overflow: 'hidden' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
+              <thead>
+                <tr style={{ borderBottom: '1px solid #e5e5e5' }}>
+                  {['Nama Display', 'WAG', 'Keterangan', 'Ditambahkan', ''].map(h => (
+                    <th key={h} style={{ padding: '10px 14px', textAlign: 'left', fontSize: '11px', color: '#999', fontWeight: '500' }}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {observers.length === 0 && <tr><td colSpan={5} style={{ padding: '24px', textAlign: 'center', color: '#999', fontSize: '13px' }}>Belum ada observer</td></tr>}
+                {observers.map(o => (
+                  <tr key={o.id} style={{ borderBottom: '1px solid #f5f5f5' }}>
+                    <td style={{ padding: '12px 14px', fontWeight: '500' }}>{o.display_name}</td>
+                    <td style={{ padding: '12px 14px', color: '#999' }}>{wags.find(w => w.id === o.wag_id)?.name || '—'}</td>
+                    <td style={{ padding: '12px 14px', color: '#999' }}>{o.note || '—'}</td>
+                    <td style={{ padding: '12px 14px', color: '#999', fontSize: '12px' }}>{new Date(o.created_at).toLocaleDateString('id-ID')}</td>
+                    <td style={{ padding: '12px 14px' }}>
+                      <button onClick={() => handleDeleteObserver(o.id)} style={{ fontSize: '11px', padding: '4px 10px', borderRadius: '6px', border: '1px solid #FDECEA', background: 'transparent', color: '#B00020', cursor: 'pointer' }}>Hapus</button>
                     </td>
                   </tr>
                 ))}
