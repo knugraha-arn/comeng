@@ -110,7 +110,11 @@ ${r.metrics.map(m => `  ${m.week_key}: ${m.total_messages} pesan Ranger, ${m.act
 
     const claudeData = await claudeRes.json()
     const text = claudeData.content?.[0]?.text || ''
-    const recommendations = JSON.parse(text.replace(/```json|```/g, '').trim())
+
+    // Ekstrak JSON dari response
+    const jsonMatch = text.match(/\[[\s\S]*\]/)
+    if (!jsonMatch) throw new Error(`Response tidak mengandung JSON valid. Raw: ${text.slice(0, 200)}`)
+    const recommendations = JSON.parse(jsonMatch[0])
 
     return res.status(200).json({ recommendations, summaries_count: summaries.length })
 
