@@ -1,4 +1,4 @@
-\import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import Layout from '@/components/Layout'
 import { supabase } from '@/lib/supabase'
 
@@ -36,7 +36,7 @@ export default function RekomendasiPage() {
   const [error, setError] = useState('')
   const [dataReady, setDataReady] = useState(false)
   const [showConfirm, setShowConfirm] = useState(false)
-  const progressTimer = useRef<NodeJS.Timeout | null>(null)
+  const progressTimer = useRef<ReturnType<typeof setInterval> | null>(null)
   const stepIndex = useRef(0)
 
   useEffect(() => {
@@ -66,7 +66,6 @@ export default function RekomendasiPage() {
     stepIndex.current = 0
     setProgress(PROGRESS_STEPS[0].pct)
     setProgressLabel(PROGRESS_STEPS[0].label)
-
     progressTimer.current = setInterval(() => {
       stepIndex.current += 1
       if (stepIndex.current < PROGRESS_STEPS.length - 1) {
@@ -91,7 +90,6 @@ export default function RekomendasiPage() {
     setError('')
     setShowConfirm(false)
     startProgress()
-
     try {
       const { data: { session } } = await supabase.auth.getSession()
       const res = await fetch('/api/generate-rekomendasi', {
@@ -101,17 +99,14 @@ export default function RekomendasiPage() {
           'x-user-id': session?.user?.id || '',
         },
       })
-
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || 'Gagal generate')
-
       stopProgress()
       await fetchHistory()
     } catch (err: unknown) {
       stopProgress()
       setError(err instanceof Error ? err.message : 'Terjadi kesalahan')
     }
-
     setGenerating(false)
   }
 
@@ -135,23 +130,20 @@ export default function RekomendasiPage() {
     <Layout title="Rekomendasi">
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 260px', gap: '16px', alignItems: 'start' }}>
 
-        {/* Main */}
         <div>
           {/* Header */}
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '20px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
             <div>
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                 <div style={{ fontSize: '13px', color: '#999' }}>
                   {displayed
                     ? `Generate: ${new Date(displayed.generated_at).toLocaleString('id-ID')}`
-                    : dataReady ? 'Data siap dianalisis · 8 minggu terakhir' : 'Belum ada data — upload WAG dulu'}
+                    : dataReady ? 'Data siap dianalisis' : 'Belum ada data — upload WAG dulu'}
                 </div>
-                {/* AI Powered badge */}
                 <span style={{
                   fontSize: '10px', padding: '2px 8px', borderRadius: '999px',
-                  background: 'linear-gradient(135deg, #0344D8, #387EE4)',
+                  background: '#0344D8',
                   color: '#FFFFFF', fontWeight: '600', letterSpacing: '0.04em',
-                  display: 'flex', alignItems: 'center', gap: '4px',
                 }}>
                   ✦ AI Powered
                 </span>
@@ -178,7 +170,24 @@ export default function RekomendasiPage() {
             </button>
           </div>
 
-          {/* Konfirmasi */}
+          {/* Info 8 minggu */}
+          {!generating && (
+            <div style={{
+              display: 'flex', alignItems: 'start', gap: '10px',
+              padding: '10px 14px', background: '#F0F5FF',
+              border: '1px solid #B5D4F4', borderRadius: '8px',
+              marginBottom: '16px', fontSize: '12px', color: '#0C447C',
+            }}>
+              <span style={{ fontSize: '14px', flexShrink: 0, marginTop: '1px' }}>ℹ</span>
+              <div style={{ lineHeight: '1.6' }}>
+                <strong>Analisis berbasis 8 minggu terakhir.</strong> Rekomendasi hanya mempertimbangkan data 8 minggu terakhir per Ranger — bukan seluruh histori.
+                Alasannya: perilaku terkini lebih relevan untuk coaching, data historis terlalu panjang dapat mengaburkan kondisi saat ini, dan efisiensi penggunaan AI API.
+                Data historis lengkap tersedia di halaman <strong>Tren</strong>.
+              </div>
+            </div>
+          )}
+
+          {/* Konfirmasi generate ulang */}
           {showConfirm && (
             <div style={{
               padding: '16px 20px', background: '#FFF3CD', border: '1px solid #FAC775',
@@ -211,34 +220,15 @@ export default function RekomendasiPage() {
             </div>
           )}
 
-          {/* Info 8 minggu */}
-          {!generating && (
-            <div style={{
-              display: 'flex', alignItems: 'start', gap: '10px',
-              padding: '10px 14px', background: '#F0F5FF',
-              border: '1px solid #B5D4F4', borderRadius: '8px',
-              marginBottom: '16px', fontSize: '12px', color: '#0C447C',
-            }}>
-              <span style={{ fontSize: '14px', marginTop: '1px' }}>ℹ</span>
-              <div>
-                <strong>Analisis berbasis 8 minggu terakhir</strong> — Rekomendasi ini hanya mempertimbangkan data 8 minggu terakhir per Ranger, bukan seluruh histori.
-                Alasannya: perilaku terkini lebih relevan untuk coaching, data historis yang terlalu panjang dapat mengaburkan kondisi saat ini, dan efisiensi penggunaan AI API.
-                Data historis lengkap tetap tersedia di halaman <strong>Tren</strong>.
-              </div>
-            </div>
-          )}
-
-
-
           {/* Generating dengan progress bar */}
           {generating && (
             <div style={{ background: '#FFFFFF', border: '1px solid #e5e5e5', borderRadius: '10px', padding: '32px', marginBottom: '12px' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '20px' }}>
                 <div style={{
                   width: '36px', height: '36px', borderRadius: '10px',
-                  background: 'linear-gradient(135deg, #0344D8, #387EE4)',
+                  background: '#0344D8',
                   display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  fontSize: '16px', flexShrink: 0,
+                  fontSize: '16px', flexShrink: 0, color: '#FFFFFF',
                 }}>✦</div>
                 <div>
                   <div style={{ fontSize: '14px', fontWeight: '500' }}>Claude AI sedang bekerja</div>
@@ -246,20 +236,18 @@ export default function RekomendasiPage() {
                 </div>
                 <span style={{
                   marginLeft: 'auto', fontSize: '10px', padding: '2px 8px', borderRadius: '999px',
-                  background: 'linear-gradient(135deg, #0344D8, #387EE4)',
-                  color: '#FFFFFF', fontWeight: '600',
+                  background: '#0344D8', color: '#FFFFFF', fontWeight: '600',
                 }}>
                   ✦ AI Powered
                 </span>
               </div>
 
-              {/* Progress bar */}
               <div style={{ marginBottom: '8px' }}>
                 <div style={{ height: '8px', background: '#F8F9FB', borderRadius: '4px', overflow: 'hidden' }}>
                   <div style={{
                     height: '100%', borderRadius: '4px',
                     width: `${progress}%`,
-                    background: 'linear-gradient(90deg, #0344D8, #387EE4, #D1EA2C)',
+                    background: '#0344D8',
                     transition: 'width 0.8s ease',
                   }} />
                 </div>
@@ -269,7 +257,6 @@ export default function RekomendasiPage() {
                 <span>{progress}%</span>
               </div>
 
-              {/* Steps indicator */}
               <div style={{ display: 'flex', gap: '4px', marginTop: '16px' }}>
                 {PROGRESS_STEPS.slice(0, -1).map((step, i) => (
                   <div key={i} style={{
