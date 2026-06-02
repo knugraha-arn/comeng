@@ -1,6 +1,16 @@
 {
-  "buildCommand": "next build",
-  "outputDirectory": ".next",
-  "devCommand": "next dev",
-  "installCommand": "npm install"
+  "functions": {
+    "pages/api/analyze-semantik.ts": {
+      "maxDuration": 60
+    },
+    "pages/api/generate-rekomendasi.ts": {
+      "maxDuration": 60
+    },
+    "pages/api/chat.ts": {
+      "maxDuration": 60
+    },
+    "pages/api/parse-upload.ts": {
+      "maxDuration": 60
+    }
+  }
 }
