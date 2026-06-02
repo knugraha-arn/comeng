@@ -12,16 +12,23 @@ export default function AuthCallback() {
         return
       }
 
-      // Cek apakah email ada di whitelist users table
-      const { data: user, error } = await supabase
+      // Upsert user ke tabel — kalau belum ada, buat dulu
+      await supabase.from('users').upsert({
+        id: session.user.id,
+        email: session.user.email,
+        full_name: session.user.user_metadata?.full_name ?? '',
+        avatar_url: session.user.user_metadata?.avatar_url ?? '',
+        last_login_at: new Date().toISOString(),
+      }, { onConflict: 'id' })
+
+      // Cek is_approved
+      const { data: userData } = await supabase
         .from('users')
-        .select('id, role')
-        .eq('email', session.user.email)
+        .select('is_approved')
+        .eq('id', session.user.id)
         .single()
 
-      if (error || !user) {
-        // Email tidak ada di whitelist — logout dan tolak
-        await supabase.auth.signOut()
+      if (!userData?.is_approved) {
         router.replace('/unauthorized')
         return
       }
@@ -32,13 +39,12 @@ export default function AuthCallback() {
 
   return (
     <main style={{
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'center',
-      minHeight: '100vh',
-      fontFamily: 'system-ui, sans-serif',
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+      minHeight: '100vh', fontFamily: 'system-ui, sans-serif',
+      background: '#F8F9FB', flexDirection: 'column', gap: '12px',
     }}>
-      <p style={{ color: '#666' }}>Memproses login...</p>
+      <img src="/LogoAmaris.png" alt="AMARIS" style={{ width: '48px', height: '48px', borderRadius: '12px', opacity: 0.7 }} />
+      <p style={{ color: '#999', fontSize: '13px' }}>Memproses login...</p>
     </main>
   )
 }
