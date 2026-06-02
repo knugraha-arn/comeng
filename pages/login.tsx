@@ -1,8 +1,7 @@
-import { createClient } from '@/lib/supabase'
+import { supabase } from '@/lib/supabase'
 
 export default function LoginPage() {
   const handleLogin = async () => {
-    const supabase = createClient()
     await supabase.auth.signInWithOAuth({
       provider: 'google',
       options: {
@@ -40,7 +39,7 @@ export default function LoginPage() {
           <div style={{ fontSize: '13px', color: 'rgba(255,255,255,0.5)', lineHeight: '1.7', maxWidth: '280px' }}>
             AI-driven Monitoring, Action, Retention, and Intelligent Smart Engagement
           </div>
-          <div style={{ marginTop: '32px', display: 'flex', gap: '8px' }}>
+          <div style={{ marginTop: '32px', display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
             {['Monitoring', 'Retensi', 'AI Insight'].map(tag => (
               <span key={tag} style={{
                 fontSize: '10px', padding: '4px 10px', borderRadius: '999px',
@@ -92,7 +91,6 @@ export default function LoginPage() {
               justifyContent: 'center',
               gap: '12px',
               boxShadow: '0 1px 4px rgba(0,0,0,0.06)',
-              transition: 'box-shadow 0.15s',
             }}
             onMouseEnter={e => (e.currentTarget.style.boxShadow = '0 4px 12px rgba(0,0,0,0.1)')}
             onMouseLeave={e => (e.currentTarget.style.boxShadow = '0 1px 4px rgba(0,0,0,0.06)')}
