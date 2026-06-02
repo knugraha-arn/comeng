@@ -39,6 +39,28 @@ const statusConfig = {
   healthy: { label: 'Sehat', bg: '#EAF3DE', color: '#27500A' },
 }
 
+function Tooltip({ text }: { text: string }) {
+  const [show, setShow] = useState(false)
+  return (
+    <div style={{ position: 'relative', display: 'inline-block' }}
+      onMouseEnter={() => setShow(true)}
+      onMouseLeave={() => setShow(false)}
+    >
+      <span style={{ fontSize: '11px', color: '#bbb', cursor: 'help', borderBottom: '1px dashed #e5e5e5' }}>ⓘ</span>
+      {show && (
+        <div style={{
+          position: 'absolute', left: '0', top: '20px', zIndex: 100,
+          background: '#1A1F2E', color: '#FFFFFF', fontSize: '11px', lineHeight: '1.6',
+          padding: '8px 12px', borderRadius: '8px', width: '240px',
+          boxShadow: '0 4px 12px rgba(0,0,0,0.2)', pointerEvents: 'none',
+        }}>
+          {text}
+        </div>
+      )}
+    </div>
+  )
+}
+
 export default function RangerDetail() {
   const router = useRouter()
   const { id } = router.query
@@ -84,8 +106,17 @@ export default function RangerDetail() {
     setLoading(false)
   }
 
-  if (loading) return <Layout title="Detail Ranger"><div style={{ color: '#999', fontSize: '13px' }}>Memuat data...</div></Layout>
-  if (!ranger) return <Layout title="Detail Ranger"><div style={{ color: '#999', fontSize: '13px' }}>Ranger tidak ditemukan</div></Layout>
+  if (loading) return (
+    <Layout title="Detail Ranger">
+      <div style={{ color: '#999', fontSize: '13px' }}>Memuat data...</div>
+    </Layout>
+  )
+
+  if (!ranger) return (
+    <Layout title="Detail Ranger">
+      <div style={{ color: '#999', fontSize: '13px' }}>Ranger tidak ditemukan</div>
+    </Layout>
+  )
 
   const sortedMetrics = [...(ranger.weekly_metrics || [])].sort((a, b) => a.week_key.localeCompare(b.week_key))
   const latest = sortedMetrics[sortedMetrics.length - 1]
@@ -94,10 +125,30 @@ export default function RangerDetail() {
   const maxMsg = Math.max(...sortedMetrics.map(m => m.total_messages), 1)
 
   const barMetrics = [
-    { label: 'Hari aktif', value: latest?.active_days ?? 0, pct: ((latest?.active_days ?? 0) / 7) * 100 },
-    { label: 'Total pesan', value: latest?.total_messages ?? 0, pct: ((latest?.total_messages ?? 0) / 50) * 100 },
-    { label: 'Proactive posts', value: latest?.proactive_posts ?? 0, pct: ((latest?.proactive_posts ?? 0) / 30) * 100 },
-    { label: 'Participation rate', value: `${latest?.participation_rate ?? 0}%`, pct: latest?.participation_rate ?? 0 },
+    {
+      label: 'Hari aktif',
+      value: latest?.active_days ?? 0,
+      pct: ((latest?.active_days ?? 0) / 7) * 100,
+      tooltip: 'Jumlah hari dalam minggu ini di mana Ranger mengirim minimal 1 pesan di WAG. Target: ≥ 3 hari/minggu.',
+    },
+    {
+      label: 'Total pesan',
+      value: latest?.total_messages ?? 0,
+      pct: ((latest?.total_messages ?? 0) / 50) * 100,
+      tooltip: 'Total pesan yang dikirim Ranger di WAG minggu ini. Target: ≥ 10 pesan/minggu.',
+    },
+    {
+      label: 'Proactive posts',
+      value: latest?.proactive_posts ?? 0,
+      pct: ((latest?.proactive_posts ?? 0) / 30) * 100,
+      tooltip: 'Pesan yang diinisiasi Ranger sendiri — bukan balasan. Contoh: tips transaksi, motivasi, info promo. Target: > 50% dari total pesan.',
+    },
+    {
+      label: 'Participation rate',
+      value: `${latest?.participation_rate ?? 0}%`,
+      pct: latest?.participation_rate ?? 0,
+      tooltip: 'Persentase agen yang aktif mengirim pesan di WAG dalam 30 hari terakhir. Target: > 40%.',
+    },
   ]
 
   const dormantMembers = members.filter(m => {
@@ -109,11 +160,13 @@ export default function RangerDetail() {
 
   return (
     <Layout title={ranger.full_name}>
+
       <div onClick={() => router.push('/ranger')}
         style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontSize: '13px', color: '#0344D8', cursor: 'pointer', marginBottom: '16px' }}>
         ← Kembali ke daftar Ranger
       </div>
 
+      {/* Header */}
       <div style={{ display: 'flex', alignItems: 'center', gap: '14px', marginBottom: '20px' }}>
         <div style={{ width: '48px', height: '48px', borderRadius: '50%', background: s.bg, color: s.color, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '16px', fontWeight: '600' }}>
           {ranger.full_name.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase()}
@@ -134,6 +187,7 @@ export default function RangerDetail() {
         </span>
       </div>
 
+      {/* Metric cards */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '12px', marginBottom: '20px' }}>
         {[
           { label: 'Hari aktif (minggu ini)', value: `${latest?.active_days ?? 0}/7`, color: (latest?.active_days ?? 0) <= 2 ? '#B00020' : (latest?.active_days ?? 0) <= 4 ? '#856404' : '#27500A' },
@@ -148,11 +202,16 @@ export default function RangerDetail() {
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px', marginBottom: '14px' }}>
+
+        {/* Bar metrics dengan tooltip */}
         <div style={{ background: '#FFFFFF', border: '1px solid #e5e5e5', borderRadius: '10px', padding: '18px' }}>
           <div style={{ fontSize: '13px', fontWeight: '500', marginBottom: '14px' }}>Metrik minggu terakhir</div>
           {barMetrics.map(m => (
-            <div key={m.label} style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '12px' }}>
-              <div style={{ fontSize: '12px', color: '#999', width: '120px', flexShrink: 0 }}>{m.label}</div>
+            <div key={m.label} style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '14px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '5px', width: '130px', flexShrink: 0 }}>
+                <span style={{ fontSize: '12px', color: '#555' }}>{m.label}</span>
+                <Tooltip text={m.tooltip} />
+              </div>
               <div style={{ flex: 1, height: '6px', background: '#F8F9FB', borderRadius: '3px', overflow: 'hidden' }}>
                 <div style={{ width: `${Math.min(m.pct, 100)}%`, height: '100%', background: m.pct < 30 ? '#E24B4A' : m.pct < 60 ? '#FFC128' : '#0344D8', borderRadius: '3px' }} />
               </div>
@@ -161,31 +220,35 @@ export default function RangerDetail() {
           ))}
         </div>
 
+        {/* Weekly trend */}
         <div style={{ background: '#FFFFFF', border: '1px solid #e5e5e5', borderRadius: '10px', padding: '18px' }}>
-          <div style={{ fontSize: '13px', fontWeight: '500', marginBottom: '14px' }}>Tren total pesan — {sortedMetrics.length} periode</div>
+          <div style={{ fontSize: '13px', fontWeight: '500', marginBottom: '14px' }}>
+            Tren total pesan — {sortedMetrics.length} periode
+          </div>
           {sortedMetrics.length === 0 ? (
             <div style={{ fontSize: '12px', color: '#999' }}>Belum ada data</div>
           ) : (
-            <>
-              <div style={{ display: 'flex', alignItems: 'flex-end', gap: '8px', height: '80px' }}>
-                {sortedMetrics.map(m => {
-                  const pct = (m.total_messages / maxMsg) * 100
-                  const barColor = m.status === 'critical' ? '#E24B4A' : m.status === 'warning' ? '#FFC128' : '#0344D8'
-                  return (
-                    <div key={m.week_key} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '3px', height: '100%', justifyContent: 'flex-end' }}>
-                      <div style={{ fontSize: '10px', fontWeight: '500', color: barColor }}>{m.total_messages}</div>
-                      <div style={{ width: '100%', height: `${Math.max(pct, 5)}%`, background: barColor, borderRadius: '3px 3px 0 0' }} />
-                      <div style={{ fontSize: '9px', color: '#999', whiteSpace: 'nowrap' }}>{formatWeekKey(m.week_key)}</div>
-                    </div>
-                  )
-                })}
-              </div>
-            </>
+            <div style={{ display: 'flex', alignItems: 'flex-end', gap: '8px', height: '80px' }}>
+              {sortedMetrics.map(m => {
+                const pct = (m.total_messages / maxMsg) * 100
+                const barColor = m.status === 'critical' ? '#E24B4A' : m.status === 'warning' ? '#FFC128' : '#0344D8'
+                return (
+                  <div key={m.week_key} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '3px', height: '100%', justifyContent: 'flex-end' }}>
+                    <div style={{ fontSize: '10px', fontWeight: '500', color: barColor }}>{m.total_messages}</div>
+                    <div style={{ width: '100%', height: `${Math.max(pct, 5)}%`, background: barColor, borderRadius: '3px 3px 0 0' }} />
+                    <div style={{ fontSize: '9px', color: '#999', whiteSpace: 'nowrap' }}>{formatWeekKey(m.week_key)}</div>
+                  </div>
+                )
+              })}
+            </div>
           )}
         </div>
       </div>
 
+      {/* Bottom row */}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '14px' }}>
+
+        {/* Dormant */}
         <div style={{ background: '#FFFFFF', border: '1px solid #e5e5e5', borderRadius: '10px', padding: '18px' }}>
           <div style={{ fontSize: '13px', fontWeight: '500', marginBottom: '12px' }}>
             Tidak aktif &gt; 14 hari
@@ -207,4 +270,50 @@ export default function RangerDetail() {
           )}
         </div>
 
-        <div style={{ background: '#F
+        {/* Ungreeted */}
+        <div style={{ background: '#FFFFFF', border: '1px solid #e5e5e5', borderRadius: '10px', padding: '18px' }}>
+          <div style={{ fontSize: '13px', fontWeight: '500', marginBottom: '12px' }}>
+            Belum disambut
+            <span style={{ marginLeft: '8px', fontSize: '11px', padding: '2px 8px', borderRadius: '999px', background: ungretedMembers.length > 0 ? '#FFF3CD' : '#EAF3DE', color: ungretedMembers.length > 0 ? '#856404' : '#27500A' }}>
+              {ungretedMembers.length}
+            </span>
+          </div>
+          {ungretedMembers.length === 0 ? (
+            <div style={{ fontSize: '12px', color: '#999' }}>Semua agen sudah disambut 👍</div>
+          ) : (
+            ungretedMembers.slice(0, 5).map(m => (
+              <div key={m.id} style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0', borderBottom: '1px solid #f5f5f5', fontSize: '12px' }}>
+                <span style={{ fontWeight: '500' }}>{m.display_name}</span>
+                <span style={{ color: '#999' }}>
+                  {m.joined_at ? new Date(m.joined_at).toLocaleDateString('id-ID') : '—'}
+                </span>
+              </div>
+            ))
+          )}
+        </div>
+
+        {/* Top 3 */}
+        <div style={{ background: '#FFFFFF', border: '1px solid #e5e5e5', borderRadius: '10px', padding: '18px' }}>
+          <div style={{ fontSize: '13px', fontWeight: '500', marginBottom: '12px' }}>
+            Top 3 agen paling aktif
+            <span style={{ marginLeft: '8px', fontSize: '11px', color: '#999', fontWeight: '400' }}>all time</span>
+          </div>
+          {topMembers.length === 0 ? (
+            <div style={{ fontSize: '12px', color: '#999' }}>Belum ada data</div>
+          ) : (
+            topMembers.map((m, i) => (
+              <div key={m.display_name} style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '10px 0', borderBottom: i < topMembers.length - 1 ? '1px solid #f5f5f5' : 'none' }}>
+                <div style={{ width: '22px', height: '22px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', background: i === 0 ? '#D1EA2C' : i === 1 ? '#e5e5e5' : '#F8F9FB', color: i === 0 ? '#1A1F2E' : '#555', fontSize: '11px', fontWeight: '700', minWidth: '22px' }}>
+                  {i + 1}
+                </div>
+                <div style={{ flex: 1, fontSize: '13px', fontWeight: '500', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{m.display_name}</div>
+                <div style={{ fontSize: '12px', color: '#999', whiteSpace: 'nowrap' }}>{m.total} pesan</div>
+              </div>
+            ))
+          )}
+        </div>
+      </div>
+
+    </Layout>
+  )
+}
