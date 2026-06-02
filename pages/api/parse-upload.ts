@@ -7,12 +7,20 @@ const supabase = createClient(
 )
 
 function getWeekKey(date: Date): string {
-  const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()))
-  const dayNum = d.getUTCDay() || 7
-  d.setUTCDate(d.getUTCDate() + 4 - dayNum)
-  const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1))
-  const weekNo = Math.ceil((((d.getTime() - yearStart.getTime()) / 86400000) + 1) / 7)
-  return `${d.getUTCFullYear()}-W${String(weekNo).padStart(2, '0')}`
+  // Cari Senin minggu ini
+  const d = new Date(date)
+  const day = d.getDay() // 0=Minggu, 1=Senin, dst
+  const diffToMonday = day === 0 ? -6 : 1 - day
+  const monday = new Date(d)
+  monday.setDate(d.getDate() + diffToMonday)
+  monday.setHours(0, 0, 0, 0)
+
+  // Minggu = Senin + 6 hari
+  const sunday = new Date(monday)
+  sunday.setDate(monday.getDate() + 6)
+
+  const fmt = (dt: Date) => dt.toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })
+  return `${fmt(monday)} – ${fmt(sunday)}`
 }
 
 function parseWhatsAppLine(line: string): { timestamp: Date; sender: string; content: string } | null {
