@@ -7,7 +7,7 @@ const PUBLIC_PATHS = [
   '/auth/callback',
 ]
 
-export async function middleware(req: NextRequest) {
+export function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl
 
   // Izinkan path publik dan static files
@@ -28,5 +28,7 @@ export async function middleware(req: NextRequest) {
 }
 
 export const config = {
-  matcher: ['/((?!_next/static|_next/image|favicon\\.ico|LogoAmaris\\.png|arranet-logo-black\\.png).*)'],
+  matcher: [
+    '/((?!_next/static|_next/image|favicon\\.ico|LogoAmaris\\.png|arranet-logo-black\\.png|api/).*)',
+  ],
 }
