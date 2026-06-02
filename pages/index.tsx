@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { useRouter } from 'next/router'
 import Layout from '@/components/Layout'
 import { supabase } from '@/lib/supabase'
+import { formatWeekKey } from '@/lib/utils'
 
 type WagHealth = {
   id: string
@@ -56,7 +57,6 @@ export default function Home() {
     const wagData = (wagRes.data || []) as WagHealth[]
     setWags(wagData)
 
-    // Hitung stats
     const needAttention = wagData.filter(w => {
       const latest = w.weekly_metrics?.sort((a, b) => b.week_key.localeCompare(a.week_key))[0]
       return latest?.status === 'critical' || latest?.status === 'warning'
@@ -69,7 +69,6 @@ export default function Home() {
       uploadsThisWeek: uploadRes.data?.length || 0,
     })
 
-    // Build alerts
     const newAlerts: Alert[] = []
     for (const wag of wagData) {
       const latest = wag.weekly_metrics?.sort((a, b) => b.week_key.localeCompare(a.week_key))[0]
@@ -104,15 +103,14 @@ export default function Home() {
   const statusColor = { critical: '#B00020', warning: '#856404', healthy: '#27500A' }
 
   if (loading) return (
-    <Layout title="Overview komunitas">
+    <Layout title="Overview">
       <div style={{ color: '#999', fontSize: '13px' }}>Memuat data...</div>
     </Layout>
   )
 
   return (
-    <Layout title="Overview komunitas">
+    <Layout title="Overview">
 
-      {/* Metric cards */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '12px', marginBottom: '24px' }}>
         {[
           { label: 'Total WAG aktif', value: stats.totalWags, sub: 'komunitas' },
@@ -130,21 +128,15 @@ export default function Home() {
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
 
-        {/* Status komunitas */}
         <div style={{ background: '#FFFFFF', border: '1px solid #e5e5e5', borderRadius: '10px', padding: '18px' }}>
           <div style={{ fontSize: '13px', fontWeight: '500', marginBottom: '14px' }}>Status komunitas</div>
-          {wags.length === 0 && (
-            <div style={{ fontSize: '12px', color: '#999' }}>Belum ada WAG — tambahkan di Konfigurasi</div>
-          )}
+          {wags.length === 0 && <div style={{ fontSize: '12px', color: '#999' }}>Belum ada WAG</div>}
           {wags.map(w => {
             const status = getWagStatus(w) as keyof typeof dotColor
             const latest = w.weekly_metrics?.sort((a, b) => b.week_key.localeCompare(a.week_key))[0]
             return (
-              <div
-                key={w.id}
-                onClick={() => router.push('/ranger')}
-                style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '12px 0', borderBottom: '1px solid #f5f5f5', cursor: 'pointer' }}
-              >
+              <div key={w.id} onClick={() => router.push('/ranger')}
+                style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '12px 0', borderBottom: '1px solid #f5f5f5', cursor: 'pointer' }}>
                 <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: dotColor[status], minWidth: '8px' }} />
                 <div style={{ flex: 1 }}>
                   <div style={{ fontSize: '13px', fontWeight: '500' }}>{w.name}</div>
@@ -152,6 +144,11 @@ export default function Home() {
                     {w.rangers?.[0]?.full_name || '—'} &nbsp;·&nbsp;
                     {latest ? `${latest.total_messages} pesan · ${latest.active_days} hari aktif` : 'Belum ada data'}
                   </div>
+                  {latest && (
+                    <div style={{ fontSize: '10px', color: '#bbb', marginTop: '1px' }}>
+                      {formatWeekKey(latest.week_key)}
+                    </div>
+                  )}
                 </div>
                 <span style={{ fontSize: '11px', padding: '3px 10px', borderRadius: '999px', background: statusBg[status], color: statusColor[status], fontWeight: '500', whiteSpace: 'nowrap' }}>
                   {statusLabel[status]}
@@ -161,14 +158,13 @@ export default function Home() {
           })}
         </div>
 
-        {/* Tren 4 minggu */}
         <div style={{ background: '#FFFFFF', border: '1px solid #e5e5e5', borderRadius: '10px', padding: '18px' }}>
-          <div style={{ fontSize: '13px', fontWeight: '500', marginBottom: '14px' }}>Tren aktivitas Ranger — 4 minggu</div>
+          <div style={{ fontSize: '13px', fontWeight: '500', marginBottom: '14px' }}>Tren aktivitas Ranger</div>
           {wags.map(w => {
             const metrics = [...(w.weekly_metrics || [])].sort((a, b) => a.week_key.localeCompare(b.week_key)).slice(-4)
             const maxMsg = Math.max(...metrics.map(m => m.total_messages), 1)
             return (
-              <div key={w.id} style={{ marginBottom: '16px' }}>
+              <div key={w.id} style={{ marginBottom: '20px' }}>
                 <div style={{ fontSize: '12px', color: '#999', marginBottom: '8px' }}>{w.rangers?.[0]?.full_name || w.name}</div>
                 <div style={{ display: 'flex', alignItems: 'flex-end', gap: '8px', height: '60px' }}>
                   {metrics.map(m => {
@@ -178,7 +174,7 @@ export default function Home() {
                       <div key={m.week_key} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '3px', height: '100%', justifyContent: 'flex-end' }}>
                         <div style={{ fontSize: '10px', fontWeight: '500', color: barColor }}>{m.total_messages}</div>
                         <div style={{ width: '100%', height: `${Math.max(pct, 5)}%`, background: barColor, borderRadius: '3px 3px 0 0' }} />
-                        <div style={{ fontSize: '9px', color: '#999', whiteSpace: 'nowrap' }}>{m.week_key.replace('2026-', '')}</div>
+                        <div style={{ fontSize: '9px', color: '#999', whiteSpace: 'nowrap' }}>{formatWeekKey(m.week_key)}</div>
                       </div>
                     )
                   })}
@@ -190,20 +186,16 @@ export default function Home() {
         </div>
       </div>
 
-      {/* Alerts */}
       {alerts.length > 0 && (
         <div style={{ marginTop: '16px' }}>
           <div style={{ fontSize: '13px', fontWeight: '500', marginBottom: '12px' }}>Yang perlu tindakan sekarang</div>
           {alerts.map((alert, i) => (
-            <div
-              key={i}
-              onClick={() => router.push(alert.href)}
+            <div key={i} onClick={() => router.push(alert.href)}
               style={{
                 display: 'flex', gap: '12px', padding: '12px 14px', borderRadius: '10px', marginBottom: '8px', cursor: 'pointer',
                 background: alert.type === 'critical' ? '#FDECEA' : '#FFF3CD',
                 border: `1px solid ${alert.type === 'critical' ? '#F09595' : '#FAC775'}`,
-              }}
-            >
+              }}>
               <div style={{ fontSize: '16px', marginTop: '1px' }}>{alert.type === 'critical' ? '🔴' : '🟡'}</div>
               <div>
                 <div style={{ fontSize: '13px', fontWeight: '500', color: alert.type === 'critical' ? '#791F1F' : '#633806' }}>{alert.title}</div>
