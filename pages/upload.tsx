@@ -14,12 +14,15 @@ type UploadRecord = {
   wags: { name: string }
 }
 
+type ProgressStep = 'idle' | 'uploading' | 'parsing' | 'done' | 'error'
+
 export default function UploadPage() {
   const [wags, setWags] = useState<Wag[]>([])
   const [selectedWagId, setSelectedWagId] = useState('')
   const [file, setFile] = useState<File | null>(null)
   const [dragging, setDragging] = useState(false)
-  const [status, setStatus] = useState<'idle' | 'uploading' | 'success' | 'error'>('idle')
+  const [step, setStep] = useState<ProgressStep>('idle')
+  const [progress, setProgress] = useState(0)
   const [message, setMessage] = useState('')
   const [history, setHistory] = useState<UploadRecord[]>([])
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -44,17 +47,12 @@ export default function UploadPage() {
   }
 
   const handleFile = (f: File) => {
-    if (!f.name.endsWith('.txt')) {
-      setMessage('File harus berformat .txt (export WhatsApp)')
-      return
-    }
-    if (f.size > 10 * 1024 * 1024) {
-      setMessage('Ukuran file maksimal 10MB')
-      return
-    }
+    if (!f.name.endsWith('.txt')) { setMessage('File harus berformat .txt'); return }
+    if (f.size > 10 * 1024 * 1024) { setMessage('Ukuran file maksimal 10MB'); return }
     setFile(f)
     setMessage('')
-    setStatus('idle')
+    setStep('idle')
+    setProgress(0)
   }
 
   const handleDrop = (e: React.DragEvent) => {
@@ -68,22 +66,25 @@ export default function UploadPage() {
     if (!file) { setMessage('Pilih file terlebih dahulu'); return }
     if (!selectedWagId) { setMessage('Pilih WAG tujuan terlebih dahulu'); return }
 
-    setStatus('uploading')
+    setStep('uploading')
+    setProgress(10)
     setMessage('Mengupload file...')
 
     try {
-      // 1. Upload ke Supabase Storage
+      // Step 1: Upload ke Storage
       const filename = `${selectedWagId}/${Date.now()}_${file.name}`
       const { error: storageError } = await supabase.storage
         .from('wag-exports')
         .upload(filename, file)
       if (storageError) throw storageError
 
-      // 2. Dapatkan session
+      setProgress(35)
+      setMessage('File terupload — menyimpan record...')
+
+      // Step 2: Simpan record
       const { data: { session } } = await supabase.auth.getSession()
       if (!session) throw new Error('Session tidak ditemukan')
 
-      // 3. Simpan record upload
       const { data: uploadData, error: dbError } = await supabase
         .from('uploads')
         .insert({
@@ -98,40 +99,60 @@ export default function UploadPage() {
         .single()
       if (dbError) throw dbError
 
-      setMessage('File terupload — memproses pesan...')
+      setProgress(50)
+      setStep('parsing')
+      setMessage('Memproses pesan...')
 
-      // 4. Panggil parser
+      // Step 3: Parse
       const parseRes = await fetch('/api/parse-upload', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ upload_id: uploadData.id }),
       })
 
-      const parseResult = await parseRes.json()
+      setProgress(85)
+      setMessage('Menghitung metrik...')
 
+      const parseResult = await parseRes.json()
       if (!parseRes.ok) throw new Error(parseResult.error || 'Gagal memproses file')
 
-      setStatus('success')
+      setProgress(100)
+      setStep('done')
       setMessage(`Selesai — ${parseResult.messages_parsed} pesan baru, ${parseResult.messages_skipped} dilewati.`)
       setFile(null)
       setSelectedWagId('')
       fetchHistory()
 
     } catch (err: unknown) {
-      setStatus('error')
+      setStep('error')
+      setProgress(0)
       setMessage(err instanceof Error ? err.message : 'Terjadi kesalahan')
     }
   }
 
-  const statusColor: Record<string, string> = {
-    idle: '#856404', uploading: '#856404', success: '#27500A', error: '#B00020'
-  }
-  const statusBg: Record<string, string> = {
-    idle: '#FFF3CD', uploading: '#FFF3CD', success: '#EAF3DE', error: '#FDECEA'
+  const formatDateTime = (iso: string) => {
+    const d = new Date(iso)
+    const dd = String(d.getDate()).padStart(2, '0')
+    const mm = String(d.getMonth() + 1).padStart(2, '0')
+    const yy = String(d.getFullYear()).slice(2)
+    const hh = String(d.getHours()).padStart(2, '0')
+    const min = String(d.getMinutes()).padStart(2, '0')
+    return `${dd}/${mm}/${yy} ${hh}:${min}`
   }
 
+  const stepLabels: Record<ProgressStep, string> = {
+    idle: '',
+    uploading: 'Mengupload file',
+    parsing: 'Memproses pesan',
+    done: 'Selesai',
+    error: 'Error',
+  }
+
+  const msgColor = step === 'done' ? '#27500A' : step === 'error' ? '#B00020' : '#856404'
+  const msgBg = step === 'done' ? '#EAF3DE' : step === 'error' ? '#FDECEA' : '#FFF3CD'
+
   return (
-    <Layout title="Upload WAG Mingguan">
+    <Layout title="Upload WAG">
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', alignItems: 'start' }}>
 
         {/* Upload form */}
@@ -142,7 +163,7 @@ export default function UploadPage() {
           <div style={{ marginBottom: '16px' }}>
             <div style={{ fontSize: '11px', color: '#999', marginBottom: '8px' }}>Pilih WAG tujuan</div>
             {wags.length === 0 ? (
-              <div style={{ fontSize: '12px', color: '#999' }}>Belum ada WAG — tambahkan di halaman Konfigurasi</div>
+              <div style={{ fontSize: '12px', color: '#999' }}>Belum ada WAG — tambahkan di Konfigurasi</div>
             ) : (
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
                 {wags.map(w => (
@@ -150,14 +171,11 @@ export default function UploadPage() {
                     key={w.id}
                     onClick={() => setSelectedWagId(w.id)}
                     style={{
-                      padding: '7px 16px',
-                      borderRadius: '999px',
-                      border: '1px solid',
+                      padding: '7px 16px', borderRadius: '999px', border: '1px solid',
                       borderColor: selectedWagId === w.id ? '#0344D8' : '#e5e5e5',
                       background: selectedWagId === w.id ? '#0344D8' : '#FFFFFF',
                       color: selectedWagId === w.id ? '#FFFFFF' : '#555',
-                      fontSize: '12px',
-                      cursor: 'pointer',
+                      fontSize: '12px', cursor: 'pointer',
                       fontWeight: selectedWagId === w.id ? '500' : '400',
                     }}
                   >
@@ -177,53 +195,57 @@ export default function UploadPage() {
             style={{
               border: '1.5px dashed',
               borderColor: dragging ? '#0344D8' : file ? '#0344D8' : '#e5e5e5',
-              borderRadius: '10px',
-              padding: '32px',
-              textAlign: 'center',
-              cursor: 'pointer',
+              borderRadius: '10px', padding: '28px', textAlign: 'center', cursor: 'pointer',
               background: dragging ? '#EEF4FF' : file ? '#F0F5FF' : '#F8F9FB',
-              marginBottom: '16px',
-              transition: 'all 0.15s',
+              marginBottom: '16px', transition: 'all 0.15s',
             }}
           >
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept=".txt"
+            <input ref={fileInputRef} type="file" accept=".txt"
               onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFile(f) }}
-              style={{ display: 'none' }}
-            />
-            <div style={{ fontSize: '28px', marginBottom: '8px' }}>
+              style={{ display: 'none' }} />
+            <div style={{ fontSize: '24px', marginBottom: '8px' }}>
               {dragging ? '📂' : file ? '📄' : '📁'}
             </div>
             {file ? (
               <>
                 <div style={{ fontSize: '13px', fontWeight: '500', color: '#0344D8' }}>{file.name}</div>
                 <div style={{ fontSize: '11px', color: '#999', marginTop: '4px' }}>
-                  {Math.round(file.size / 1024)} KB · Klik untuk ganti file
+                  {Math.round(file.size / 1024)} KB · Klik untuk ganti
                 </div>
               </>
             ) : (
               <>
                 <div style={{ fontSize: '13px', fontWeight: '500', marginBottom: '4px' }}>
-                  {dragging ? 'Lepaskan file di sini' : 'Drag & drop atau klik untuk pilih file'}
+                  {dragging ? 'Lepaskan di sini' : 'Drag & drop atau klik untuk pilih'}
                 </div>
-                <div style={{ fontSize: '11px', color: '#999' }}>
-                  Export WhatsApp (.txt) tanpa media · Maks 10MB
-                </div>
+                <div style={{ fontSize: '11px', color: '#999' }}>Export WhatsApp (.txt) · Maks 10MB</div>
               </>
             )}
           </div>
 
+          {/* Progress bar */}
+          {step !== 'idle' && (
+            <div style={{ marginBottom: '14px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px', color: '#999', marginBottom: '6px' }}>
+                <span>{stepLabels[step]}</span>
+                <span>{progress}%</span>
+              </div>
+              <div style={{ height: '6px', background: '#F8F9FB', borderRadius: '3px', overflow: 'hidden' }}>
+                <div style={{
+                  height: '100%', borderRadius: '3px',
+                  width: `${progress}%`,
+                  background: step === 'done' ? '#27500A' : step === 'error' ? '#B00020' : '#0344D8',
+                  transition: 'width 0.4s ease',
+                }} />
+              </div>
+            </div>
+          )}
+
           {/* Message */}
           {message && (
             <div style={{
-              padding: '10px 14px',
-              borderRadius: '8px',
-              fontSize: '12px',
-              marginBottom: '16px',
-              background: statusBg[status],
-              color: statusColor[status],
+              padding: '10px 14px', borderRadius: '8px', fontSize: '12px',
+              marginBottom: '16px', background: msgBg, color: msgColor,
             }}>
               {message}
             </div>
@@ -232,20 +254,16 @@ export default function UploadPage() {
           {/* Button */}
           <button
             onClick={handleUpload}
-            disabled={status === 'uploading'}
+            disabled={step === 'uploading' || step === 'parsing'}
             style={{
-              width: '100%',
-              padding: '12px',
-              background: status === 'uploading' ? '#999' : '#0344D8',
-              color: '#FFFFFF',
-              border: 'none',
-              borderRadius: '8px',
-              fontSize: '13px',
-              fontWeight: '500',
-              cursor: status === 'uploading' ? 'not-allowed' : 'pointer',
+              width: '100%', padding: '12px',
+              background: (step === 'uploading' || step === 'parsing') ? '#999' : '#0344D8',
+              color: '#FFFFFF', border: 'none', borderRadius: '8px',
+              fontSize: '13px', fontWeight: '500',
+              cursor: (step === 'uploading' || step === 'parsing') ? 'not-allowed' : 'pointer',
             }}
           >
-            {status === 'uploading' ? 'Memproses...' : 'Upload & Proses File'}
+            {step === 'uploading' ? 'Mengupload...' : step === 'parsing' ? 'Memproses...' : 'Upload & Proses File'}
           </button>
         </div>
 
@@ -254,16 +272,16 @@ export default function UploadPage() {
 
           {/* Panduan */}
           <div style={{ background: '#F8F9FB', border: '1px solid #e5e5e5', borderRadius: '10px', padding: '16px' }}>
-            <div style={{ fontSize: '12px', fontWeight: '500', marginBottom: '8px' }}>Cara export chat WAG di WhatsApp</div>
+            <div style={{ fontSize: '12px', fontWeight: '500', marginBottom: '8px' }}>Cara export chat WAG</div>
             {[
               'Buka WAG → ketuk ⋮ → More → Export Chat',
               'Pilih Without Media',
               'Download file .txt',
               'Drag & drop atau klik upload di sebelah kiri',
-            ].map((step, i) => (
+            ].map((s, i) => (
               <div key={i} style={{ display: 'flex', gap: '10px', marginBottom: '6px', fontSize: '12px', color: '#555' }}>
                 <span style={{ color: '#0344D8', fontWeight: '600', minWidth: '16px' }}>{i + 1}.</span>
-                <span>{step}</span>
+                <span>{s}</span>
               </div>
             ))}
           </div>
@@ -280,7 +298,7 @@ export default function UploadPage() {
               history.map(h => (
                 <div key={h.id} style={{ padding: '10px 16px', borderBottom: '1px solid #f5f5f5', fontSize: '12px' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <div style={{ fontWeight: '500', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '180px' }}>
+                    <div style={{ fontWeight: '500', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '160px' }}>
                       {h.filename}
                     </div>
                     <span style={{
@@ -292,15 +310,15 @@ export default function UploadPage() {
                     </span>
                   </div>
                   <div style={{ color: '#999', marginTop: '3px' }}>
-                    {h.wags?.name} · {h.file_size_kb} KB · {new Date(h.uploaded_at).toLocaleDateString('id-ID')}
+                    {h.wags?.name} · {h.file_size_kb} KB
+                  </div>
+                  <div style={{ color: '#bbb', marginTop: '2px', fontSize: '11px' }}>
+                    {formatDateTime(h.uploaded_at)}
                   </div>
                   {h.messages_parsed > 0 && (
                     <div style={{ color: '#27500A', marginTop: '2px' }}>
                       {h.messages_parsed} pesan baru · {h.messages_skipped} dilewati
                     </div>
-                  )}
-                  {h.status === 'error' && (
-                    <div style={{ color: '#B00020', marginTop: '2px' }}>Gagal diproses</div>
                   )}
                 </div>
               ))
