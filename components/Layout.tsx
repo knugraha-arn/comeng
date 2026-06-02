@@ -44,10 +44,13 @@ export default function Layout({ children, title }: { children: React.ReactNode;
       }}>
         {/* Logo */}
         <div style={{ padding: '20px 16px', borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
-          <img src="/arranet-logo-black.png" alt="Arranet" style={{ width: '100px', filter: 'invert(1)' }} />
-          <div style={{ fontSize: '10px', color: '#D1EA2C', marginTop: '6px', letterSpacing: '0.1em', fontWeight: '600' }}>
-            AMARIS
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <img src="/LogoAmaris.png" alt="AMARIS" style={{ width: '36px', height: '36px', borderRadius: '8px' }} />
+          <div>
+            <div style={{ fontSize: '14px', fontWeight: '600', color: '#FFFFFF', letterSpacing: '0.05em' }}>AMARIS</div>
+            <div style={{ fontSize: '9px', color: '#D1EA2C', marginTop: '1px', letterSpacing: '0.05em' }}>by Arranet</div>
           </div>
+        </div>
         </div>
 
         {/* Nav */}
