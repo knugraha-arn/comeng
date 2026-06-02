@@ -30,11 +30,16 @@ export default function LoginPage() {
         maxWidth: '400px',
         width: '100%',
       }}>
-        <img
-          src="/arranet-logo-black.png"
-          alt="Arranet"
-          style={{ width: '140px', marginBottom: '24px' }}
-        />
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginBottom: '24px' }}>
+  <img src="/arranet-logo-black.png" alt="Arranet" style={{ width: '120px', marginBottom: '16px' }} />
+  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+    <img src="/LogoAmaris.png" alt="AMARIS" style={{ width: '32px', height: '32px', borderRadius: '8px' }} />
+    <div style={{ textAlign: 'left' }}>
+      <div style={{ fontSize: '15px', fontWeight: '600', color: '#000000' }}>AMARIS</div>
+      <div style={{ fontSize: '10px', color: '#999' }}>AI-driven Monitoring & Smart Engagement</div>
+    </div>
+  </div>
+</div>
         <h1 style={{ fontSize: '18px', fontWeight: '600', marginBottom: '4px' }}>
           AMARIS
         </h1>
