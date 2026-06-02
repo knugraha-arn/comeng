@@ -10,6 +10,17 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 )
 
+// Rekomendasi hanya menggunakan 8 minggu terakhir per Ranger.
+// Alasan:
+// 1. Fokus pada kondisi terkini — perilaku 2 bulan terakhir lebih relevan
+//    untuk coaching daripada data historis yang sudah lama.
+// 2. Efisiensi token — data terlalu panjang meningkatkan biaya API
+//    dan dapat menurunkan kualitas analisis Claude.
+// 3. Tren yang actionable — 8 minggu cukup untuk melihat pola perilaku
+//    dan perubahan yang perlu ditindaklanjuti segera.
+// Data historis lengkap tetap tersimpan dan bisa dilihat di halaman Tren.
+const WEEKS_WINDOW = 8
+
 const PROMPT_TEMPLATE = `Kamu adalah sistem analisis komunitas untuk platform AMARIS — alat monitoring efektivitas Ranger dalam membina komunitas agen WhatsApp (WAG).
 
 Konteks bisnis:
@@ -17,6 +28,8 @@ Konteks bisnis:
 - Ranger mendapat fee per transaksi agen — makin aktif agen bertransaksi, makin besar pendapatan Ranger
 - Masalah utama: Ranger cenderung fokus akuisisi agen baru, tapi kurang membina agen yang sudah ada
 - AMARIS mengukur efektivitas Ranger dari aktivitas di WAG sebagai leading indicator
+
+Catatan analisis: Data yang diberikan adalah 8 minggu terakhir per Ranger untuk memastikan rekomendasi fokus pada kondisi dan tren terkini yang actionable.
 
 Data komunitas:
 
@@ -50,7 +63,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       return res.status(400).json({ error: 'Belum ada data Ranger' })
     }
 
-    // Step 2: Build summaries
+    // Step 2: Build summaries — hanya 8 minggu terakhir
     const summaries = []
 
     for (const r of rangers) {
@@ -96,9 +109,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         .sort((a, b) => b.total - a.total)
         .slice(0, 3)
 
-      const sortedMetrics = [...(ranger.weekly_metrics || [])].sort((a, b) =>
-        a.week_key.localeCompare(b.week_key)
-      )
+      // Ambil hanya WEEKS_WINDOW minggu terakhir
+      const sortedMetrics = [...(ranger.weekly_metrics || [])]
+        .sort((a, b) => a.week_key.localeCompare(b.week_key))
+        .slice(-WEEKS_WINDOW)
 
       summaries.push({
         full_name: ranger.full_name,
@@ -109,6 +123,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         dormant_count: dormantCount,
         top_members: topMembers,
         metrics: sortedMetrics,
+        weeks_analyzed: sortedMetrics.length,
       })
     }
 
@@ -120,7 +135,7 @@ Total agen: ${r.total_members}
 Agen belum disambut: ${r.ungreeted_count}
 Agen dormant lebih dari 14 hari tidak aktif: ${r.dormant_count}
 Top 3 agen paling aktif: ${r.top_members.map(m => `${m.display_name} (${m.total} pesan)`).join(', ') || 'tidak ada data'}
-Tren aktivitas minggu ke minggu:
+Tren aktivitas ${r.weeks_analyzed} minggu terakhir:
 ${r.metrics.map(m => `  ${m.week_key}: ${m.total_messages} pesan Ranger, ${m.active_days} hari aktif, participation ${m.participation_rate}%, status: ${m.status}`).join('\n')}
 `).join('\n---\n')
 
@@ -144,9 +159,9 @@ ${r.metrics.map(m => `  ${m.week_key}: ${m.total_messages} pesan Ranger, ${m.act
     const claudeData = await claudeRes.json()
     const text = claudeData.content?.[0]?.text || ''
 
-    // Step 5: Parse JSON dengan robust error handling
+    // Step 5: Parse JSON
     const jsonMatch = text.match(/\[[\s\S]*\]/)
-    if (!jsonMatch) throw new Error(`Response tidak mengandung JSON. Raw: ${text.slice(0, 200)}`)
+    if (!jsonMatch) throw new Error(`Response tidak mengandung JSON valid. Raw: ${text.slice(0, 200)}`)
 
     const cleanJson = jsonMatch[0]
       .replace(/[\u0000-\u001F\u007F-\u009F]/g, ' ')
@@ -172,6 +187,7 @@ ${r.metrics.map(m => `  ${m.week_key}: ${m.total_messages} pesan Ranger, ${m.act
     return res.status(200).json({
       recommendations,
       summaries_count: summaries.length,
+      weeks_analyzed: WEEKS_WINDOW,
       saved: true,
     })
 
