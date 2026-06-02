@@ -10,17 +10,8 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 )
 
-type MessageAnalysis = {
-  message_id: string
-  wag_id: string
-  week_key: string
-  sender_type: string
-  sentiment: 'positif' | 'negatif' | 'netral'
-  topic: 'keluhan_teknis' | 'pertanyaan' | 'apresiasi' | 'info_promo' | 'motivasi' | 'onboarding' | 'lainnya'
-  response_quality: 'substantif' | 'generik' | 'tidak_relevan' | null
-}
-
 const BATCH_SIZE = 50
+const WEEKS_WINDOW = 8
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
@@ -28,18 +19,24 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const { wag_id, week_key } = req.body
 
   try {
-    // 1. Ambil pesan yang belum dianalisis
+    // Hitung cutoff 8 minggu ke belakang
+    const cutoff = new Date()
+    cutoff.setDate(cutoff.getDate() - WEEKS_WINDOW * 7)
+    const cutoffIso = cutoff.toISOString()
+
+    // 1. Ambil pesan dalam 8 minggu terakhir
     let query = supabase
       .from('messages')
       .select('id, wag_id, week_key, sender_type, sender_name, content')
       .not('content', 'is', null)
       .neq('content', '')
       .neq('content', '<Media omitted>')
+      .gte('sent_at', cutoffIso)
 
     if (wag_id) query = query.eq('wag_id', wag_id)
     if (week_key) query = query.eq('week_key', week_key)
 
-    // Cek yang sudah dianalisis
+    // 2. Cek yang sudah dianalisis
     const { data: analyzed } = await supabase
       .from('message_analysis')
       .select('message_id')
@@ -61,9 +58,17 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       return res.status(200).json({ analyzed: 0, message: 'Semua pesan sudah dianalisis' })
     }
 
-    // 2. Proses per batch
+    // 3. Proses per batch
     let totalAnalyzed = 0
-    const results: MessageAnalysis[] = []
+    const results: {
+      message_id: string
+      wag_id: string
+      week_key: string
+      sender_type: string
+      sentiment: string
+      topic: string
+      response_quality: string | null
+    }[] = []
 
     for (let i = 0; i < unanalyzed.length; i += BATCH_SIZE) {
       const batch = unanalyzed.slice(i, i + BATCH_SIZE)
@@ -120,12 +125,11 @@ Respond HANYA dengan JSON array, tanpa penjelasan, tanpa backticks:
           totalAnalyzed++
         }
       } catch {
-        // Skip batch yang gagal parse
         continue
       }
     }
 
-    // 3. Simpan ke database
+    // 4. Simpan ke database
     if (results.length > 0) {
       const { error: insertError } = await supabase
         .from('message_analysis')
@@ -137,7 +141,8 @@ Respond HANYA dengan JSON array, tanpa penjelasan, tanpa backticks:
     return res.status(200).json({
       analyzed: totalAnalyzed,
       total_messages: unanalyzed.length,
-      message: `${totalAnalyzed} pesan berhasil dianalisis`,
+      weeks_window: WEEKS_WINDOW,
+      message: `${totalAnalyzed} pesan berhasil dianalisis (${WEEKS_WINDOW} minggu terakhir)`,
     })
 
   } catch (err: unknown) {
