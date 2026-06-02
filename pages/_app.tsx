@@ -7,7 +7,8 @@ export default function App({ Component, pageProps }: AppProps) {
       <Head>
         <title>AMARIS</title>
         <meta name="description" content="AI-driven Monitoring, Action, Retention, and Intelligent Smart Engagement" />
-        <link rel="icon" href="/favicon.ico" />
+        <link rel="icon" href="/LogoAmaris.png" />
+        <link rel="apple-touch-icon" href="/LogoAmaris.png" />
       </Head>
       <Component {...pageProps} />
     </>
