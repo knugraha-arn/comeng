@@ -7,18 +7,14 @@ const supabase = createClient(
 )
 
 function getWeekKey(date: Date): string {
-  // Cari Senin minggu ini
   const d = new Date(date)
-  const day = d.getDay() // 0=Minggu, 1=Senin, dst
+  const day = d.getDay()
   const diffToMonday = day === 0 ? -6 : 1 - day
   const monday = new Date(d)
   monday.setDate(d.getDate() + diffToMonday)
   monday.setHours(0, 0, 0, 0)
-
-  // Minggu = Senin + 6 hari
   const sunday = new Date(monday)
   sunday.setDate(monday.getDate() + 6)
-
   const fmt = (dt: Date) => dt.toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })
   return `${fmt(monday)} – ${fmt(sunday)}`
 }
@@ -31,7 +27,6 @@ function parseWhatsAppLine(line: string): { timestamp: Date; sender: string; con
     const timestamp = new Date(`${fullYear}-${month.padStart(2,'0')}-${day.padStart(2,'0')}T${hour.padStart(2,'0')}:${min}:${sec}`)
     return { timestamp, sender: sender.trim(), content: content.trim() }
   }
-
   const androidMatch = line.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2,4}),\s(\d{1,2})\.(\d{2})\s-\s(.+?):\s(.*)$/)
   if (androidMatch) {
     const [, day, month, year, hour, min, sender, content] = androidMatch
@@ -39,28 +34,18 @@ function parseWhatsAppLine(line: string): { timestamp: Date; sender: string; con
     const timestamp = new Date(`${fullYear}-${month.padStart(2,'0')}-${day.padStart(2,'0')}T${hour.padStart(2,'0')}:${min}:00`)
     return { timestamp, sender: sender.trim(), content: content.trim() }
   }
-
   return null
 }
 
 const SYSTEM_KEYWORDS = [
-  'joined using this group',
-  'left',
-  'added',
-  'removed',
-  'changed the subject',
-  'changed this group',
-  'Messages and calls are end-to-end encrypted',
-  'created group',
-  'changed the group',
-  'pinned a message',
-  'deleted this message',
-  'This message was deleted',
+  'joined using this group', 'left', 'added', 'removed',
+  'changed the subject', 'changed this group', 'Messages and calls are end-to-end encrypted',
+  'created group', 'changed the group', 'pinned a message',
+  'deleted this message', 'This message was deleted',
 ]
 
 function isSystemMessage(sender: string, content: string): boolean {
   if (!sender || sender === 'You' || sender === '\u200eYou') return true
-  if (content === '<Media omitted>') return false
   if (content === '') return true
   for (const kw of SYSTEM_KEYWORDS) {
     if (content.includes(kw)) return true
@@ -83,7 +68,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       .single()
 
     if (uploadError || !upload) throw new Error('Upload tidak ditemukan')
-
     await supabase.from('uploads').update({ status: 'processing' }).eq('id', upload_id)
 
     const wag = upload.wags
@@ -177,7 +161,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       }, { onConflict: 'wag_id,display_name' })
     }
 
-    // 7. Hitung weekly_metrics per week_key
+    // 7. Hitung weekly_metrics
     const weekKeys = [...new Set(messages.map(m => m.week_key as string))]
     const { data: rangerData } = await supabase
       .from('rangers')
@@ -198,17 +182,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         const weekMessages = messages.filter(m => m.week_key === weekKey)
         const rangerMessages = weekMessages.filter(m => m.sender_type === 'ranger')
         const memberMessages = weekMessages.filter(m => m.sender_type === 'member')
-
-        const activeDays = new Set(
-          rangerMessages.map(m => (m.sent_at as string).slice(0, 10))
-        ).size
-
-        const uniqueActiveMembers = new Set(
-          memberMessages.map(m => m.sender_name as string)
-        ).size
-
+        const activeDays = new Set(rangerMessages.map(m => (m.sent_at as string).slice(0, 10))).size
+        const uniqueActiveMembers = new Set(memberMessages.map(m => m.sender_name as string)).size
         const participationRate = Math.round((uniqueActiveMembers / totalMembers) * 100)
-
         const proactivePosts = rangerMessages.length
         const status = proactivePosts < 3 ? 'critical' : proactivePosts < 10 ? 'warning' : 'healthy'
 
@@ -240,6 +216,17 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       messages_parsed: parsedCount,
       messages_skipped: skippedCount,
     }).eq('id', upload_id)
+
+    // 10. Trigger analisis semantik otomatis (non-blocking)
+    const siteUrl = process.env.VERCEL_URL
+      ? `https://${process.env.VERCEL_URL}`
+      : 'https://comeng.vercel.app'
+
+    fetch(`${siteUrl}/api/analyze-semantik`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ wag_id: wag.id }),
+    }).catch(() => null)
 
     return res.status(200).json({
       success: true,
