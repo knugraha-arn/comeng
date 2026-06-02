@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { useRouter } from 'next/router'
 import Layout from '@/components/Layout'
 import { supabase } from '@/lib/supabase'
+import { formatWeekKey } from '@/lib/utils'
 
 type Metric = {
   week_key: string
@@ -60,16 +61,13 @@ export default function RangerDetail() {
 
     if (rangerData) {
       setRanger(rangerData as unknown as RangerDetail)
-
       const wagId = (rangerData as unknown as RangerDetail).wags?.id
       if (wagId) {
         const [memberRes, msgRes] = await Promise.all([
           supabase.from('members').select('id, display_name, status, last_active_at, joined_at, greeted_at').eq('wag_id', wagId).order('last_active_at', { ascending: false }),
           supabase.from('messages').select('sender_name').eq('wag_id', wagId).eq('sender_type', 'member'),
         ])
-
         if (memberRes.data) setMembers(memberRes.data as Member[])
-
         if (msgRes.data) {
           const counts = msgRes.data.reduce((acc: Record<string, number>, m) => {
             acc[m.sender_name] = (acc[m.sender_name] || 0) + 1
@@ -86,17 +84,8 @@ export default function RangerDetail() {
     setLoading(false)
   }
 
-  if (loading) return (
-    <Layout title="Detail Ranger">
-      <div style={{ color: '#999', fontSize: '13px' }}>Memuat data...</div>
-    </Layout>
-  )
-
-  if (!ranger) return (
-    <Layout title="Detail Ranger">
-      <div style={{ color: '#999', fontSize: '13px' }}>Ranger tidak ditemukan</div>
-    </Layout>
-  )
+  if (loading) return <Layout title="Detail Ranger"><div style={{ color: '#999', fontSize: '13px' }}>Memuat data...</div></Layout>
+  if (!ranger) return <Layout title="Detail Ranger"><div style={{ color: '#999', fontSize: '13px' }}>Ranger tidak ditemukan</div></Layout>
 
   const sortedMetrics = [...(ranger.weekly_metrics || [])].sort((a, b) => a.week_key.localeCompare(b.week_key))
   const latest = sortedMetrics[sortedMetrics.length - 1]
@@ -113,31 +102,20 @@ export default function RangerDetail() {
 
   const dormantMembers = members.filter(m => {
     if (!m.last_active_at) return true
-    const daysSince = (Date.now() - new Date(m.last_active_at).getTime()) / (1000 * 60 * 60 * 24)
-    return daysSince > 14
+    return (Date.now() - new Date(m.last_active_at).getTime()) / (1000 * 60 * 60 * 24) > 14
   })
 
   const ungretedMembers = members.filter(m => !m.greeted_at)
 
   return (
     <Layout title={ranger.full_name}>
-
-      {/* Back */}
-      <div
-        onClick={() => router.push('/ranger')}
-        style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontSize: '13px', color: '#0344D8', cursor: 'pointer', marginBottom: '16px' }}
-      >
+      <div onClick={() => router.push('/ranger')}
+        style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontSize: '13px', color: '#0344D8', cursor: 'pointer', marginBottom: '16px' }}>
         ← Kembali ke daftar Ranger
       </div>
 
-      {/* Header */}
       <div style={{ display: 'flex', alignItems: 'center', gap: '14px', marginBottom: '20px' }}>
-        <div style={{
-          width: '48px', height: '48px', borderRadius: '50%',
-          background: s.bg, color: s.color,
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          fontSize: '16px', fontWeight: '600',
-        }}>
+        <div style={{ width: '48px', height: '48px', borderRadius: '50%', background: s.bg, color: s.color, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '16px', fontWeight: '600' }}>
           {ranger.full_name.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase()}
         </div>
         <div>
@@ -145,13 +123,17 @@ export default function RangerDetail() {
           <div style={{ fontSize: '12px', color: '#999', marginTop: '2px' }}>
             {ranger.wags?.name} &nbsp;·&nbsp; {members.length} agen &nbsp;·&nbsp; display: {ranger.display_name}
           </div>
+          {latest && (
+            <div style={{ fontSize: '11px', color: '#bbb', marginTop: '2px' }}>
+              Periode: {formatWeekKey(latest.week_key)}
+            </div>
+          )}
         </div>
         <span style={{ marginLeft: 'auto', fontSize: '12px', padding: '4px 14px', borderRadius: '999px', background: s.bg, color: s.color, fontWeight: '500' }}>
           {s.label}
         </span>
       </div>
 
-      {/* Metric cards */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '12px', marginBottom: '20px' }}>
         {[
           { label: 'Hari aktif (minggu ini)', value: `${latest?.active_days ?? 0}/7`, color: (latest?.active_days ?? 0) <= 2 ? '#B00020' : (latest?.active_days ?? 0) <= 4 ? '#856404' : '#27500A' },
@@ -166,8 +148,6 @@ export default function RangerDetail() {
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px', marginBottom: '14px' }}>
-
-        {/* Bar metrics */}
         <div style={{ background: '#FFFFFF', border: '1px solid #e5e5e5', borderRadius: '10px', padding: '18px' }}>
           <div style={{ fontSize: '13px', fontWeight: '500', marginBottom: '14px' }}>Metrik minggu terakhir</div>
           {barMetrics.map(m => (
@@ -181,33 +161,31 @@ export default function RangerDetail() {
           ))}
         </div>
 
-        {/* Weekly trend */}
         <div style={{ background: '#FFFFFF', border: '1px solid #e5e5e5', borderRadius: '10px', padding: '18px' }}>
-          <div style={{ fontSize: '13px', fontWeight: '500', marginBottom: '14px' }}>Tren total pesan — {sortedMetrics.length} minggu</div>
+          <div style={{ fontSize: '13px', fontWeight: '500', marginBottom: '14px' }}>Tren total pesan — {sortedMetrics.length} periode</div>
           {sortedMetrics.length === 0 ? (
             <div style={{ fontSize: '12px', color: '#999' }}>Belum ada data</div>
           ) : (
-            <div style={{ display: 'flex', alignItems: 'flex-end', gap: '8px', height: '80px' }}>
-              {sortedMetrics.map(m => {
-                const pct = (m.total_messages / maxMsg) * 100
-                const barColor = m.status === 'critical' ? '#E24B4A' : m.status === 'warning' ? '#FFC128' : '#0344D8'
-                return (
-                  <div key={m.week_key} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '3px', height: '100%', justifyContent: 'flex-end' }}>
-                    <div style={{ fontSize: '10px', fontWeight: '500', color: barColor }}>{m.total_messages}</div>
-                    <div style={{ width: '100%', height: `${Math.max(pct, 5)}%`, background: barColor, borderRadius: '3px 3px 0 0' }} />
-                    <div style={{ fontSize: '9px', color: '#999', whiteSpace: 'nowrap' }}>{m.week_key.replace('2026-', '')}</div>
-                  </div>
-                )
-              })}
-            </div>
+            <>
+              <div style={{ display: 'flex', alignItems: 'flex-end', gap: '8px', height: '80px' }}>
+                {sortedMetrics.map(m => {
+                  const pct = (m.total_messages / maxMsg) * 100
+                  const barColor = m.status === 'critical' ? '#E24B4A' : m.status === 'warning' ? '#FFC128' : '#0344D8'
+                  return (
+                    <div key={m.week_key} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '3px', height: '100%', justifyContent: 'flex-end' }}>
+                      <div style={{ fontSize: '10px', fontWeight: '500', color: barColor }}>{m.total_messages}</div>
+                      <div style={{ width: '100%', height: `${Math.max(pct, 5)}%`, background: barColor, borderRadius: '3px 3px 0 0' }} />
+                      <div style={{ fontSize: '9px', color: '#999', whiteSpace: 'nowrap' }}>{formatWeekKey(m.week_key)}</div>
+                    </div>
+                  )
+                })}
+              </div>
+            </>
           )}
         </div>
       </div>
 
-      {/* Bottom row */}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '14px' }}>
-
-        {/* Dormant members */}
         <div style={{ background: '#FFFFFF', border: '1px solid #e5e5e5', borderRadius: '10px', padding: '18px' }}>
           <div style={{ fontSize: '13px', fontWeight: '500', marginBottom: '12px' }}>
             Tidak aktif &gt; 14 hari
@@ -229,56 +207,4 @@ export default function RangerDetail() {
           )}
         </div>
 
-        {/* Ungreeted members */}
-        <div style={{ background: '#FFFFFF', border: '1px solid #e5e5e5', borderRadius: '10px', padding: '18px' }}>
-          <div style={{ fontSize: '13px', fontWeight: '500', marginBottom: '12px' }}>
-            Belum disambut
-            <span style={{ marginLeft: '8px', fontSize: '11px', padding: '2px 8px', borderRadius: '999px', background: ungretedMembers.length > 0 ? '#FFF3CD' : '#EAF3DE', color: ungretedMembers.length > 0 ? '#856404' : '#27500A' }}>
-              {ungretedMembers.length}
-            </span>
-          </div>
-          {ungretedMembers.length === 0 ? (
-            <div style={{ fontSize: '12px', color: '#999' }}>Semua agen sudah disambut 👍</div>
-          ) : (
-            ungretedMembers.slice(0, 5).map(m => (
-              <div key={m.id} style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0', borderBottom: '1px solid #f5f5f5', fontSize: '12px' }}>
-                <span style={{ fontWeight: '500' }}>{m.display_name}</span>
-                <span style={{ color: '#999' }}>
-                  {m.joined_at ? new Date(m.joined_at).toLocaleDateString('id-ID') : '—'}
-                </span>
-              </div>
-            ))
-          )}
-        </div>
-
-        {/* Top 3 agen */}
-        <div style={{ background: '#FFFFFF', border: '1px solid #e5e5e5', borderRadius: '10px', padding: '18px' }}>
-          <div style={{ fontSize: '13px', fontWeight: '500', marginBottom: '12px' }}>
-            Top 3 agen paling aktif
-            <span style={{ marginLeft: '8px', fontSize: '11px', color: '#999', fontWeight: '400' }}>all time</span>
-          </div>
-          {topMembers.length === 0 ? (
-            <div style={{ fontSize: '12px', color: '#999' }}>Belum ada data</div>
-          ) : (
-            topMembers.map((m, i) => (
-              <div key={m.display_name} style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '10px 0', borderBottom: i < topMembers.length - 1 ? '1px solid #f5f5f5' : 'none' }}>
-                <div style={{
-                  width: '22px', height: '22px', borderRadius: '50%',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  background: i === 0 ? '#D1EA2C' : i === 1 ? '#e5e5e5' : '#F8F9FB',
-                  color: i === 0 ? '#1A1F2E' : '#555',
-                  fontSize: '11px', fontWeight: '700', minWidth: '22px',
-                }}>
-                  {i + 1}
-                </div>
-                <div style={{ flex: 1, fontSize: '13px', fontWeight: '500', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{m.display_name}</div>
-                <div style={{ fontSize: '12px', color: '#999', whiteSpace: 'nowrap' }}>{m.total} pesan</div>
-              </div>
-            ))
-          )}
-        </div>
-      </div>
-
-    </Layout>
-  )
-}
+        <div style={{ background: '#F
