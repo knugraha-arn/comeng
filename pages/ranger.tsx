@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { useRouter } from 'next/router'
 import Layout from '@/components/Layout'
 import { supabase } from '@/lib/supabase'
+import { formatWeekKey } from '@/lib/utils'
 
 type RangerData = {
   id: string
@@ -36,9 +37,7 @@ export default function RangerPage() {
   const [page, setPage] = useState(1)
   const PER_PAGE = 10
 
-  useEffect(() => {
-    fetchRangers()
-  }, [])
+  useEffect(() => { fetchRangers() }, [])
 
   useEffect(() => {
     let result = rangers
@@ -81,27 +80,20 @@ export default function RangerPage() {
   const paginated = filtered.slice((page - 1) * PER_PAGE, page * PER_PAGE)
 
   if (loading) return (
-    <Layout title="Efektivitas Ranger">
+    <Layout title="Ranger">
       <div style={{ color: '#999', fontSize: '13px' }}>Memuat data...</div>
     </Layout>
   )
 
   return (
-    <Layout title="Efektivitas Ranger">
-
-      {/* Search & filter */}
+    <Layout title="Ranger">
       <div style={{ display: 'flex', gap: '10px', marginBottom: '14px', alignItems: 'center' }}>
-        <input
-          type="text"
-          placeholder="Cari nama Ranger atau WAG..."
-          value={search}
-          onChange={e => setSearch(e.target.value)}
-          style={{ flex: 1, padding: '8px 12px', borderRadius: '8px', border: '1px solid #e5e5e5', fontSize: '13px', outline: 'none' }}
-        />
+        <input type="text" placeholder="Cari nama Ranger atau WAG..."
+          value={search} onChange={e => setSearch(e.target.value)}
+          style={{ flex: 1, padding: '8px 12px', borderRadius: '8px', border: '1px solid #e5e5e5', fontSize: '13px', outline: 'none' }} />
         <span style={{ fontSize: '12px', color: '#999', whiteSpace: 'nowrap' }}>{filtered.length} Ranger</span>
       </div>
 
-      {/* Filter chips */}
       <div style={{ display: 'flex', gap: '6px', marginBottom: '16px' }}>
         {[
           { key: 'semua', label: 'Semua' },
@@ -109,9 +101,7 @@ export default function RangerPage() {
           { key: 'warning', label: '● Waspada' },
           { key: 'healthy', label: '● Sehat' },
         ].map(f => (
-          <button
-            key={f.key}
-            onClick={() => setFilter(f.key)}
+          <button key={f.key} onClick={() => setFilter(f.key)}
             style={{
               padding: '5px 14px', borderRadius: '999px', border: '1px solid',
               borderColor: filter === f.key ? '#0344D8' : '#e5e5e5',
@@ -126,32 +116,27 @@ export default function RangerPage() {
         ))}
       </div>
 
-      {/* Table */}
       <div style={{ background: '#FFFFFF', border: '1px solid #e5e5e5', borderRadius: '10px', overflow: 'hidden', marginBottom: '14px' }}>
         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
           <thead>
             <tr style={{ borderBottom: '1px solid #e5e5e5' }}>
-              {['Ranger', 'WAG', 'Status', 'Hari Aktif', 'Total Pesan', 'Participation', ''].map(h => (
+              {['Ranger', 'WAG', 'Status', 'Hari Aktif', 'Total Pesan', 'Periode', ''].map(h => (
                 <th key={h} style={{ padding: '10px 14px', textAlign: 'left', fontSize: '11px', color: '#999', fontWeight: '500' }}>{h}</th>
               ))}
             </tr>
           </thead>
           <tbody>
             {paginated.length === 0 && (
-              <tr>
-                <td colSpan={7} style={{ padding: '32px', textAlign: 'center', color: '#999', fontSize: '13px' }}>
-                  {rangers.length === 0 ? 'Belum ada Ranger — tambahkan di Konfigurasi' : 'Tidak ada Ranger yang sesuai filter'}
-                </td>
-              </tr>
+              <tr><td colSpan={7} style={{ padding: '32px', textAlign: 'center', color: '#999', fontSize: '13px' }}>
+                {rangers.length === 0 ? 'Belum ada Ranger' : 'Tidak ada yang sesuai filter'}
+              </td></tr>
             )}
             {paginated.map(r => {
               const status = getLatestStatus(r) as keyof typeof statusConfig
               const s = statusConfig[status]
               const metric = getLatestMetric(r)
               return (
-                <tr
-                  key={r.id}
-                  onClick={() => router.push(`/ranger/${r.id}`)}
+                <tr key={r.id} onClick={() => router.push(`/ranger/${r.id}`)}
                   style={{ borderBottom: '1px solid #f5f5f5', cursor: 'pointer' }}
                   onMouseEnter={e => (e.currentTarget.style.background = '#F8F9FB')}
                   onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
@@ -166,14 +151,14 @@ export default function RangerPage() {
                       {s.label}
                     </span>
                   </td>
-                  <td style={{ padding: '12px 14px', color: metric?.active_days <= 2 ? '#B00020' : metric?.active_days <= 4 ? '#856404' : '#27500A' }}>
+                  <td style={{ padding: '12px 14px', color: (metric?.active_days ?? 0) <= 2 ? '#B00020' : (metric?.active_days ?? 0) <= 4 ? '#856404' : '#27500A' }}>
                     {metric?.active_days ?? '—'}/7
                   </td>
-                  <td style={{ padding: '12px 14px', color: metric?.total_messages < 3 ? '#B00020' : metric?.total_messages < 10 ? '#856404' : '#27500A' }}>
+                  <td style={{ padding: '12px 14px', color: (metric?.total_messages ?? 0) < 3 ? '#B00020' : (metric?.total_messages ?? 0) < 10 ? '#856404' : '#27500A' }}>
                     {metric?.total_messages ?? '—'}
                   </td>
-                  <td style={{ padding: '12px 14px', color: '#555' }}>
-                    {metric?.participation_rate != null ? `${metric.participation_rate}%` : '—'}
+                  <td style={{ padding: '12px 14px', color: '#999', fontSize: '11px' }}>
+                    {metric ? formatWeekKey(metric.week_key) : '—'}
                   </td>
                   <td style={{ padding: '12px 14px', color: '#0344D8', fontSize: '12px' }}>Detail →</td>
                 </tr>
@@ -183,13 +168,10 @@ export default function RangerPage() {
         </table>
       </div>
 
-      {/* Pagination */}
       {totalPages > 1 && (
         <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
           {Array.from({ length: totalPages }, (_, i) => i + 1).map(p => (
-            <button
-              key={p}
-              onClick={() => setPage(p)}
+            <button key={p} onClick={() => setPage(p)}
               style={{
                 padding: '5px 12px', borderRadius: '6px', border: '1px solid',
                 borderColor: page === p ? '#0344D8' : '#e5e5e5',
@@ -205,7 +187,6 @@ export default function RangerPage() {
           <span style={{ fontSize: '12px', color: '#999', marginLeft: '4px' }}>dari {totalPages} halaman</span>
         </div>
       )}
-
     </Layout>
   )
 }
