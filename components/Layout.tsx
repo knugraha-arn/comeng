@@ -18,16 +18,42 @@ export default function Layout({ children, title }: { children: React.ReactNode;
   const [email, setEmail] = useState('')
   const [name, setName] = useState('')
   const [avatar, setAvatar] = useState('')
+  const [checking, setChecking] = useState(true)
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
+    supabase.auth.getSession().then(async ({ data: { session } }) => {
       if (!session) {
         router.replace('/login')
-      } else {
-        setEmail(session.user.email ?? '')
-        setName(session.user.user_metadata?.full_name ?? '')
-        setAvatar(session.user.user_metadata?.avatar_url ?? '')
+        return
       }
+
+      const userEmail = session.user.email ?? ''
+      setEmail(userEmail)
+      setName(session.user.user_metadata?.full_name ?? '')
+      setAvatar(session.user.user_metadata?.avatar_url ?? '')
+
+      // Upsert user ke tabel users
+      await supabase.from('users').upsert({
+        id: session.user.id,
+        email: userEmail,
+        full_name: session.user.user_metadata?.full_name ?? '',
+        avatar_url: session.user.user_metadata?.avatar_url ?? '',
+        last_login_at: new Date().toISOString(),
+      }, { onConflict: 'id' })
+
+      // Cek apakah user sudah di-approve
+      const { data: userData } = await supabase
+        .from('users')
+        .select('is_approved')
+        .eq('id', session.user.id)
+        .single()
+
+      if (!userData?.is_approved) {
+        router.replace('/unauthorized')
+        return
+      }
+
+      setChecking(false)
     })
   }, [router])
 
@@ -39,15 +65,20 @@ export default function Layout({ children, title }: { children: React.ReactNode;
   const now = new Date()
   const dateStr = now.toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })
 
+  if (checking) return (
+    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '100vh', fontFamily: 'system-ui, sans-serif', background: '#F8F9FB' }}>
+      <div style={{ textAlign: 'center' }}>
+        <img src="/LogoAmaris.png" alt="AMARIS" style={{ width: '48px', height: '48px', borderRadius: '12px', marginBottom: '12px' }} />
+        <div style={{ fontSize: '13px', color: '#999' }}>Memverifikasi akses...</div>
+      </div>
+    </div>
+  )
+
   return (
     <div style={{ display: 'flex', minHeight: '100vh', fontFamily: 'system-ui, sans-serif', background: '#F8F9FB' }}>
 
       {/* Sidebar */}
-      <div style={{
-        width: '216px', minWidth: '216px',
-        background: '#1A1F2E',
-        display: 'flex', flexDirection: 'column',
-      }}>
+      <div style={{ width: '216px', minWidth: '216px', background: '#1A1F2E', display: 'flex', flexDirection: 'column' }}>
 
         {/* Logo */}
         <div style={{ padding: '20px 16px', borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
@@ -75,6 +106,8 @@ export default function Layout({ children, title }: { children: React.ReactNode;
                   fontWeight: isActive ? '500' : '400',
                   transition: 'all 0.15s',
                 }}
+                onMouseEnter={e => { if (!isActive) e.currentTarget.style.background = 'rgba(255,255,255,0.06)' }}
+                onMouseLeave={e => { if (!isActive) e.currentTarget.style.background = 'transparent' }}
               >
                 <span style={{ fontSize: '14px', minWidth: '16px', textAlign: 'center' }}>{item.icon}</span>
                 <span>{item.label}</span>
@@ -83,24 +116,15 @@ export default function Layout({ children, title }: { children: React.ReactNode;
           })}
         </nav>
 
-        {/* Footer — user info */}
+        {/* Footer */}
         <div style={{ padding: '14px 16px', borderTop: '1px solid rgba(255,255,255,0.08)' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '10px' }}>
-            {/* Avatar — Google profile photo atau initial */}
             {avatar ? (
-              <img
-                src={avatar}
-                alt={name || email}
-                referrerPolicy="no-referrer"
+              <img src={avatar} alt={name || email} referrerPolicy="no-referrer"
                 style={{ width: '30px', height: '30px', borderRadius: '50%', objectFit: 'cover', minWidth: '30px', border: '2px solid rgba(255,255,255,0.15)' }}
               />
             ) : (
-              <div style={{
-                width: '30px', height: '30px', borderRadius: '50%',
-                background: '#0344D8',
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                fontSize: '12px', fontWeight: '600', color: '#FFFFFF', minWidth: '30px',
-              }}>
+              <div style={{ width: '30px', height: '30px', borderRadius: '50%', background: '#0344D8', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '12px', fontWeight: '600', color: '#FFFFFF', minWidth: '30px' }}>
                 {(name || email).slice(0, 1).toUpperCase()}
               </div>
             )}
@@ -129,11 +153,7 @@ export default function Layout({ children, title }: { children: React.ReactNode;
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
 
         {/* Topbar */}
-        <div style={{
-          padding: '12px 24px', background: '#FFFFFF',
-          borderBottom: '1px solid #e5e5e5',
-          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-        }}>
+        <div style={{ padding: '12px 24px', background: '#FFFFFF', borderBottom: '1px solid #e5e5e5', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <span style={{ fontSize: '15px', fontWeight: '500', color: '#000000' }}>{title || 'AMARIS'}</span>
           <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
             <span style={{ fontSize: '11px', color: '#999', background: '#F8F9FB', padding: '4px 10px', borderRadius: '6px', border: '1px solid #e5e5e5' }}>
