@@ -13,14 +13,29 @@ const navItems = [
   { href: '/config', label: 'Konfigurasi', icon: '⚙' },
 ]
 
+// Cache di module level — persist selama session browser, tidak reset saat ganti halaman
+let sessionChecked = false
+let sessionApproved = false
+let sessionEmail = ''
+let sessionName = ''
+let sessionAvatar = ''
+
 export default function Layout({ children, title }: { children: React.ReactNode; title?: string }) {
   const router = useRouter()
-  const [email, setEmail] = useState('')
-  const [name, setName] = useState('')
-  const [avatar, setAvatar] = useState('')
-  const [checking, setChecking] = useState(true)
+  const [ready, setReady] = useState(sessionChecked && sessionApproved)
+  const [email, setEmail] = useState(sessionEmail)
+  const [name, setName] = useState(sessionName)
+  const [avatar, setAvatar] = useState(sessionAvatar)
 
   useEffect(() => {
+    // Kalau sudah dicek sebelumnya, skip query
+    if (sessionChecked) {
+      if (!sessionApproved) {
+        router.replace('/unauthorized')
+      }
+      return
+    }
+
     supabase.auth.getSession().then(async ({ data: { session } }) => {
       if (!session) {
         router.replace('/login')
@@ -28,36 +43,54 @@ export default function Layout({ children, title }: { children: React.ReactNode;
       }
 
       const userEmail = session.user.email ?? ''
-      setEmail(userEmail)
-      setName(session.user.user_metadata?.full_name ?? '')
-      setAvatar(session.user.user_metadata?.avatar_url ?? '')
+      const userName = session.user.user_metadata?.full_name ?? ''
+      const userAvatar = session.user.user_metadata?.avatar_url ?? ''
 
-      // Upsert user ke tabel users
-      await supabase.from('users').upsert({
+      // Update state
+      setEmail(userEmail)
+      setName(userName)
+      setAvatar(userAvatar)
+
+      // Upsert user ke tabel users (non-blocking)
+      supabase.from('users').upsert({
         id: session.user.id,
         email: userEmail,
-        full_name: session.user.user_metadata?.full_name ?? '',
-        avatar_url: session.user.user_metadata?.avatar_url ?? '',
+        full_name: userName,
+        avatar_url: userAvatar,
         last_login_at: new Date().toISOString(),
-      }, { onConflict: 'id' })
+      }, { onConflict: 'id' }).then(() => {})
 
-      // Cek apakah user sudah di-approve
+      // Cek is_approved
       const { data: userData } = await supabase
         .from('users')
         .select('is_approved')
         .eq('id', session.user.id)
         .single()
 
+      // Cache hasil
+      sessionChecked = true
+      sessionEmail = userEmail
+      sessionName = userName
+      sessionAvatar = userAvatar
+
       if (!userData?.is_approved) {
+        sessionApproved = false
         router.replace('/unauthorized')
         return
       }
 
-      setChecking(false)
+      sessionApproved = true
+      setReady(true)
     })
   }, [router])
 
   const handleLogout = async () => {
+    // Reset cache saat logout
+    sessionChecked = false
+    sessionApproved = false
+    sessionEmail = ''
+    sessionName = ''
+    sessionAvatar = ''
     await supabase.auth.signOut()
     router.replace('/login')
   }
@@ -65,11 +98,11 @@ export default function Layout({ children, title }: { children: React.ReactNode;
   const now = new Date()
   const dateStr = now.toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })
 
-  if (checking) return (
+  if (!ready) return (
     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '100vh', fontFamily: 'system-ui, sans-serif', background: '#F8F9FB' }}>
       <div style={{ textAlign: 'center' }}>
-        <img src="/LogoAmaris.png" alt="AMARIS" style={{ width: '48px', height: '48px', borderRadius: '12px', marginBottom: '12px' }} />
-        <div style={{ fontSize: '13px', color: '#999' }}>Memverifikasi akses...</div>
+        <img src="/LogoAmaris.png" alt="AMARIS" style={{ width: '48px', height: '48px', borderRadius: '12px', marginBottom: '12px', opacity: 0.7 }} />
+        <div style={{ fontSize: '12px', color: '#bbb' }}>Memuat...</div>
       </div>
     </div>
   )
@@ -151,8 +184,6 @@ export default function Layout({ children, title }: { children: React.ReactNode;
 
       {/* Main */}
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
-
-        {/* Topbar */}
         <div style={{ padding: '12px 24px', background: '#FFFFFF', borderBottom: '1px solid #e5e5e5', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <span style={{ fontSize: '15px', fontWeight: '500', color: '#000000' }}>{title || 'AMARIS'}</span>
           <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
@@ -162,8 +193,6 @@ export default function Layout({ children, title }: { children: React.ReactNode;
             <img src="/arranet-logo-black.png" alt="Arranet" style={{ height: '18px', opacity: 0.45 }} />
           </div>
         </div>
-
-        {/* Content */}
         <div style={{ padding: '24px', flex: 1, overflow: 'auto' }}>
           {children}
         </div>
