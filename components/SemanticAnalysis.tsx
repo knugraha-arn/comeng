@@ -6,6 +6,7 @@ type Analysis = {
   topic: string
   response_quality: string | null
   week_key: string
+  sender_type: string
 }
 
 type Props = {
@@ -28,7 +29,7 @@ export default function SemanticAnalysis({ wagId, weekKey }: Props) {
     setLoading(true)
     let query = supabase
       .from('message_analysis')
-      .select('sentiment, topic, response_quality, week_key')
+      .select('sentiment, topic, response_quality, week_key, sender_type')
       .eq('wag_id', wagId)
 
     if (weekKey) query = query.eq('week_key', weekKey)
@@ -64,7 +65,6 @@ export default function SemanticAnalysis({ wagId, weekKey }: Props) {
 
   if (loading) return <div style={{ fontSize: '12px', color: '#999' }}>Memuat analisis semantik...</div>
 
-  // Agregat data
   const total = data.length
   const sentiments = {
     positif: data.filter(d => d.sentiment === 'positif').length,
@@ -95,6 +95,9 @@ export default function SemanticAnalysis({ wagId, weekKey }: Props) {
           <span style={{ fontSize: '10px', padding: '2px 8px', borderRadius: '999px', background: '#0344D8', color: '#FFFFFF', fontWeight: '600' }}>
             ✦ Haiku AI
           </span>
+          {total > 0 && (
+            <span style={{ fontSize: '11px', color: '#999' }}>{total} pesan dianalisis</span>
+          )}
         </div>
         <button
           onClick={handleAnalyze}
@@ -111,7 +114,7 @@ export default function SemanticAnalysis({ wagId, weekKey }: Props) {
 
       {progress && !analyzing && (
         <div style={{ fontSize: '11px', color: '#27500A', background: '#EAF3DE', padding: '6px 10px', borderRadius: '6px', marginBottom: '12px' }}>
-          {progress}
+          ✓ {progress}
         </div>
       )}
 
@@ -126,29 +129,28 @@ export default function SemanticAnalysis({ wagId, weekKey }: Props) {
           Belum ada analisis — klik "Analisis Sekarang"
         </div>
       ) : (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
 
           {/* Sentimen */}
           <div>
-            <div style={{ fontSize: '11px', color: '#999', marginBottom: '8px', fontWeight: '500' }}>
-              SENTIMEN AGEN ({total} pesan)
+            <div style={{ fontSize: '11px', color: '#999', marginBottom: '8px', fontWeight: '500', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+              Sentimen Agen
             </div>
-            <div style={{ display: 'flex', gap: '6px' }}>
+            <div style={{ display: 'flex', gap: '6px', marginBottom: '8px' }}>
               {(Object.entries(sentiments) as [keyof typeof sentiments, number][]).map(([key, val]) => (
                 <div key={key} style={{
-                  flex: 1, padding: '8px', borderRadius: '8px', textAlign: 'center',
-                  background: sentimentBg[key], border: `1px solid ${sentimentBg[key]}`,
+                  flex: 1, padding: '10px', borderRadius: '8px', textAlign: 'center',
+                  background: sentimentBg[key],
                 }}>
-                  <div style={{ fontSize: '18px', fontWeight: '600', color: sentimentColor[key] }}>{val}</div>
-                  <div style={{ fontSize: '10px', color: sentimentColor[key], marginTop: '2px' }}>{key}</div>
+                  <div style={{ fontSize: '20px', fontWeight: '600', color: sentimentColor[key] }}>{val}</div>
+                  <div style={{ fontSize: '10px', color: sentimentColor[key], marginTop: '2px', textTransform: 'capitalize' }}>{key}</div>
                   <div style={{ fontSize: '10px', color: '#999' }}>{total > 0 ? Math.round((val / total) * 100) : 0}%</div>
                 </div>
               ))}
             </div>
-
             {/* Sentimen bar */}
-            <div style={{ height: '6px', borderRadius: '3px', overflow: 'hidden', display: 'flex', marginTop: '8px' }}>
-              <div style={{ width: `${total > 0 ? (sentiments.positif / total) * 100 : 0}%`, background: '#27500A' }} />
+            <div style={{ height: '6px', borderRadius: '3px', overflow: 'hidden', display: 'flex' }}>
+              <div style={{ width: `${total > 0 ? (sentiments.positif / total) * 100 : 0}%`, background: '#27500A', transition: 'width 0.5s' }} />
               <div style={{ width: `${total > 0 ? (sentiments.netral / total) * 100 : 0}%`, background: '#e5e5e5' }} />
               <div style={{ width: `${total > 0 ? (sentiments.negatif / total) * 100 : 0}%`, background: '#B00020' }} />
             </div>
@@ -156,9 +158,11 @@ export default function SemanticAnalysis({ wagId, weekKey }: Props) {
 
           {/* Topik */}
           <div>
-            <div style={{ fontSize: '11px', color: '#999', marginBottom: '8px', fontWeight: '500' }}>TOPIK PERCAKAPAN</div>
+            <div style={{ fontSize: '11px', color: '#999', marginBottom: '8px', fontWeight: '500', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+              Topik Percakapan
+            </div>
             {topicCounts.slice(0, 5).map(t => (
-              <div key={t.label} style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' }}>
+              <div key={t.label} style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '7px' }}>
                 <div style={{ fontSize: '12px', color: '#555', width: '110px', flexShrink: 0, textTransform: 'capitalize' }}>{t.label}</div>
                 <div style={{ flex: 1, height: '5px', background: '#F8F9FB', borderRadius: '3px', overflow: 'hidden' }}>
                   <div style={{ width: `${total > 0 ? (t.count / total) * 100 : 0}%`, height: '100%', background: '#0344D8', borderRadius: '3px' }} />
@@ -171,23 +175,23 @@ export default function SemanticAnalysis({ wagId, weekKey }: Props) {
           {/* Kualitas respons Ranger */}
           {rangerMsgs.length > 0 && (
             <div>
-              <div style={{ fontSize: '11px', color: '#999', marginBottom: '8px', fontWeight: '500' }}>
-                KUALITAS RESPONS RANGER ({rangerMsgs.length} pesan)
+              <div style={{ fontSize: '11px', color: '#999', marginBottom: '8px', fontWeight: '500', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                Kualitas Respons Ranger ({rangerMsgs.length} pesan)
               </div>
               <div style={{ display: 'flex', gap: '6px' }}>
-                <div style={{ flex: 1, padding: '8px', borderRadius: '8px', background: '#EAF3DE', textAlign: 'center' }}>
-                  <div style={{ fontSize: '18px', fontWeight: '600', color: '#27500A' }}>{responseQuality.substantif}</div>
-                  <div style={{ fontSize: '10px', color: '#27500A' }}>Substantif</div>
+                <div style={{ flex: 1, padding: '10px', borderRadius: '8px', background: '#EAF3DE', textAlign: 'center' }}>
+                  <div style={{ fontSize: '20px', fontWeight: '600', color: '#27500A' }}>{responseQuality.substantif}</div>
+                  <div style={{ fontSize: '10px', color: '#27500A', marginTop: '2px' }}>Substantif</div>
                 </div>
-                <div style={{ flex: 1, padding: '8px', borderRadius: '8px', background: '#FFF3CD', textAlign: 'center' }}>
-                  <div style={{ fontSize: '18px', fontWeight: '600', color: '#856404' }}>{responseQuality.generik}</div>
-                  <div style={{ fontSize: '10px', color: '#856404' }}>Generik</div>
+                <div style={{ flex: 1, padding: '10px', borderRadius: '8px', background: '#FFF3CD', textAlign: 'center' }}>
+                  <div style={{ fontSize: '20px', fontWeight: '600', color: '#856404' }}>{responseQuality.generik}</div>
+                  <div style={{ fontSize: '10px', color: '#856404', marginTop: '2px' }}>Generik</div>
                 </div>
-                <div style={{ flex: 1, padding: '8px', borderRadius: '8px', background: '#F8F9FB', textAlign: 'center' }}>
-                  <div style={{ fontSize: '18px', fontWeight: '600', color: '#555' }}>
+                <div style={{ flex: 1, padding: '10px', borderRadius: '8px', background: '#F0F5FF', textAlign: 'center' }}>
+                  <div style={{ fontSize: '20px', fontWeight: '600', color: '#0344D8' }}>
                     {rangerMsgs.length > 0 ? Math.round((responseQuality.substantif / rangerMsgs.length) * 100) : 0}%
                   </div>
-                  <div style={{ fontSize: '10px', color: '#555' }}>Substantif rate</div>
+                  <div style={{ fontSize: '10px', color: '#0344D8', marginTop: '2px' }}>Substantif rate</div>
                 </div>
               </div>
             </div>
