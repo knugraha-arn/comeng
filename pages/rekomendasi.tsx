@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+\import { useState, useEffect, useRef } from 'react'
 import Layout from '@/components/Layout'
 import { supabase } from '@/lib/supabase'
 
@@ -144,7 +144,7 @@ export default function RekomendasiPage() {
                 <div style={{ fontSize: '13px', color: '#999' }}>
                   {displayed
                     ? `Generate: ${new Date(displayed.generated_at).toLocaleString('id-ID')}`
-                    : dataReady ? 'Data siap dianalisis' : 'Belum ada data — upload WAG dulu'}
+                    : dataReady ? 'Data siap dianalisis · 8 minggu terakhir' : 'Belum ada data — upload WAG dulu'}
                 </div>
                 {/* AI Powered badge */}
                 <span style={{
@@ -210,6 +210,25 @@ export default function RekomendasiPage() {
               {error}
             </div>
           )}
+
+          {/* Info 8 minggu */}
+          {!generating && (
+            <div style={{
+              display: 'flex', alignItems: 'start', gap: '10px',
+              padding: '10px 14px', background: '#F0F5FF',
+              border: '1px solid #B5D4F4', borderRadius: '8px',
+              marginBottom: '16px', fontSize: '12px', color: '#0C447C',
+            }}>
+              <span style={{ fontSize: '14px', marginTop: '1px' }}>ℹ</span>
+              <div>
+                <strong>Analisis berbasis 8 minggu terakhir</strong> — Rekomendasi ini hanya mempertimbangkan data 8 minggu terakhir per Ranger, bukan seluruh histori.
+                Alasannya: perilaku terkini lebih relevan untuk coaching, data historis yang terlalu panjang dapat mengaburkan kondisi saat ini, dan efisiensi penggunaan AI API.
+                Data historis lengkap tetap tersedia di halaman <strong>Tren</strong>.
+              </div>
+            </div>
+          )}
+
+
 
           {/* Generating dengan progress bar */}
           {generating && (
