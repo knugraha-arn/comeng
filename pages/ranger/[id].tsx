@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/router'
 import Layout from '@/components/Layout'
+import WeeklyChart from '@/components/WeeklyChart'
 import { supabase } from '@/lib/supabase'
 import { formatWeekKey } from '@/lib/utils'
 
@@ -46,7 +47,7 @@ function Tooltip({ text }: { text: string }) {
       onMouseEnter={() => setShow(true)}
       onMouseLeave={() => setShow(false)}
     >
-      <span style={{ fontSize: '11px', color: '#bbb', cursor: 'help', borderBottom: '1px dashed #e5e5e5' }}>ⓘ</span>
+      <span style={{ fontSize: '11px', color: '#bbb', cursor: 'help' }}>ⓘ</span>
       {show && (
         <div style={{
           position: 'absolute', left: '0', top: '20px', zIndex: 100,
@@ -122,33 +123,12 @@ export default function RangerDetail() {
   const latest = sortedMetrics[sortedMetrics.length - 1]
   const status = (latest?.status || 'healthy') as keyof typeof statusConfig
   const s = statusConfig[status]
-  const maxMsg = Math.max(...sortedMetrics.map(m => m.total_messages), 1)
 
   const barMetrics = [
-    {
-      label: 'Hari aktif',
-      value: latest?.active_days ?? 0,
-      pct: ((latest?.active_days ?? 0) / 7) * 100,
-      tooltip: 'Jumlah hari dalam minggu ini di mana Ranger mengirim minimal 1 pesan di WAG. Target: ≥ 3 hari/minggu.',
-    },
-    {
-      label: 'Total pesan',
-      value: latest?.total_messages ?? 0,
-      pct: ((latest?.total_messages ?? 0) / 50) * 100,
-      tooltip: 'Total pesan yang dikirim Ranger di WAG minggu ini. Target: ≥ 10 pesan/minggu.',
-    },
-    {
-      label: 'Proactive posts',
-      value: latest?.proactive_posts ?? 0,
-      pct: ((latest?.proactive_posts ?? 0) / 30) * 100,
-      tooltip: 'Pesan yang diinisiasi Ranger sendiri — bukan balasan. Contoh: tips transaksi, motivasi, info promo. Target: > 50% dari total pesan.',
-    },
-    {
-      label: 'Participation rate',
-      value: `${latest?.participation_rate ?? 0}%`,
-      pct: latest?.participation_rate ?? 0,
-      tooltip: 'Persentase agen yang aktif mengirim pesan di WAG dalam 30 hari terakhir. Target: > 40%.',
-    },
+    { label: 'Hari aktif', value: latest?.active_days ?? 0, pct: ((latest?.active_days ?? 0) / 7) * 100, tooltip: 'Jumlah hari Ranger mengirim minimal 1 pesan di WAG. Target: ≥ 3 hari/minggu.' },
+    { label: 'Total pesan', value: latest?.total_messages ?? 0, pct: ((latest?.total_messages ?? 0) / 50) * 100, tooltip: 'Total pesan Ranger di WAG minggu ini. Target: ≥ 10 pesan/minggu.' },
+    { label: 'Proactive posts', value: latest?.proactive_posts ?? 0, pct: ((latest?.proactive_posts ?? 0) / 30) * 100, tooltip: 'Pesan inisiasi Ranger — bukan balasan. Tips, motivasi, info promo. Target: > 50% dari total.' },
+    { label: 'Participation rate', value: `${latest?.participation_rate ?? 0}%`, pct: latest?.participation_rate ?? 0, tooltip: '% agen yang aktif mengirim pesan dalam 30 hari terakhir. Target: > 40%.' },
   ]
 
   const dormantMembers = members.filter(m => {
@@ -203,7 +183,7 @@ export default function RangerDetail() {
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px', marginBottom: '14px' }}>
 
-        {/* Bar metrics dengan tooltip */}
+        {/* Bar metrics */}
         <div style={{ background: '#FFFFFF', border: '1px solid #e5e5e5', borderRadius: '10px', padding: '18px' }}>
           <div style={{ fontSize: '13px', fontWeight: '500', marginBottom: '14px' }}>Metrik minggu terakhir</div>
           {barMetrics.map(m => (
@@ -220,27 +200,20 @@ export default function RangerDetail() {
           ))}
         </div>
 
-        {/* Weekly trend */}
+        {/* Weekly trend — pakai WeeklyChart */}
         <div style={{ background: '#FFFFFF', border: '1px solid #e5e5e5', borderRadius: '10px', padding: '18px' }}>
           <div style={{ fontSize: '13px', fontWeight: '500', marginBottom: '14px' }}>
-            Tren total pesan — {sortedMetrics.length} periode
+            Tren total pesan
+            <span style={{ fontSize: '11px', color: '#999', fontWeight: '400', marginLeft: '6px' }}>{sortedMetrics.length} periode</span>
           </div>
           {sortedMetrics.length === 0 ? (
             <div style={{ fontSize: '12px', color: '#999' }}>Belum ada data</div>
           ) : (
-            <div style={{ display: 'flex', alignItems: 'flex-end', gap: '8px', height: '80px' }}>
-              {sortedMetrics.map(m => {
-                const pct = (m.total_messages / maxMsg) * 100
-                const barColor = m.status === 'critical' ? '#E24B4A' : m.status === 'warning' ? '#FFC128' : '#0344D8'
-                return (
-                  <div key={m.week_key} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '3px', height: '100%', justifyContent: 'flex-end' }}>
-                    <div style={{ fontSize: '10px', fontWeight: '500', color: barColor }}>{m.total_messages}</div>
-                    <div style={{ width: '100%', height: `${Math.max(pct, 5)}%`, background: barColor, borderRadius: '3px 3px 0 0' }} />
-                    <div style={{ fontSize: '9px', color: '#999', whiteSpace: 'nowrap' }}>{formatWeekKey(m.week_key)}</div>
-                  </div>
-                )
-              })}
-            </div>
+            <WeeklyChart
+              data={sortedMetrics.map(m => ({ week_key: m.week_key, value: m.total_messages, status: m.status }))}
+              target={10}
+              height={90}
+            />
           )}
         </div>
       </div>
