@@ -6,13 +6,16 @@ export default function AuthCallback() {
   const router = useRouter()
 
   useEffect(() => {
-    supabase.auth.getSession().then(async ({ data: { session } }) => {
+    // Beri waktu Supabase establish session
+    setTimeout(async () => {
+      const { data: { session } } = await supabase.auth.getSession()
+
       if (!session) {
         router.replace('/login')
         return
       }
 
-      // Upsert user ke tabel — kalau belum ada, buat dulu
+      // Upsert user
       await supabase.from('users').upsert({
         id: session.user.id,
         email: session.user.email,
@@ -34,7 +37,7 @@ export default function AuthCallback() {
       }
 
       router.replace('/')
-    })
+    }, 1000)
   }, [router])
 
   return (
