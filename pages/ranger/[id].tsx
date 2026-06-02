@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { useRouter } from 'next/router'
 import Layout from '@/components/Layout'
 import WeeklyChart from '@/components/WeeklyChart'
+import SemanticAnalysis from '@/components/SemanticAnalysis'
 import { supabase } from '@/lib/supabase'
 import { formatWeekKey } from '@/lib/utils'
 
@@ -200,7 +201,7 @@ export default function RangerDetail() {
           ))}
         </div>
 
-        {/* Weekly trend — pakai WeeklyChart */}
+        {/* Weekly trend */}
         <div style={{ background: '#FFFFFF', border: '1px solid #e5e5e5', borderRadius: '10px', padding: '18px' }}>
           <div style={{ fontSize: '13px', fontWeight: '500', marginBottom: '14px' }}>
             Tren total pesan
@@ -219,7 +220,7 @@ export default function RangerDetail() {
       </div>
 
       {/* Bottom row */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '14px' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '14px', marginBottom: '14px' }}>
 
         {/* Dormant */}
         <div style={{ background: '#FFFFFF', border: '1px solid #e5e5e5', borderRadius: '10px', padding: '18px' }}>
@@ -286,6 +287,11 @@ export default function RangerDetail() {
           )}
         </div>
       </div>
+
+      {/* Analisis Semantik */}
+      {ranger.wags?.id && (
+        <SemanticAnalysis wagId={ranger.wags.id} />
+      )}
 
     </Layout>
   )
