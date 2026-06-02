@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import Layout from '@/components/Layout'
+import WeeklyChart from '@/components/WeeklyChart'
 import { supabase } from '@/lib/supabase'
 import { formatWeekKey } from '@/lib/utils'
 
@@ -10,9 +11,6 @@ type WeekMetric = {
   participation_rate: number
   proactive_posts: number
   status: string
-  ranger_name: string
-  wag_name: string
-  ranger_id: string
 }
 
 type RangerTrend = {
@@ -55,10 +53,10 @@ export default function TrendsPage() {
   }
 
   const metricConfig = {
-    total_messages: { label: 'Total Pesan Ranger', unit: 'pesan', target: 10, desc: 'Jumlah pesan Ranger per minggu' },
-    active_days: { label: 'Hari Aktif', unit: 'hari', target: 3, desc: 'Hari Ranger aktif di WAG per minggu' },
-    participation_rate: { label: 'Participation Rate', unit: '%', target: 40, desc: '% agen aktif dalam 30 hari terakhir' },
-    proactive_posts: { label: 'Proactive Posts', unit: 'pesan', target: 5, desc: 'Pesan inisiasi Ranger (bukan balasan)' },
+    total_messages: { label: 'Total Pesan', unit: '', target: 10, desc: 'Jumlah pesan Ranger per minggu · Target: 10' },
+    active_days: { label: 'Hari Aktif', unit: '', target: 3, desc: 'Hari Ranger aktif di WAG · Target: 3 hari' },
+    participation_rate: { label: 'Participation Rate', unit: '%', target: 40, desc: '% agen aktif dalam 30 hari · Target: 40%' },
+    proactive_posts: { label: 'Proactive Posts', unit: '', target: 5, desc: 'Pesan inisiasi Ranger · Target: 5' },
   }
 
   const mc = metricConfig[selectedMetric]
@@ -67,17 +65,13 @@ export default function TrendsPage() {
     ? trends
     : trends.filter(t => t.ranger_id === selectedRangerId)
 
-  // Kumpulkan semua week_key unik dari semua ranger
+  // Agregat rata-rata semua Ranger per minggu
   const allWeeks = [...new Set(trends.flatMap(t => t.metrics.map(m => m.week_key)))].sort()
-
-  // Hitung agregat semua Ranger per minggu
   const aggregated = allWeeks.map(wk => {
     const vals = trends.map(t => t.metrics.find(m => m.week_key === wk)?.[selectedMetric] ?? 0)
-    const avg = vals.length > 0 ? Math.round(vals.reduce((a, b) => a + b, 0) / vals.length) : 0
-    return { week_key: wk, avg, vals }
+    const avg = vals.length > 0 ? Math.round(vals.reduce((a, b) => a + (b as number), 0) / vals.length) : 0
+    return { week_key: wk, value: avg }
   })
-
-  const maxVal = Math.max(...aggregated.map(a => a.avg), mc.target, 1)
 
   if (loading) return (
     <Layout title="Tren">
@@ -90,7 +84,6 @@ export default function TrendsPage() {
 
       {/* Controls */}
       <div style={{ display: 'flex', gap: '12px', marginBottom: '20px', alignItems: 'center', flexWrap: 'wrap' }}>
-        {/* Metric selector */}
         <div style={{ display: 'flex', gap: '4px', background: '#F8F9FB', padding: '4px', borderRadius: '10px', border: '1px solid #e5e5e5' }}>
           {(Object.keys(metricConfig) as (keyof typeof metricConfig)[]).map(k => (
             <button key={k} onClick={() => setSelectedMetric(k)}
@@ -107,55 +100,40 @@ export default function TrendsPage() {
           ))}
         </div>
 
-        {/* Ranger filter */}
-        <select
-          value={selectedRangerId}
-          onChange={e => setSelectedRangerId(e.target.value)}
-          style={{ padding: '7px 12px', borderRadius: '8px', border: '1px solid #e5e5e5', fontSize: '12px', outline: 'none', background: '#FFFFFF' }}
-        >
+        <select value={selectedRangerId} onChange={e => setSelectedRangerId(e.target.value)}
+          style={{ padding: '7px 12px', borderRadius: '8px', border: '1px solid #e5e5e5', fontSize: '12px', outline: 'none', background: '#FFFFFF' }}>
           <option value="semua">Semua Ranger</option>
           {trends.map(t => (
             <option key={t.ranger_id} value={t.ranger_id}>{t.ranger_name}</option>
           ))}
         </select>
 
-        <div style={{ fontSize: '12px', color: '#999', marginLeft: 'auto' }}>{mc.desc} · Target: {mc.target} {mc.unit}</div>
+        <div style={{ fontSize: '12px', color: '#999', marginLeft: 'auto' }}>{mc.desc}</div>
       </div>
 
-      {/* Agregat chart — semua ranger */}
+      {/* Agregat chart */}
       {selectedRangerId === 'semua' && (
         <div style={{ background: '#FFFFFF', border: '1px solid #e5e5e5', borderRadius: '10px', padding: '20px', marginBottom: '16px' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
-            <div style={{ fontSize: '13px', fontWeight: '500' }}>Rata-rata semua Ranger — {mc.label}</div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '11px', color: '#999' }}>
-              <div style={{ width: '20px', height: '2px', background: '#E24B4A', borderRadius: '1px' }} />
-              Target {mc.target} {mc.unit}
-            </div>
+          <div style={{ fontSize: '13px', fontWeight: '500', marginBottom: '16px' }}>
+            Rata-rata semua Ranger — {mc.label}
           </div>
-          <div style={{ display: 'flex', alignItems: 'flex-end', gap: '10px', height: '120px' }}>
-            {aggregated.map(a => {
-              const pct = (a.avg / maxVal) * 100
-              const targetPct = (mc.target / maxVal) * 100
-              const barColor = a.avg < mc.target * 0.5 ? '#E24B4A' : a.avg < mc.target ? '#FFC128' : '#0344D8'
-              return (
-                <div key={a.week_key} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px', height: '100%', justifyContent: 'flex-end', position: 'relative' }}>
-                  {/* Target line */}
-                  <div style={{ position: 'absolute', bottom: `${targetPct}%`, left: 0, right: 0, height: '1px', background: '#E24B4A', opacity: 0.4 }} />
-                  <div style={{ fontSize: '11px', fontWeight: '500', color: barColor }}>{a.avg}</div>
-                  <div style={{ width: '100%', height: `${Math.max(pct, 3)}%`, background: barColor, borderRadius: '4px 4px 0 0', opacity: 0.85 }} />
-                  <div style={{ fontSize: '10px', color: '#999', whiteSpace: 'nowrap', textAlign: 'center' }}>{formatWeekKey(a.week_key)}</div>
-                </div>
-              )
-            })}
-          </div>
+          {aggregated.length === 0 ? (
+            <div style={{ fontSize: '12px', color: '#999' }}>Belum ada data</div>
+          ) : (
+            <WeeklyChart
+              data={aggregated}
+              target={mc.target}
+              unit={mc.unit}
+              height={100}
+            />
+          )}
         </div>
       )}
 
-      {/* Per Ranger charts */}
-      <div style={{ display: 'grid', gridTemplateColumns: displayedTrends.length === 1 ? '1fr' : 'repeat(auto-fill, minmax(340px, 1fr))', gap: '14px' }}>
+      {/* Per Ranger */}
+      <div style={{ display: 'grid', gridTemplateColumns: displayedTrends.length === 1 ? '1fr' : 'repeat(auto-fill, minmax(340px, 1fr))', gap: '14px', marginBottom: '16px' }}>
         {displayedTrends.map(t => {
           const vals = t.metrics.map(m => m[selectedMetric] as number)
-          const max = Math.max(...vals, mc.target, 1)
           const latest = vals[vals.length - 1] ?? 0
           const prev = vals[vals.length - 2] ?? 0
           const trend = latest > prev ? 'up' : latest < prev ? 'down' : 'flat'
@@ -170,8 +148,8 @@ export default function TrendsPage() {
                   <div style={{ fontSize: '11px', color: '#999', marginTop: '2px' }}>{t.wag_name}</div>
                 </div>
                 <div style={{ textAlign: 'right' }}>
-                  <div style={{ fontSize: '20px', fontWeight: '600', color: latest < mc.target * 0.5 ? '#B00020' : latest < mc.target ? '#856404' : '#0344D8' }}>
-                    {latest}{mc.unit === '%' ? '%' : ''}
+                  <div style={{ fontSize: '22px', fontWeight: '600', color: latest < mc.target * 0.5 ? '#B00020' : latest < mc.target ? '#856404' : '#0344D8' }}>
+                    {latest}{mc.unit}
                   </div>
                   <div style={{ fontSize: '11px', color: trendColor, marginTop: '2px' }}>
                     {trendIcon} vs minggu lalu
@@ -179,28 +157,21 @@ export default function TrendsPage() {
                 </div>
               </div>
 
-              {/* Mini chart */}
-              <div style={{ display: 'flex', alignItems: 'flex-end', gap: '6px', height: '80px' }}>
-                {t.metrics.map((m, i) => {
-                  const val = m[selectedMetric] as number
-                  const pct = (val / max) * 100
-                  const isLatest = i === t.metrics.length - 1
-                  const barColor = val < mc.target * 0.5 ? '#E24B4A' : val < mc.target ? '#FFC128' : '#0344D8'
-                  return (
-                    <div key={m.week_key} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '3px', height: '100%', justifyContent: 'flex-end' }}>
-                      <div style={{ fontSize: '10px', fontWeight: isLatest ? '600' : '400', color: isLatest ? barColor : '#bbb' }}>{val}{mc.unit === '%' ? '%' : ''}</div>
-                      <div style={{ width: '100%', height: `${Math.max(pct, 3)}%`, background: barColor, borderRadius: '3px 3px 0 0', opacity: isLatest ? 1 : 0.5 }} />
-                      <div style={{ fontSize: '9px', color: '#bbb', whiteSpace: 'nowrap' }}>{formatWeekKey(m.week_key)}</div>
-                    </div>
-                  )
-                })}
-                {t.metrics.length === 0 && <div style={{ fontSize: '12px', color: '#999' }}>Belum ada data</div>}
-              </div>
+              <WeeklyChart
+                data={t.metrics.map(m => ({ week_key: m.week_key, value: m[selectedMetric] as number, status: m.status }))}
+                target={mc.target}
+                unit={mc.unit}
+                height={80}
+              />
 
-              {/* Target indicator */}
+              {/* Target bar */}
               <div style={{ marginTop: '12px', display: 'flex', alignItems: 'center', gap: '8px' }}>
                 <div style={{ flex: 1, height: '4px', background: '#F8F9FB', borderRadius: '2px', overflow: 'hidden' }}>
-                  <div style={{ width: `${Math.min((latest / mc.target) * 100, 100)}%`, height: '100%', background: latest >= mc.target ? '#0344D8' : latest >= mc.target * 0.5 ? '#FFC128' : '#E24B4A', borderRadius: '2px' }} />
+                  <div style={{
+                    width: `${Math.min((latest / mc.target) * 100, 100)}%`, height: '100%',
+                    background: latest >= mc.target ? '#0344D8' : latest >= mc.target * 0.5 ? '#FFC128' : '#E24B4A',
+                    borderRadius: '2px',
+                  }} />
                 </div>
                 <div style={{ fontSize: '10px', color: '#999', whiteSpace: 'nowrap' }}>
                   {latest >= mc.target ? '✓ Target tercapai' : `${Math.round((latest / mc.target) * 100)}% dari target`}
@@ -212,14 +183,14 @@ export default function TrendsPage() {
       </div>
 
       {/* Summary table */}
-      <div style={{ background: '#FFFFFF', border: '1px solid #e5e5e5', borderRadius: '10px', overflow: 'hidden', marginTop: '16px' }}>
+      <div style={{ background: '#FFFFFF', border: '1px solid #e5e5e5', borderRadius: '10px', overflow: 'hidden' }}>
         <div style={{ padding: '14px 16px', borderBottom: '1px solid #e5e5e5', fontSize: '13px', fontWeight: '500' }}>
           Ringkasan semua metrik — periode terakhir
         </div>
         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px' }}>
           <thead>
             <tr style={{ borderBottom: '1px solid #e5e5e5' }}>
-              {['Ranger', 'WAG', 'Total Pesan', 'Hari Aktif', 'Participation', 'Proactive', 'Status'].map(h => (
+              {['Ranger', 'WAG', 'Periode', 'Total Pesan', 'Hari Aktif', 'Participation', 'Proactive', 'Status'].map(h => (
                 <th key={h} style={{ padding: '9px 14px', textAlign: 'left', fontSize: '11px', color: '#999', fontWeight: '500' }}>{h}</th>
               ))}
             </tr>
@@ -228,9 +199,12 @@ export default function TrendsPage() {
             {trends.map(t => {
               const latest = t.metrics[t.metrics.length - 1]
               if (!latest) return null
-              const s = latest.status
-              const sc = { critical: { bg: '#FDECEA', color: '#B00020', label: 'Kritis' }, warning: { bg: '#FFF3CD', color: '#856404', label: 'Waspada' }, healthy: { bg: '#EAF3DE', color: '#27500A', label: 'Sehat' } }
-              const style = sc[s as keyof typeof sc] || sc.healthy
+              const sc = {
+                critical: { bg: '#FDECEA', color: '#B00020', label: 'Kritis' },
+                warning: { bg: '#FFF3CD', color: '#856404', label: 'Waspada' },
+                healthy: { bg: '#EAF3DE', color: '#27500A', label: 'Sehat' },
+              }
+              const style = sc[latest.status as keyof typeof sc] || sc.healthy
               return (
                 <tr key={t.ranger_id} style={{ borderBottom: '1px solid #f5f5f5' }}
                   onMouseEnter={e => (e.currentTarget.style.background = '#F8F9FB')}
@@ -238,6 +212,7 @@ export default function TrendsPage() {
                 >
                   <td style={{ padding: '10px 14px', fontWeight: '500' }}>{t.ranger_name}</td>
                   <td style={{ padding: '10px 14px', color: '#999' }}>{t.wag_name}</td>
+                  <td style={{ padding: '10px 14px', color: '#bbb', fontSize: '11px' }}>{formatWeekKey(latest.week_key)}</td>
                   <td style={{ padding: '10px 14px', color: latest.total_messages < 10 ? '#B00020' : '#27500A', fontWeight: '500' }}>{latest.total_messages}</td>
                   <td style={{ padding: '10px 14px', color: latest.active_days < 3 ? '#B00020' : '#27500A', fontWeight: '500' }}>{latest.active_days}/7</td>
                   <td style={{ padding: '10px 14px', color: latest.participation_rate < 40 ? '#B00020' : '#27500A', fontWeight: '500' }}>{latest.participation_rate}%</td>
