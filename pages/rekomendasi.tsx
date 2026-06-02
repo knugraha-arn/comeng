@@ -19,11 +19,11 @@ type SavedRecommendation = {
 
 export default function RekomendasiPage() {
   const [generating, setGenerating] = useState(false)
-  const [current, setCurrent] = useState<SavedRecommendation | null>(null)
   const [history, setHistory] = useState<SavedRecommendation[]>([])
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [error, setError] = useState('')
   const [dataReady, setDataReady] = useState(false)
+  const [showConfirm, setShowConfirm] = useState(false)
 
   useEffect(() => {
     checkData()
@@ -43,22 +43,20 @@ export default function RekomendasiPage() {
       .limit(10)
     if (data && data.length > 0) {
       setHistory(data as SavedRecommendation[])
-      setCurrent(data[0] as SavedRecommendation)
       setSelectedId(data[0].id)
     }
   }
 
-  const handleGenerate = async () => {
-    // Cek apakah sudah generate hari ini
-    const today = new Date().toISOString().slice(0, 10)
-    const alreadyToday = history.find(h => h.week_key === today)
-    if (alreadyToday) {
-      const confirm = window.confirm('Sudah ada rekomendasi hari ini. Generate ulang?')
-      if (!confirm) return
-    }
+  // Cek apakah sudah ada rekomendasi minggu ini
+  const getThisWeekKey = () => new Date().toISOString().slice(0, 10)
 
+  const thisWeekRec = history.find(h => h.week_key === getThisWeekKey())
+  const canGenerate = dataReady && !generating
+
+  const doGenerate = async () => {
     setGenerating(true)
     setError('')
+    setShowConfirm(false)
 
     try {
       const { data: { session } } = await supabase.auth.getSession()
@@ -81,7 +79,15 @@ export default function RekomendasiPage() {
     setGenerating(false)
   }
 
-  const displayed = selectedId ? history.find(h => h.id === selectedId) : current
+  const handleGenerate = () => {
+    if (thisWeekRec) {
+      setShowConfirm(true)
+    } else {
+      doGenerate()
+    }
+  }
+
+  const displayed = selectedId ? history.find(h => h.id === selectedId) : null
 
   const priorityConfig = {
     critical: { label: 'Perhatian Segera', bg: '#FDECEA', border: '#F09595', accent: '#B00020', dot: '🔴' },
@@ -91,31 +97,65 @@ export default function RekomendasiPage() {
 
   return (
     <Layout title="Rekomendasi">
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 280px', gap: '16px', alignItems: 'start' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 260px', gap: '16px', alignItems: 'start' }}>
 
-        {/* Main content */}
+        {/* Main */}
         <div>
           {/* Header */}
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '20px' }}>
             <div>
               <div style={{ fontSize: '13px', color: '#999' }}>
-                {displayed ? `Generate: ${new Date(displayed.generated_at).toLocaleString('id-ID')}` : dataReady ? 'Data siap dianalisis' : 'Belum ada data'}
+                {displayed
+                  ? `Generate: ${new Date(displayed.generated_at).toLocaleString('id-ID')}`
+                  : dataReady ? 'Data siap dianalisis' : 'Belum ada data — upload WAG dulu'}
               </div>
+              {thisWeekRec && (
+                <div style={{ fontSize: '11px', color: '#27500A', marginTop: '3px' }}>
+                  ✓ Rekomendasi minggu ini sudah ada
+                </div>
+              )}
             </div>
             <button
               onClick={handleGenerate}
-              disabled={generating || !dataReady}
+              disabled={!canGenerate}
               style={{
                 padding: '10px 24px',
-                background: generating || !dataReady ? '#999' : '#0344D8',
+                background: !canGenerate ? '#999' : thisWeekRec ? '#555' : '#0344D8',
                 color: '#FFFFFF', border: 'none', borderRadius: '8px',
                 fontSize: '13px', fontWeight: '500',
-                cursor: generating || !dataReady ? 'not-allowed' : 'pointer',
+                cursor: !canGenerate ? 'not-allowed' : 'pointer',
+                display: 'flex', alignItems: 'center', gap: '8px',
               }}
             >
-              {generating ? '⟳ Menganalisis...' : '✦ Generate Rekomendasi AI'}
+              {generating ? '⟳ Menganalisis...' : thisWeekRec ? '↺ Generate Ulang' : '✦ Generate Rekomendasi AI'}
             </button>
           </div>
+
+          {/* Konfirmasi generate ulang */}
+          {showConfirm && (
+            <div style={{
+              padding: '16px 20px', background: '#FFF3CD', border: '1px solid #FAC775',
+              borderRadius: '10px', marginBottom: '16px',
+              display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '16px',
+            }}>
+              <div>
+                <div style={{ fontSize: '13px', fontWeight: '500', color: '#633806' }}>Generate ulang rekomendasi?</div>
+                <div style={{ fontSize: '12px', color: '#854F0B', marginTop: '3px' }}>
+                  Sudah ada rekomendasi hari ini ({new Date(thisWeekRec!.generated_at).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })}). Ini akan menggunakan API token tambahan.
+                </div>
+              </div>
+              <div style={{ display: 'flex', gap: '8px', flexShrink: 0 }}>
+                <button onClick={() => setShowConfirm(false)}
+                  style={{ padding: '7px 16px', borderRadius: '8px', border: '1px solid #e5e5e5', background: '#FFFFFF', fontSize: '12px', cursor: 'pointer' }}>
+                  Batal
+                </button>
+                <button onClick={doGenerate}
+                  style={{ padding: '7px 16px', borderRadius: '8px', border: 'none', background: '#0344D8', color: '#FFFFFF', fontSize: '12px', cursor: 'pointer', fontWeight: '500' }}>
+                  Generate Ulang
+                </button>
+              </div>
+            </div>
+          )}
 
           {/* Error */}
           {error && (
@@ -124,7 +164,7 @@ export default function RekomendasiPage() {
             </div>
           )}
 
-          {/* Generating state */}
+          {/* Generating */}
           {generating && (
             <div style={{ background: '#FFFFFF', border: '1px solid #e5e5e5', borderRadius: '10px', padding: '48px', textAlign: 'center', marginBottom: '12px' }}>
               <div style={{ fontSize: '24px', marginBottom: '12px' }}>⟳</div>
@@ -133,7 +173,7 @@ export default function RekomendasiPage() {
             </div>
           )}
 
-          {/* Empty state */}
+          {/* Empty */}
           {!generating && !displayed && (
             <div style={{ background: '#FFFFFF', border: '1px solid #e5e5e5', borderRadius: '10px', padding: '48px', textAlign: 'center' }}>
               <div style={{ fontSize: '32px', marginBottom: '12px' }}>✦</div>
@@ -149,12 +189,9 @@ export default function RekomendasiPage() {
             const p = priorityConfig[rec.priority] || priorityConfig.warning
             return (
               <div key={i} style={{
-                background: p.bg,
-                border: `1px solid ${p.border}`,
+                background: p.bg, border: `1px solid ${p.border}`,
                 borderLeft: `4px solid ${p.accent}`,
-                borderRadius: '10px',
-                padding: '20px',
-                marginBottom: '12px',
+                borderRadius: '10px', padding: '20px', marginBottom: '12px',
               }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '10px' }}>
                   <span style={{ fontSize: '18px' }}>{p.dot}</span>
@@ -196,19 +233,22 @@ export default function RekomendasiPage() {
             <div style={{ padding: '20px', fontSize: '12px', color: '#999', textAlign: 'center' }}>Belum ada riwayat</div>
           ) : (
             history.map(h => (
-              <div
-                key={h.id}
-                onClick={() => setSelectedId(h.id)}
+              <div key={h.id} onClick={() => setSelectedId(h.id)}
                 style={{
-                  padding: '12px 16px',
-                  borderBottom: '1px solid #f5f5f5',
-                  cursor: 'pointer',
+                  padding: '12px 16px', borderBottom: '1px solid #f5f5f5', cursor: 'pointer',
                   background: selectedId === h.id ? '#F0F5FF' : 'transparent',
                   borderLeft: selectedId === h.id ? '3px solid #0344D8' : '3px solid transparent',
                 }}
               >
-                <div style={{ fontSize: '12px', fontWeight: '500', color: selectedId === h.id ? '#0344D8' : '#333' }}>
-                  {new Date(h.generated_at).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })}
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '6px' }}>
+                  <div style={{ fontSize: '12px', fontWeight: '500', color: selectedId === h.id ? '#0344D8' : '#333' }}>
+                    {new Date(h.generated_at).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })}
+                  </div>
+                  {h.week_key === getThisWeekKey() && (
+                    <span style={{ fontSize: '9px', padding: '1px 6px', borderRadius: '999px', background: '#EAF3DE', color: '#27500A', fontWeight: '500' }}>
+                      Hari ini
+                    </span>
+                  )}
                 </div>
                 <div style={{ fontSize: '11px', color: '#999', marginTop: '2px' }}>
                   {new Date(h.generated_at).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })} · {h.items.length} Ranger
