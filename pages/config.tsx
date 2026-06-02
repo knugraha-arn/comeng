@@ -4,7 +4,7 @@ import { supabase } from '@/lib/supabase'
 
 type Wag = { id: string; name: string; description: string; status: string; created_at: string }
 type Ranger = { id: string; wag_id: string; full_name: string; display_name: string; phone_number: string; status: string }
-type User = { id: string; email: string; full_name: string; role: string; last_login_at: string }
+type User = { id: string; email: string; full_name: string; role: string; last_login_at: string; is_approved: boolean }
 type Observer = { id: string; wag_id: string; display_name: string; note: string; created_at: string }
 
 export default function ConfigPage() {
@@ -18,6 +18,7 @@ export default function ConfigPage() {
   const [showObserverForm, setShowObserverForm] = useState(false)
   const [loading, setLoading] = useState(false)
   const [message, setMessage] = useState({ text: '', type: '' })
+  const [confirmArchive, setConfirmArchive] = useState<string | null>(null)
 
   const [wagName, setWagName] = useState('')
   const [wagDesc, setWagDesc] = useState('')
@@ -95,16 +96,41 @@ export default function ConfigPage() {
     setShowObserverForm(false); fetchAll()
   }
 
-  const handleDeactivateWag = async (id: string) => {
-    await supabase.from('wags').update({ status: 'inactive' }).eq('id', id); fetchAll()
+  const handleArchiveWag = async (id: string) => {
+    await supabase.from('wags').update({ status: 'inactive' }).eq('id', id)
+    setConfirmArchive(null)
+    showMsg('WAG berhasil diarsipkan', 'success')
+    fetchAll()
+  }
+
+  const handleActivateWag = async (id: string) => {
+    await supabase.from('wags').update({ status: 'active' }).eq('id', id)
+    showMsg('WAG berhasil diaktifkan kembali', 'success')
+    fetchAll()
   }
 
   const handleDeactivateRanger = async (id: string) => {
-    await supabase.from('rangers').update({ status: 'inactive' }).eq('id', id); fetchAll()
+    await supabase.from('rangers').update({ status: 'inactive' }).eq('id', id)
+    showMsg('Ranger berhasil dinonaktifkan', 'success')
+    fetchAll()
+  }
+
+  const handleActivateRanger = async (id: string) => {
+    await supabase.from('rangers').update({ status: 'active' }).eq('id', id)
+    showMsg('Ranger berhasil diaktifkan kembali', 'success')
+    fetchAll()
   }
 
   const handleDeleteObserver = async (id: string) => {
-    await supabase.from('observers').delete().eq('id', id); fetchAll()
+    await supabase.from('observers').delete().eq('id', id)
+    showMsg('Observer berhasil dihapus', 'success')
+    fetchAll()
+  }
+
+  const handleToggleApprove = async (id: string, current: boolean) => {
+    await supabase.from('users').update({ is_approved: !current }).eq('id', id)
+    showMsg(`Akses ${!current ? 'diberikan' : 'dicabut'}`, !current ? 'success' : 'error')
+    fetchAll()
   }
 
   const inputStyle = {
@@ -120,13 +146,16 @@ export default function ConfigPage() {
     { key: 'users', label: 'Akun Pengguna' },
   ]
 
+  const activeWags = wags.filter(w => w.status === 'active')
+  const archivedWags = wags.filter(w => w.status !== 'active')
+
   return (
     <Layout title="Konfigurasi">
 
       {/* Tabs */}
       <div style={{ display: 'flex', gap: '4px', marginBottom: '20px', background: '#F8F9FB', padding: '4px', borderRadius: '10px', width: 'fit-content', border: '1px solid #e5e5e5' }}>
         {tabs.map((t) => (
-          <button key={t.key} onClick={() => setTab(t.key as 'wag' | 'ranger' | 'users' | 'observer')}
+          <button key={t.key} onClick={() => setTab(t.key as typeof tab)}
             style={{ padding: '7px 20px', borderRadius: '8px', border: 'none', background: tab === t.key ? '#FFFFFF' : 'transparent', color: tab === t.key ? '#000000' : '#999', fontSize: '13px', fontWeight: tab === t.key ? '500' : '400', cursor: 'pointer', boxShadow: tab === t.key ? '0 1px 3px rgba(0,0,0,0.08)' : 'none' }}>
             {t.label}
           </button>
@@ -147,6 +176,7 @@ export default function ConfigPage() {
             style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '8px 16px', borderRadius: '8px', border: '1px solid #e5e5e5', background: '#FFFFFF', fontSize: '13px', cursor: 'pointer', marginBottom: '14px', fontWeight: '500' }}>
             + Tambah WAG Baru
           </button>
+
           {showWagForm && (
             <div style={{ background: '#F8F9FB', border: '1px solid #e5e5e5', borderRadius: '10px', padding: '18px', marginBottom: '16px' }}>
               <div style={{ fontSize: '13px', fontWeight: '500', marginBottom: '14px' }}>Form tambah WAG</div>
@@ -168,37 +198,90 @@ export default function ConfigPage() {
               </div>
             </div>
           )}
-          <div style={{ background: '#FFFFFF', border: '1px solid #e5e5e5', borderRadius: '10px', overflow: 'hidden' }}>
+
+          {/* Konfirmasi archive */}
+          {confirmArchive && (
+            <div style={{ padding: '14px 18px', background: '#FFF3CD', border: '1px solid #FAC775', borderRadius: '10px', marginBottom: '14px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '16px' }}>
+              <div style={{ fontSize: '13px', color: '#633806' }}>
+                <strong>Arsipkan WAG ini?</strong> WAG tidak akan muncul di dashboard dan tidak akan diproses saat upload. Data histori tetap tersimpan.
+              </div>
+              <div style={{ display: 'flex', gap: '8px', flexShrink: 0 }}>
+                <button onClick={() => setConfirmArchive(null)} style={{ padding: '6px 14px', borderRadius: '6px', border: '1px solid #e5e5e5', background: '#FFFFFF', fontSize: '12px', cursor: 'pointer' }}>Batal</button>
+                <button onClick={() => handleArchiveWag(confirmArchive)} style={{ padding: '6px 14px', borderRadius: '6px', border: 'none', background: '#B00020', color: '#FFFFFF', fontSize: '12px', cursor: 'pointer', fontWeight: '500' }}>Ya, Arsipkan</button>
+              </div>
+            </div>
+          )}
+
+          {/* WAG Aktif */}
+          <div style={{ background: '#FFFFFF', border: '1px solid #e5e5e5', borderRadius: '10px', overflow: 'hidden', marginBottom: '14px' }}>
+            <div style={{ padding: '12px 16px', borderBottom: '1px solid #e5e5e5', fontSize: '13px', fontWeight: '500' }}>
+              WAG Aktif <span style={{ fontSize: '11px', color: '#999', fontWeight: '400', marginLeft: '6px' }}>{activeWags.length} WAG</span>
+            </div>
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
               <thead>
                 <tr style={{ borderBottom: '1px solid #e5e5e5' }}>
-                  {['Nama WAG', 'Deskripsi', 'Status', 'Dibuat', ''].map(h => (
+                  {['Nama WAG', 'Deskripsi', 'Dibuat', ''].map(h => (
                     <th key={h} style={{ padding: '10px 14px', textAlign: 'left', fontSize: '11px', color: '#999', fontWeight: '500' }}>{h}</th>
                   ))}
                 </tr>
               </thead>
               <tbody>
-                {wags.length === 0 && <tr><td colSpan={5} style={{ padding: '24px', textAlign: 'center', color: '#999', fontSize: '13px' }}>Belum ada WAG</td></tr>}
-                {wags.map(w => (
+                {activeWags.length === 0 && (
+                  <tr><td colSpan={4} style={{ padding: '24px', textAlign: 'center', color: '#999', fontSize: '13px' }}>Belum ada WAG aktif</td></tr>
+                )}
+                {activeWags.map(w => (
                   <tr key={w.id} style={{ borderBottom: '1px solid #f5f5f5' }}>
                     <td style={{ padding: '12px 14px', fontWeight: '500' }}>{w.name}</td>
                     <td style={{ padding: '12px 14px', color: '#999' }}>{w.description || '—'}</td>
-                    <td style={{ padding: '12px 14px' }}>
-                      <span style={{ fontSize: '11px', padding: '3px 10px', borderRadius: '999px', background: w.status === 'active' ? '#EAF3DE' : '#F8F9FB', color: w.status === 'active' ? '#27500A' : '#999' }}>
-                        {w.status === 'active' ? 'Aktif' : 'Nonaktif'}
-                      </span>
-                    </td>
                     <td style={{ padding: '12px 14px', color: '#999', fontSize: '12px' }}>{new Date(w.created_at).toLocaleDateString('id-ID')}</td>
                     <td style={{ padding: '12px 14px' }}>
-                      {w.status === 'active' && (
-                        <button onClick={() => handleDeactivateWag(w.id)} style={{ fontSize: '11px', padding: '4px 10px', borderRadius: '6px', border: '1px solid #FDECEA', background: 'transparent', color: '#B00020', cursor: 'pointer' }}>Nonaktifkan</button>
-                      )}
+                      <button
+                        onClick={() => setConfirmArchive(w.id)}
+                        style={{ fontSize: '11px', padding: '4px 10px', borderRadius: '6px', border: '1px solid #e5e5e5', background: 'transparent', color: '#856404', cursor: 'pointer' }}
+                      >
+                        Arsipkan
+                      </button>
                     </td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
+
+          {/* WAG Diarsipkan */}
+          {archivedWags.length > 0 && (
+            <div style={{ background: '#FFFFFF', border: '1px solid #e5e5e5', borderRadius: '10px', overflow: 'hidden' }}>
+              <div style={{ padding: '12px 16px', borderBottom: '1px solid #e5e5e5', fontSize: '13px', fontWeight: '500', color: '#999' }}>
+                WAG Diarsipkan <span style={{ fontSize: '11px', fontWeight: '400', marginLeft: '6px' }}>{archivedWags.length} WAG</span>
+              </div>
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
+                <thead>
+                  <tr style={{ borderBottom: '1px solid #e5e5e5' }}>
+                    {['Nama WAG', 'Deskripsi', 'Dibuat', ''].map(h => (
+                      <th key={h} style={{ padding: '10px 14px', textAlign: 'left', fontSize: '11px', color: '#bbb', fontWeight: '500' }}>{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {archivedWags.map(w => (
+                    <tr key={w.id} style={{ borderBottom: '1px solid #f5f5f5', opacity: 0.7 }}>
+                      <td style={{ padding: '12px 14px', color: '#999' }}>{w.name}</td>
+                      <td style={{ padding: '12px 14px', color: '#bbb' }}>{w.description || '—'}</td>
+                      <td style={{ padding: '12px 14px', color: '#bbb', fontSize: '12px' }}>{new Date(w.created_at).toLocaleDateString('id-ID')}</td>
+                      <td style={{ padding: '12px 14px' }}>
+                        <button
+                          onClick={() => handleActivateWag(w.id)}
+                          style={{ fontSize: '11px', padding: '4px 10px', borderRadius: '6px', border: '1px solid #B5D4F4', background: 'transparent', color: '#0344D8', cursor: 'pointer' }}
+                        >
+                          Aktifkan Kembali
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
         </div>
       )}
 
@@ -258,7 +341,7 @@ export default function ConfigPage() {
               <tbody>
                 {rangers.length === 0 && <tr><td colSpan={6} style={{ padding: '24px', textAlign: 'center', color: '#999', fontSize: '13px' }}>Belum ada Ranger</td></tr>}
                 {rangers.map(r => (
-                  <tr key={r.id} style={{ borderBottom: '1px solid #f5f5f5' }}>
+                  <tr key={r.id} style={{ borderBottom: '1px solid #f5f5f5', opacity: r.status !== 'active' ? 0.6 : 1 }}>
                     <td style={{ padding: '12px 14px', fontWeight: '500' }}>{r.full_name}</td>
                     <td style={{ padding: '12px 14px', color: '#555' }}>{r.display_name}</td>
                     <td style={{ padding: '12px 14px', color: '#999' }}>{r.phone_number}</td>
@@ -269,8 +352,10 @@ export default function ConfigPage() {
                       </span>
                     </td>
                     <td style={{ padding: '12px 14px' }}>
-                      {r.status === 'active' && (
+                      {r.status === 'active' ? (
                         <button onClick={() => handleDeactivateRanger(r.id)} style={{ fontSize: '11px', padding: '4px 10px', borderRadius: '6px', border: '1px solid #FDECEA', background: 'transparent', color: '#B00020', cursor: 'pointer' }}>Nonaktifkan</button>
+                      ) : (
+                        <button onClick={() => handleActivateRanger(r.id)} style={{ fontSize: '11px', padding: '4px 10px', borderRadius: '6px', border: '1px solid #B5D4F4', background: 'transparent', color: '#0344D8', cursor: 'pointer' }}>Aktifkan</button>
                       )}
                     </td>
                   </tr>
@@ -352,16 +437,20 @@ export default function ConfigPage() {
       {/* Users Tab */}
       {tab === 'users' && (
         <div>
+          <div style={{ fontSize: '12px', color: '#856404', marginBottom: '14px', background: '#FFF3CD', padding: '10px 14px', borderRadius: '8px', border: '1px solid #FAC775' }}>
+            ⚠ User baru perlu login dulu via Google — lalu approve aksesnya di sini.
+          </div>
           <div style={{ background: '#FFFFFF', border: '1px solid #e5e5e5', borderRadius: '10px', overflow: 'hidden' }}>
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
               <thead>
                 <tr style={{ borderBottom: '1px solid #e5e5e5' }}>
-                  {['Email', 'Nama', 'Role', 'Login Terakhir'].map(h => (
+                  {['Email', 'Nama', 'Role', 'Login Terakhir', 'Akses'].map(h => (
                     <th key={h} style={{ padding: '10px 14px', textAlign: 'left', fontSize: '11px', color: '#999', fontWeight: '500' }}>{h}</th>
                   ))}
                 </tr>
               </thead>
               <tbody>
+                {users.length === 0 && <tr><td colSpan={5} style={{ padding: '24px', textAlign: 'center', color: '#999', fontSize: '13px' }}>Belum ada pengguna</td></tr>}
                 {users.map(u => (
                   <tr key={u.id} style={{ borderBottom: '1px solid #f5f5f5' }}>
                     <td style={{ padding: '12px 14px', fontWeight: '500' }}>{u.email}</td>
@@ -374,13 +463,24 @@ export default function ConfigPage() {
                     <td style={{ padding: '12px 14px', color: '#999', fontSize: '12px' }}>
                       {u.last_login_at ? new Date(u.last_login_at).toLocaleDateString('id-ID') : '—'}
                     </td>
+                    <td style={{ padding: '12px 14px' }}>
+                      <button
+                        onClick={() => handleToggleApprove(u.id, u.is_approved)}
+                        style={{
+                          fontSize: '11px', padding: '4px 12px', borderRadius: '6px', border: '1px solid',
+                          borderColor: u.is_approved ? '#FDECEA' : '#B5D4F4',
+                          background: 'transparent',
+                          color: u.is_approved ? '#B00020' : '#0344D8',
+                          cursor: 'pointer', fontWeight: '500',
+                        }}
+                      >
+                        {u.is_approved ? 'Cabut Akses' : 'Approve'}
+                      </button>
+                    </td>
                   </tr>
                 ))}
               </tbody>
             </table>
-          </div>
-          <div style={{ fontSize: '12px', color: '#999', marginTop: '12px' }}>
-            Untuk menambah pengguna baru: minta mereka login dulu via Google, lalu update role di Supabase SQL Editor.
           </div>
         </div>
       )}
