@@ -8,6 +8,7 @@ const navItems = [
   { href: '/members', label: 'Member Alert', icon: '◎' },
   { href: '/trends', label: 'Tren', icon: '↗' },
   { href: '/rekomendasi', label: 'Rekomendasi', icon: '◈' },
+  { href: '/ai-assistant', label: 'AI Assistant', icon: '✦' },
   { href: '/upload', label: 'Upload WAG', icon: '↑' },
   { href: '/config', label: 'Konfigurasi', icon: '⚙' },
 ]
