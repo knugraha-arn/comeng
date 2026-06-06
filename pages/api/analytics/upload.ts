@@ -94,8 +94,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     .eq('id', user.id)
     .single()
   console.log('[upload] user:', user.id, 'role:', userData?.role, 'error:', roleError?.message)
-  if (userData?.role !== 'super_admin') {
-    return res.status(403).json({ error: 'Hanya super_admin yang dapat upload data', debug: { userId: user.id, role: userData?.role, roleError: roleError?.message } })
+  if (!['admin', 'super_admin'].includes(userData?.role ?? '')) {
+    return res.status(403).json({ error: 'Hanya admin yang dapat upload data', debug: { userId: user.id, role: userData?.role, roleError: roleError?.message } })
   }
 
   const { masterPath, nobuPath, esaPath } = req.body as {
