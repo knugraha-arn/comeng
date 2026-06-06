@@ -5,6 +5,7 @@ import * as XLSX from 'xlsx'
 export interface MasterAgenRow {
   terminal_id: string
   serial_number: string
+  snapshot_date: string
   cif_arranet: string | null
   kode_sub_ca: string | null
   nama_sub_ca: string | null
