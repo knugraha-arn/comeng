@@ -3,7 +3,7 @@ import Head from 'next/head'
 import Layout from '../../components/Layout'
 import { createBrowserClient } from '@supabase/ssr'
 
-const DATES = ['2026-06-02', '2026-06-03', '2026-06-04']
+const DATES = ['2026-05-29', '2026-05-30', '2026-05-31', '2026-06-01', '2026-06-02', '2026-06-03', '2026-06-04']
 
 interface StepResult {
   date: string
