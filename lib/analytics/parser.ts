@@ -89,7 +89,7 @@ export function parseMasterAgen(buffer: Buffer): { rows: MasterAgenRow[], errors
   const errors: string[] = []
   const rows: MasterAgenRow[] = []
 
-  const wb = XLSX.read(buffer, { type: 'buffer' })
+  const wb = XLSX.read(buffer, { type: 'buffer', cellDates: true })
   const sheetName = wb.SheetNames.find(s => s === 'Query result') ?? wb.SheetNames[0]
   const ws = wb.Sheets[sheetName]
   const raw = XLSX.utils.sheet_to_json<Record<string, unknown>>(ws, { defval: null })
@@ -139,7 +139,7 @@ export function parseNobu(buffer: Buffer): { rows: NobuRow[], dates: string[], e
   const rows: NobuRow[] = []
   const dateSet = new Set<string>()
 
-  const wb = XLSX.read(buffer, { type: 'buffer' })
+  const wb = XLSX.read(buffer, { type: 'buffer', cellDates: true })
   const ws = wb.Sheets[wb.SheetNames[0]]
   const raw = XLSX.utils.sheet_to_json<Record<string, unknown>>(ws, { defval: null })
 
@@ -195,7 +195,7 @@ export function parseEsa(buffer: Buffer): { rows: EsaRow[], errors: string[] } {
   const errors: string[] = []
   const rows: EsaRow[] = []
 
-  const wb = XLSX.read(buffer, { type: 'buffer' })
+  const wb = XLSX.read(buffer, { type: 'buffer', cellDates: true })
   const sheetName = wb.SheetNames.find(s => s === 'Query result') ?? wb.SheetNames[0]
   const ws = wb.Sheets[sheetName]
   const raw = XLSX.utils.sheet_to_json<Record<string, unknown>>(ws, { defval: null })
@@ -208,16 +208,24 @@ export function parseEsa(buffer: Buffer): { rows: EsaRow[], errors: string[] } {
     if (!refnum || !terminal_id) continue
 
     // Parse datetime_tran untuk transaction_date
+    // Di XLSX bisa berupa: Excel serial float, Date object, atau string ISO
     let transaction_date: string | null = null
     const dtRaw = row['datetime_tran']
-    if (dtRaw) {
+    if (dtRaw !== null && dtRaw !== undefined) {
       try {
-        const dt = new Date(String(dtRaw))
-        if (!isNaN(dt.getTime())) {
-          transaction_date = dt.toISOString().split('T')[0]
+        if (typeof dtRaw === 'number') {
+          // Excel serial datetime: integer part = date, decimal = time
+          transaction_date = excelSerialToDate(Math.floor(dtRaw))
+        } else if (dtRaw instanceof Date) {
+          transaction_date = (dtRaw as Date).toISOString().split('T')[0]
+        } else {
+          const dt = new Date(String(dtRaw))
+          if (!isNaN(dt.getTime())) {
+            transaction_date = dt.toISOString().split('T')[0]
+          }
         }
       } catch {
-        // ignore parse error
+        // ignore
       }
     }
 
