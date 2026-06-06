@@ -88,13 +88,14 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const { data: { user }, error: authError } = await supabase.auth.getUser(token)
   if (authError || !user) return res.status(401).json({ error: 'Unauthorized' })
 
-  const { data: userData } = await supabase
+  const { data: userData, error: roleError } = await supabase
     .from('profiles')
     .select('role')
     .eq('id', user.id)
     .single()
+  console.log('[upload] user:', user.id, 'role:', userData?.role, 'error:', roleError?.message)
   if (userData?.role !== 'super_admin') {
-    return res.status(403).json({ error: 'Hanya super_admin yang dapat upload data' })
+    return res.status(403).json({ error: 'Hanya super_admin yang dapat upload data', debug: { userId: user.id, role: userData?.role, roleError: roleError?.message } })
   }
 
   const { masterPath, nobuPath, esaPath } = req.body as {
