@@ -89,7 +89,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   if (authError || !user) return res.status(401).json({ error: 'Unauthorized' })
 
   const { data: userData, error: roleError } = await supabase
-    .from('profiles')
+    .from('users')
     .select('role')
     .eq('id', user.id)
     .single()
