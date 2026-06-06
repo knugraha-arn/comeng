@@ -113,7 +113,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       const top20pctThreshold = agentTotalFees[Math.floor(agentTotalFees.length * 0.2)]?.totalFee ?? 0
 
       for (const [key, history] of Object.entries(agentHistory)) {
-        if (history.length < 7) continue  // butuh minimal 7 hari data
+        if (history.length < 3) continue  // butuh minimal 7 hari data
 
         const mid = Math.floor(history.length / 2)
         const firstHalf = history.slice(0, mid)
@@ -176,7 +176,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       }
 
       for (const [kode, history] of Object.entries(mitraHistory)) {
-        if (history.length < 5) continue
+        if (history.length < 3) continue
 
         const mid = Math.floor(history.length / 2)
         const firstHalf  = history.slice(0, mid)
@@ -239,7 +239,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       }
 
       for (const [pic, history] of Object.entries(picHistory)) {
-        if (history.length < 5) continue
+        if (history.length < 3) continue
 
         const latest      = history[history.length - 1]
         const activeRatio = latest.total_agents > 0 ? latest.active_agents / latest.total_agents : 0
