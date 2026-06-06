@@ -25,7 +25,7 @@ export interface MasterAgenRow {
 }
 
 export interface NobuRow {
-  transaction_date: string        // ISO date string: 'YYYY-MM-DD'
+  transaction_date: string
   reference_number: string
   terminal_id: string
   type_transaksi: string
@@ -42,7 +42,7 @@ export interface NobuRow {
 }
 
 export interface EsaRow {
-  transaction_date: string        // ISO date string dari datetime_tran
+  transaction_date: string
   refnum: string
   terminal_id: string
   serial_number: string | null
@@ -52,31 +52,90 @@ export interface EsaRow {
   jenis_transaksi: string | null
   amount: number
   resp_code: string | null
-  datetime_tran: string | null    // ISO datetime string
+  datetime_tran: string | null
   agent_id: string | null
   source_app: string | null
 }
 
-export interface ParseResult {
-  master: MasterAgenRow[]
-  nobu: NobuRow[]
-  esa: EsaRow[]
-  nobuDates: string[]             // unique dates found in NOBU file
-  errors: string[]
-}
+// ─── Date Converters ──────────────────────────────────────────────────────────
 
-// ─── Excel Serial Date Converter ─────────────────────────────────────────────
-// NOBU menyimpan Local Date sebagai Excel serial number
-// Excel epoch: 1 Jan 1900, dengan bug leap year 1900
-function excelSerialToDate(serial: number): string {
+// Konversi Excel serial number ke ISO date string
+// Works untuk date-only (integer) maupun datetime (float)
+function excelSerialToISODate(serial: number): string {
   const date = new Date(Date.UTC(1899, 11, 30))
-  date.setUTCDate(date.getUTCDate() + serial)
+  date.setUTCDate(date.getUTCDate() + Math.floor(serial))
   return date.toISOString().split('T')[0]
 }
 
+// Konversi Excel serial number ke ISO datetime string (untuk datetime fields)
+function excelSerialToISODatetime(serial: number): string {
+  const MS_PER_DAY = 86400000
+  const epoch = Date.UTC(1899, 11, 30)
+  const ms = epoch + serial * MS_PER_DAY
+  return new Date(ms).toISOString()
+}
+
+// Universal date converter — handle semua format yang mungkin muncul dari XLSX
+// Mengembalikan ISO date string 'YYYY-MM-DD' atau null
+function toISODate(val: unknown): string | null {
+  if (val === null || val === undefined || val === '') return null
+
+  // Excel serial number (number)
+  if (typeof val === 'number') {
+    if (val > 1000) return excelSerialToISODate(val)  // sanity check: serial > 1000
+    return null
+  }
+
+  // Date object (dari cellDates:true atau XLSX internal)
+  if (val instanceof Date) {
+    if (!isNaN(val.getTime())) return val.toISOString().split('T')[0]
+    return null
+  }
+
+  // String — coba parse
+  if (typeof val === 'string') {
+    const s = val.trim()
+    if (!s) return null
+    // Format DD/MM/YYYY
+    const dmy = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/)
+    if (dmy) return `${dmy[3]}-${dmy[2].padStart(2,'0')}-${dmy[1].padStart(2,'0')}`
+    // Coba native Date parse
+    const d = new Date(s)
+    if (!isNaN(d.getTime())) return d.toISOString().split('T')[0]
+  }
+
+  return null
+}
+
+// Universal datetime converter — mengembalikan ISO datetime string atau null
+function toISODatetime(val: unknown): string | null {
+  if (val === null || val === undefined || val === '') return null
+
+  if (typeof val === 'number') {
+    if (val > 1000) return excelSerialToISODatetime(val)
+    return null
+  }
+
+  if (val instanceof Date) {
+    if (!isNaN(val.getTime())) return val.toISOString()
+    return null
+  }
+
+  if (typeof val === 'string') {
+    const s = val.trim()
+    if (!s) return null
+    const d = new Date(s)
+    if (!isNaN(d.getTime())) return d.toISOString()
+  }
+
+  return null
+}
+
 // ─── Safe value helpers ───────────────────────────────────────────────────────
+
 function str(val: unknown): string | null {
   if (val === null || val === undefined || val === '') return null
+  if (val instanceof Date) return val.toISOString()
   return String(val).trim() || null
 }
 
@@ -90,7 +149,7 @@ export function parseMasterAgen(buffer: Buffer): { rows: MasterAgenRow[], errors
   const errors: string[] = []
   const rows: MasterAgenRow[] = []
 
-  const wb = XLSX.read(buffer, { type: 'buffer', cellDates: true })
+  const wb = XLSX.read(buffer, { type: 'buffer', cellDates: false })
   const sheetName = wb.SheetNames.find(s => s === 'Query result') ?? wb.SheetNames[0]
   const ws = wb.Sheets[sheetName]
   const raw = XLSX.utils.sheet_to_json<Record<string, unknown>>(ws, { defval: null })
@@ -98,23 +157,14 @@ export function parseMasterAgen(buffer: Buffer): { rows: MasterAgenRow[], errors
   for (const row of raw) {
     const terminal_id = str(row['terminal_id'])
     const serial_number = str(row['serial_number'])
-
-    // Skip baris tanpa terminal_id atau serial_number (baris sampah)
     if (!terminal_id || !serial_number) continue
 
-    // Skip terminal test (9000000x)
     const is_test_terminal = terminal_id.startsWith('9000000')
 
     rows.push({
       terminal_id,
       serial_number,
-      snapshot_date:    (() => {
-        const dc = row['date_capture']
-        if (dc instanceof Date) return (dc as Date).toISOString().split('T')[0]
-        if (typeof dc === 'number') return excelSerialToDate(dc)
-        if (typeof dc === 'string' && dc.trim()) return dc.trim().split('T')[0]
-        return new Date().toISOString().split('T')[0]
-      })(),
+      snapshot_date:    toISODate(row['date_capture']) ?? new Date().toISOString().split('T')[0],
       cif_arranet:      str(row['cif_arranet']),
       kode_sub_ca:      str(row['kode_sub_ca']),
       nama_sub_ca:      str(row['nama_sub_ca']),
@@ -134,10 +184,7 @@ export function parseMasterAgen(buffer: Buffer): { rows: MasterAgenRow[], errors
     })
   }
 
-  if (rows.length === 0) {
-    errors.push('Master Agen: tidak ada baris valid ditemukan')
-  }
-
+  if (rows.length === 0) errors.push('Master Agen: tidak ada baris valid ditemukan')
   return { rows, errors }
 }
 
@@ -147,29 +194,17 @@ export function parseNobu(buffer: Buffer): { rows: NobuRow[], dates: string[], e
   const rows: NobuRow[] = []
   const dateSet = new Set<string>()
 
-  const wb = XLSX.read(buffer, { type: 'buffer', cellDates: true })
+  const wb = XLSX.read(buffer, { type: 'buffer', cellDates: false })
   const ws = wb.Sheets[wb.SheetNames[0]]
   const raw = XLSX.utils.sheet_to_json<Record<string, unknown>>(ws, { defval: null })
 
   for (const row of raw) {
     const reference_number = str(row['Reference Number'])
     const terminal_id = str(row['Terminal ID'])
-    const localDateRaw = row['Local Date']
-
-    // Skip baris tanpa reference_number atau terminal_id
     if (!reference_number || !terminal_id) continue
 
-    // Konversi Local Date
-    // Dengan cellDates:true, XLSX parse date cells jadi Date object
-    // Fallback: Excel serial number atau string
-    let transaction_date: string
-    if (localDateRaw instanceof Date) {
-      transaction_date = (localDateRaw as Date).toISOString().split('T')[0]
-    } else if (typeof localDateRaw === 'number') {
-      transaction_date = excelSerialToDate(localDateRaw)
-    } else if (typeof localDateRaw === 'string' && localDateRaw.trim()) {
-      transaction_date = localDateRaw.trim()
-    } else {
+    const transaction_date = toISODate(row['Local Date'])
+    if (!transaction_date) {
       errors.push(`NOBU: baris dengan refnum ${reference_number} tidak memiliki Local Date valid`)
       continue
     }
@@ -180,24 +215,21 @@ export function parseNobu(buffer: Buffer): { rows: NobuRow[], dates: string[], e
       transaction_date,
       reference_number,
       terminal_id,
-      type_transaksi:   str(row['Type Transaksi']) ?? '',
-      amount:           num(row['Amount']),
-      sharing_fee:      num(row['Sharing Fee']),
-      mti:              str(row['MTI']),
-      pcode:            str(row['Pcode']),
-      respon_code:      str(row['Respon Code']),
-      local_time:       str(row['Local Time']),
-      acquirer:         str(row['Acquirer']),
-      issuer:           str(row['Issuer']),
-      terminal_name:    str(row['Terminal Name']),
+      type_transaksi:    str(row['Type Transaksi']) ?? '',
+      amount:            num(row['Amount']),
+      sharing_fee:       num(row['Sharing Fee']),
+      mti:               str(row['MTI']),
+      pcode:             str(row['Pcode']),
+      respon_code:       str(row['Respon Code']),
+      local_time:        str(row['Local Time']),
+      acquirer:          str(row['Acquirer']),
+      issuer:            str(row['Issuer']),
+      terminal_name:     str(row['Terminal Name']),
       terminal_location: str(row['Terminal Location']),
     })
   }
 
-  if (rows.length === 0) {
-    errors.push('NOBU: tidak ada baris valid ditemukan')
-  }
-
+  if (rows.length === 0) errors.push('NOBU: tidak ada baris valid ditemukan')
   return { rows, dates: Array.from(dateSet).sort(), errors }
 }
 
@@ -206,7 +238,7 @@ export function parseEsa(buffer: Buffer): { rows: EsaRow[], errors: string[] } {
   const errors: string[] = []
   const rows: EsaRow[] = []
 
-  const wb = XLSX.read(buffer, { type: 'buffer', cellDates: true })
+  const wb = XLSX.read(buffer, { type: 'buffer', cellDates: false })
   const sheetName = wb.SheetNames.find(s => s === 'Query result') ?? wb.SheetNames[0]
   const ws = wb.Sheets[sheetName]
   const raw = XLSX.utils.sheet_to_json<Record<string, unknown>>(ws, { defval: null })
@@ -214,31 +246,10 @@ export function parseEsa(buffer: Buffer): { rows: EsaRow[], errors: string[] } {
   for (const row of raw) {
     const refnum = str(row['refnum'])
     const terminal_id = str(row['terminal_id'])
-
-    // Skip baris tanpa refnum
     if (!refnum || !terminal_id) continue
 
-    // Parse datetime_tran untuk transaction_date
-    // Di XLSX bisa berupa: Excel serial float, Date object, atau string ISO
-    let transaction_date: string | null = null
-    const dtRaw = row['datetime_tran']
-    if (dtRaw !== null && dtRaw !== undefined) {
-      try {
-        if (typeof dtRaw === 'number') {
-          // Excel serial datetime: integer part = date, decimal = time
-          transaction_date = excelSerialToDate(Math.floor(dtRaw))
-        } else if (dtRaw instanceof Date) {
-          transaction_date = (dtRaw as Date).toISOString().split('T')[0]
-        } else {
-          const dt = new Date(String(dtRaw))
-          if (!isNaN(dt.getTime())) {
-            transaction_date = dt.toISOString().split('T')[0]
-          }
-        }
-      } catch {
-        // ignore
-      }
-    }
+    const datetime_tran = toISODatetime(row['datetime_tran'])
+    const transaction_date = datetime_tran ? datetime_tran.split('T')[0] : null
 
     if (!transaction_date) {
       errors.push(`ESA: baris dengan refnum ${refnum} tidak memiliki datetime_tran valid`)
@@ -249,49 +260,37 @@ export function parseEsa(buffer: Buffer): { rows: EsaRow[], errors: string[] } {
       transaction_date,
       refnum,
       terminal_id,
-      serial_number:  str(row['serial_number']),
-      merchant_id:    str(row['merchant_id']),
-      merchant_name:  str(row['merchant_name']),
-      mitra:          str(row['Mitra']),
+      serial_number:   str(row['serial_number']),
+      merchant_id:     str(row['merchant_id']),
+      merchant_name:   str(row['merchant_name']),
+      mitra:           str(row['Mitra']),
       jenis_transaksi: str(row['JenisTransaksi']),
-      amount:         num(row['amount']),
-      resp_code:      str(row['resp_code']),
-      datetime_tran:  dtRaw ? String(dtRaw) : null,
-      agent_id:       str(row['agent_id']),
-      source_app:     str(row['source_app']),
+      amount:          num(row['amount']),
+      resp_code:       str(row['resp_code']),
+      datetime_tran,
+      agent_id:        str(row['agent_id']),
+      source_app:      str(row['source_app']),
     })
   }
 
-  if (rows.length === 0) {
-    errors.push('ESA: tidak ada baris valid ditemukan')
-  }
-
+  if (rows.length === 0) errors.push('ESA: tidak ada baris valid ditemukan')
   return { rows, errors }
 }
 
-// ─── REFNUM Match Rate Calculator ────────────────────────────────────────────
+// ─── REFNUM Match Rate ────────────────────────────────────────────────────────
 export function calcRefnumMatchRate(
   nobuRows: NobuRow[],
   esaRows: EsaRow[],
   forDate: string
 ): number {
   const nobuRefs = new Set(
-    nobuRows
-      .filter(r => r.transaction_date === forDate)
-      .map(r => r.reference_number)
+    nobuRows.filter(r => r.transaction_date === forDate).map(r => r.reference_number)
   )
   const esaRefs = new Set(
-    esaRows
-      .filter(r => r.transaction_date === forDate)
-      .map(r => r.refnum)
+    esaRows.filter(r => r.transaction_date === forDate).map(r => r.refnum)
   )
-
   if (nobuRefs.size === 0) return 0
-
   let matched = 0
-  for (const ref of nobuRefs) {
-    if (esaRefs.has(ref)) matched++
-  }
-
-  return Math.round((matched / nobuRefs.size) * 10000) / 100  // 2 decimal places
+  for (const ref of nobuRefs) if (esaRefs.has(ref)) matched++
+  return Math.round((matched / nobuRefs.size) * 10000) / 100
 }
