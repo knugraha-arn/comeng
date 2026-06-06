@@ -93,8 +93,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     .select('role')
     .eq('id', user.id)
     .single()
-  if (userData?.role !== 'admin') {
-    return res.status(403).json({ error: 'Hanya admin yang dapat upload data' })
+  if (userData?.role !== 'super_admin') {
+    return res.status(403).json({ error: 'Hanya super_admin yang dapat upload data' })
   }
 
   const { masterPath, nobuPath, esaPath } = req.body as {

@@ -109,7 +109,7 @@ export default function Layout({ children, title }: { children: React.ReactNode;
   const now = new Date()
   const dateStr = now.toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })
 
-  const isSuperAdmin = role === 'admin'
+  const isSuperAdmin = role === 'super_admin'
 
   if (!ready) return (
     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '100vh', fontFamily: 'system-ui, sans-serif', background: '#F8F9FB' }}>
