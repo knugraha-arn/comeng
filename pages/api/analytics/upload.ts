@@ -122,6 +122,13 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const { rows: nobuRows, dates: nobuDates, errors: nobuErrors } = parseNobu(nobuBuffer)
     const { rows: esaRows, errors: esaErrors } = parseEsa(esaBuffer)
 
+    console.log('[upload] parse results:', {
+      masterRows: masterRows.length, masterErrors,
+      nobuRows: nobuRows.length, nobuDates, nobuErrors,
+      esaRows: esaRows.length, esaErrors,
+      bufferSizes: { master: masterBuffer.length, nobu: nobuBuffer.length, esa: esaBuffer.length },
+    })
+
     allErrors.push(...masterErrors, ...nobuErrors, ...esaErrors)
 
     if (masterRows.length === 0 || nobuRows.length === 0 || esaRows.length === 0) {
@@ -129,6 +136,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       return res.status(400).json({
         error: 'Parsing gagal — satu atau lebih file tidak menghasilkan data valid',
         details: allErrors,
+        debug: {
+          masterRows: masterRows.length,
+          nobuRows: nobuRows.length,
+          esaRows: esaRows.length,
+          bufferSizes: { master: masterBuffer.length, nobu: nobuBuffer.length, esa: esaBuffer.length },
+        }
       })
     }
 
