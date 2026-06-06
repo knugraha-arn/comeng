@@ -151,12 +151,15 @@ export function parseNobu(buffer: Buffer): { rows: NobuRow[], dates: string[], e
     // Skip baris tanpa reference_number atau terminal_id
     if (!reference_number || !terminal_id) continue
 
-    // Konversi Local Date dari Excel serial
+    // Konversi Local Date
+    // Dengan cellDates:true, XLSX parse date cells jadi Date object
+    // Fallback: Excel serial number atau string
     let transaction_date: string
-    if (typeof localDateRaw === 'number') {
+    if (localDateRaw instanceof Date) {
+      transaction_date = (localDateRaw as Date).toISOString().split('T')[0]
+    } else if (typeof localDateRaw === 'number') {
       transaction_date = excelSerialToDate(localDateRaw)
     } else if (typeof localDateRaw === 'string' && localDateRaw.trim()) {
-      // Fallback jika sudah berupa string tanggal
       transaction_date = localDateRaw.trim()
     } else {
       errors.push(`NOBU: baris dengan refnum ${reference_number} tidak memiliki Local Date valid`)
