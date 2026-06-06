@@ -13,12 +13,18 @@ const navItems = [
   { href: '/config', label: 'Konfigurasi', icon: '⚙' },
 ]
 
+const analyticsNavItems = [
+  { href: '/analytics', label: 'Morning Brief', icon: '📊' },
+  { href: '/analytics/upload', label: 'Upload Data', icon: '⬆', adminOnly: true },
+]
+
 // Cache di module level — persist selama session browser, tidak reset saat ganti halaman
 let sessionChecked = false
 let sessionApproved = false
 let sessionEmail = ''
 let sessionName = ''
 let sessionAvatar = ''
+let sessionRole = ''
 
 export default function Layout({ children, title }: { children: React.ReactNode; title?: string }) {
   const router = useRouter()
@@ -26,6 +32,7 @@ export default function Layout({ children, title }: { children: React.ReactNode;
   const [email, setEmail] = useState(sessionEmail)
   const [name, setName] = useState(sessionName)
   const [avatar, setAvatar] = useState(sessionAvatar)
+  const [role, setRole] = useState(sessionRole)
 
   useEffect(() => {
     // Kalau sudah dicek sebelumnya, skip query
@@ -60,10 +67,10 @@ export default function Layout({ children, title }: { children: React.ReactNode;
         last_login_at: new Date().toISOString(),
       }, { onConflict: 'id' }).then(() => {})
 
-      // Cek is_approved
+      // Cek is_approved dan role
       const { data: userData } = await supabase
         .from('users')
-        .select('is_approved')
+        .select('is_approved, role')
         .eq('id', session.user.id)
         .single()
 
@@ -72,6 +79,9 @@ export default function Layout({ children, title }: { children: React.ReactNode;
       sessionEmail = userEmail
       sessionName = userName
       sessionAvatar = userAvatar
+      sessionRole = userData?.role ?? ''
+
+      setRole(sessionRole)
 
       if (!userData?.is_approved) {
         sessionApproved = false
@@ -91,12 +101,15 @@ export default function Layout({ children, title }: { children: React.ReactNode;
     sessionEmail = ''
     sessionName = ''
     sessionAvatar = ''
+    sessionRole = ''
     await supabase.auth.signOut()
     router.replace('/login')
   }
 
   const now = new Date()
   const dateStr = now.toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })
+
+  const isSuperAdmin = role === 'SUPER_ADMIN'
 
   if (!ready) return (
     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '100vh', fontFamily: 'system-ui, sans-serif', background: '#F8F9FB' }}>
@@ -125,7 +138,9 @@ export default function Layout({ children, title }: { children: React.ReactNode;
         </div>
 
         {/* Nav */}
-        <nav style={{ padding: '10px 8px', flex: 1 }}>
+        <nav style={{ padding: '10px 8px', flex: 1, overflowY: 'auto' }}>
+
+          {/* Menu WAG */}
           {navItems.map((item) => {
             const isActive = router.pathname === item.href || (item.href !== '/' && router.pathname.startsWith(item.href))
             return (
@@ -147,6 +162,42 @@ export default function Layout({ children, title }: { children: React.ReactNode;
               </div>
             )
           })}
+
+          {/* Divider Analytics */}
+          <div style={{
+            margin: '10px 8px 6px',
+            borderTop: '1px solid rgba(255,255,255,0.08)',
+            paddingTop: '10px',
+          }}>
+            <div style={{ fontSize: '9px', color: 'rgba(255,255,255,0.25)', letterSpacing: '0.12em', fontWeight: '600', paddingLeft: '4px', marginBottom: '4px' }}>
+              ANALYTICS
+            </div>
+          </div>
+
+          {/* Menu Analytics */}
+          {analyticsNavItems
+            .filter(item => !item.adminOnly || isSuperAdmin)
+            .map((item) => {
+              const isActive = router.pathname === item.href || (item.href !== '/' && router.pathname.startsWith(item.href))
+              return (
+                <div key={item.href} onClick={() => router.push(item.href)}
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: '10px',
+                    padding: '9px 12px', borderRadius: '8px', cursor: 'pointer',
+                    fontSize: '13px', marginBottom: '2px',
+                    background: isActive ? '#0344D8' : 'transparent',
+                    color: isActive ? '#FFFFFF' : 'rgba(255,255,255,0.55)',
+                    fontWeight: isActive ? '500' : '400',
+                    transition: 'all 0.15s',
+                  }}
+                  onMouseEnter={e => { if (!isActive) e.currentTarget.style.background = 'rgba(255,255,255,0.06)' }}
+                  onMouseLeave={e => { if (!isActive) e.currentTarget.style.background = 'transparent' }}
+                >
+                  <span style={{ fontSize: '14px', minWidth: '16px', textAlign: 'center' }}>{item.icon}</span>
+                  <span>{item.label}</span>
+                </div>
+              )
+            })}
         </nav>
 
         {/* Footer */}
