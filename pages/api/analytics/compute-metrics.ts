@@ -156,7 +156,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       // Partner Health Score (0–100)
       // Komponen: active ratio, volume trend (hari ini saja untuk sekarang)
       const active_ratio = total_agents > 0 ? active_agents / total_agents : 0
-      const health_score = Math.round(active_ratio * 100 * 100) / 100
+      const health_score = Math.min(100, Math.round(active_ratio * 100 * 100) / 100)
 
       return {
         metric_date:     date,
@@ -230,7 +230,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
       // PIC Health Score (0–100)
       const active_ratio = total_agents > 0 ? active_agents / total_agents : 0
-      const health_score = Math.round(active_ratio * 100 * 100) / 100
+      const health_score = Math.min(100, Math.round(active_ratio * 100 * 100) / 100)
 
       return {
         metric_date:    date,
