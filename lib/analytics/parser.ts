@@ -108,7 +108,13 @@ export function parseMasterAgen(buffer: Buffer): { rows: MasterAgenRow[], errors
     rows.push({
       terminal_id,
       serial_number,
-      snapshot_date:    str(row['date_capture']) ?? new Date().toISOString().split('T')[0],
+      snapshot_date:    (() => {
+        const dc = row['date_capture']
+        if (dc instanceof Date) return (dc as Date).toISOString().split('T')[0]
+        if (typeof dc === 'number') return excelSerialToDate(dc)
+        if (typeof dc === 'string' && dc.trim()) return dc.trim().split('T')[0]
+        return new Date().toISOString().split('T')[0]
+      })(),
       cif_arranet:      str(row['cif_arranet']),
       kode_sub_ca:      str(row['kode_sub_ca']),
       nama_sub_ca:      str(row['nama_sub_ca']),
