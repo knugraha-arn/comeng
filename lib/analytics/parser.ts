@@ -116,9 +116,9 @@ function toISODatetime(val: unknown): string | null {
     return null
   }
 
-  if (val instanceof Date) {
-    if (!isNaN(val.getTime())) return val.toISOString()
-    return null
+  // Duck typing untuk Date object (instanceof bisa false di cross-realm Node.js)
+  if (val !== null && typeof val === 'object' && typeof (val as {toISOString?: unknown}).toISOString === 'function') {
+    try { return (val as {toISOString: () => string}).toISOString() } catch { return null }
   }
 
   if (typeof val === 'string') {
