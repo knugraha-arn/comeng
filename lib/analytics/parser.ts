@@ -107,6 +107,7 @@ export function parseMasterAgen(buffer: Buffer): { rows: MasterAgenRow[], errors
     rows.push({
       terminal_id,
       serial_number,
+      snapshot_date:    str(row['date_capture']) ?? new Date().toISOString().split('T')[0],
       cif_arranet:      str(row['cif_arranet']),
       kode_sub_ca:      str(row['kode_sub_ca']),
       nama_sub_ca:      str(row['nama_sub_ca']),
