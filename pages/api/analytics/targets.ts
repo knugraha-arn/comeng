@@ -7,34 +7,30 @@ const supabase = createClient(
 )
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  // GET — ambil target bulan tertentu atau terbaru
   if (req.method === 'GET') {
     const { year, month } = req.query
 
-    let query = supabase
-      .from('am_targets')
-      .select('*')
-      .order('period_year', { ascending: false })
-      .order('period_month', { ascending: false })
-      .limit(1)
-
     if (year && month) {
-      query = supabase
+      const { data, error } = await supabase
         .from('am_targets')
         .select('*')
         .eq('period_year', Number(year))
         .eq('period_month', Number(month))
         .single()
+      if (error && error.code !== 'PGRST116') return res.status(500).json({ error: error.message })
+      return res.status(200).json({ data: data ?? null })
     }
 
-    const { data, error } = await query
-    if (error && error.code !== 'PGRST116') {
-      return res.status(500).json({ error: error.message })
-    }
-    return res.status(200).json({ data: Array.isArray(data) ? data[0] : data })
+    const { data, error } = await supabase
+      .from('am_targets')
+      .select('*')
+      .order('period_year', { ascending: false })
+      .order('period_month', { ascending: false })
+      .limit(1)
+    if (error) return res.status(500).json({ error: error.message })
+    return res.status(200).json({ data: data?.[0] ?? null })
   }
 
-  // POST — simpan target
   if (req.method === 'POST') {
     const token = (req.headers.authorization ?? '').replace('Bearer ', '')
     const { data: { user }, error: authError } = await supabase.auth.getUser(token)
@@ -50,11 +46,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       return res.status(403).json({ error: 'Hanya admin yang dapat mengubah target' })
     }
 
-    const body = req.body
     const { error } = await supabase
       .from('am_targets')
       .upsert({
-        ...body,
+        ...req.body,
         created_by: user.id,
         updated_at: new Date().toISOString(),
       }, { onConflict: 'period_year,period_month' })
