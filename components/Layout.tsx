@@ -16,6 +16,7 @@ const navItems = [
 const analyticsNavItems = [
   { href: '/analytics', label: 'Morning Brief', icon: '📊' },
   { href: '/analytics/history', label: 'Upload History', icon: '🗂', adminOnly: true },
+  { href: '/analytics/targets', label: 'Target', icon: '🎯', adminOnly: true },
   { href: '/analytics/upload', label: 'Upload Data', icon: '⬆', adminOnly: true },
 ]
 
