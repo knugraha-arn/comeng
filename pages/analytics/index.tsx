@@ -31,28 +31,19 @@ interface UploadSession {
 }
 
 const CATEGORY_LABEL: Record<string, string> = {
-  hidden_gem_agent:    'Hidden Gem Agen',
-  hidden_gem_pic:      'Hidden Gem PIC',
-  hidden_gem_mitra:    'Hidden Gem Mitra',
-  dormancy_risk:       'Risiko Dormant',
-  pic_risk:            'Risiko PIC',
-  mitra_risk:          'Risiko Mitra',
-  emerging_territory:  'Wilayah Berkembang',
-  concentration_risk:  'Risiko Konsentrasi',
-  focus_today:         'Fokus Hari Ini',
+  hidden_gem_agent:   'Hidden Gem Agen',
+  hidden_gem_pic:     'Hidden Gem PIC',
+  hidden_gem_mitra:   'Hidden Gem Mitra',
+  dormancy_risk:      'Risiko Dormant',
+  pic_risk:           'Risiko PIC',
+  mitra_risk:         'Risiko Mitra',
+  emerging_territory: 'Wilayah Berkembang',
+  concentration_risk: 'Risiko Konsentrasi',
+  focus_today:        'Fokus Hari Ini',
 }
 
-const CATEGORY_COLOR: Record<string, string> = {
-  hidden_gem_agent:    '#86efac',
-  hidden_gem_pic:      '#86efac',
-  hidden_gem_mitra:    '#86efac',
-  dormancy_risk:       '#fca5a5',
-  pic_risk:            '#fca5a5',
-  mitra_risk:          '#fca5a5',
-  emerging_territory:  '#93c5fd',
-  concentration_risk:  '#fde68a',
-  focus_today:         '#D1EA2C',
-}
+const RISK_CATEGORIES = ['dormancy_risk', 'pic_risk', 'mitra_risk', 'concentration_risk']
+const OPP_CATEGORIES  = ['hidden_gem_agent', 'hidden_gem_pic', 'hidden_gem_mitra', 'emerging_territory']
 
 export default function AnalyticsHome() {
   const router = useRouter()
@@ -67,14 +58,11 @@ export default function AnalyticsHome() {
   const [generating, setGenerating] = useState(false)
   const [lastDate, setLastDate] = useState<string | null>(null)
 
-  useEffect(() => {
-    loadData()
-  }, [])
+  useEffect(() => { loadData() }, [])
 
   async function loadData() {
     setLoading(true)
     try {
-      // Ambil upload sessions 14 hari terakhir
       const { data: sessionData } = await supabase
         .from('am_upload_sessions')
         .select('upload_date, status, nobu_row_count, refnum_match_rate')
@@ -86,7 +74,6 @@ export default function AnalyticsHome() {
         setSessions(sessionData)
         setLastDate(sessionData[0].upload_date)
 
-        // Ambil morning brief untuk tanggal terbaru
         const { data: briefData } = await supabase
           .from('am_morning_brief')
           .select('*')
@@ -106,7 +93,6 @@ export default function AnalyticsHome() {
     try {
       const { data: { session } } = await supabase.auth.getSession()
       if (!session) return
-
       const res = await fetch('/api/analytics/morning-brief', {
         method: 'POST',
         headers: {
@@ -115,54 +101,108 @@ export default function AnalyticsHome() {
         },
         body: JSON.stringify({ date: lastDate }),
       })
-
-      if (res.ok) {
-        await loadData()
-      }
+      if (res.ok) await loadData()
     } finally {
       setGenerating(false)
     }
   }
 
-  function InsightCard({ insight }: { insight: Insight }) {
-    const color = CATEGORY_COLOR[insight.category] ?? '#aaa'
+  function formatDate(d: string) {
+    return new Date(d).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })
+  }
+
+  function InsightCard({ insight, type }: { insight: Insight, type: 'risk' | 'opportunity' | 'watch' }) {
     const label = CATEGORY_LABEL[insight.category] ?? insight.category
+
+    const typeStyles = {
+      risk: {
+        border: '#fecaca',
+        labelBg: '#fee2e2',
+        labelColor: '#dc2626',
+        dot: '#ef4444',
+      },
+      opportunity: {
+        border: '#bbf7d0',
+        labelBg: '#dcfce7',
+        labelColor: '#16a34a',
+        dot: '#22c55e',
+      },
+      watch: {
+        border: '#fde68a',
+        labelBg: '#fef9c3',
+        labelColor: '#ca8a04',
+        dot: '#eab308',
+      },
+    }
+
+    const s = typeStyles[type]
 
     return (
       <div style={{
-        padding: '14px',
-        backgroundColor: '#111',
-        border: '1px solid #222',
-        borderRadius: '8px',
-        borderLeft: `3px solid ${color}`,
+        backgroundColor: '#fff',
+        border: `1px solid ${s.border}`,
+        borderRadius: '10px',
+        padding: '16px',
+        display: 'flex',
+        gap: '12px',
+        alignItems: 'flex-start',
       }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '6px' }}>
-          <span style={{ fontSize: '10px', color, fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-            {label}
-          </span>
-          <span style={{ fontSize: '11px', color: '#555' }}>
-            {insight.priority_score?.toFixed(0) ?? '—'}
-          </span>
-        </div>
-        <div style={{ fontSize: '13px', fontWeight: '600', color: '#fff', marginBottom: '4px' }}>
-          {insight.entity_name}
-        </div>
-        <div style={{ fontSize: '12px', color: '#888', lineHeight: '1.5' }}>
-          {insight.summary}
+        <div style={{
+          width: '8px', height: '8px', borderRadius: '50%',
+          backgroundColor: s.dot, flexShrink: 0, marginTop: '5px',
+        }} />
+        <div style={{ flex: 1 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '4px' }}>
+            <span style={{
+              fontSize: '10px', fontWeight: '700', letterSpacing: '0.06em',
+              backgroundColor: s.labelBg, color: s.labelColor,
+              padding: '2px 8px', borderRadius: '99px',
+            }}>
+              {label.toUpperCase()}
+            </span>
+            <span style={{ fontSize: '11px', color: '#d1d5db', fontWeight: '600' }}>
+              {insight.priority_score?.toFixed(0)}
+            </span>
+          </div>
+          <div style={{ fontSize: '14px', fontWeight: '700', color: '#111827', marginBottom: '4px' }}>
+            {insight.entity_name}
+          </div>
+          <div style={{ fontSize: '12px', color: '#6b7280', lineHeight: '1.6' }}>
+            {insight.summary}
+          </div>
         </div>
       </div>
     )
   }
 
-  function Section({ title, insights, color }: { title: string, insights: Insight[], color: string }) {
+  function Section({ title, icon, insights, type, color }: {
+    title: string
+    icon: string
+    insights: Insight[]
+    type: 'risk' | 'opportunity' | 'watch'
+    color: string
+  }) {
     if (!insights || insights.length === 0) return null
     return (
-      <div style={{ marginBottom: '28px' }}>
-        <div style={{ fontSize: '11px', fontWeight: '700', color, letterSpacing: '0.1em', marginBottom: '10px' }}>
-          {title}
+      <div style={{ marginBottom: '32px' }}>
+        <div style={{
+          display: 'flex', alignItems: 'center', gap: '8px',
+          marginBottom: '12px',
+        }}>
+          <span style={{ fontSize: '16px' }}>{icon}</span>
+          <span style={{ fontSize: '12px', fontWeight: '700', color, letterSpacing: '0.08em' }}>
+            {title}
+          </span>
+          <div style={{ flex: 1, height: '1px', backgroundColor: '#f3f4f6' }} />
+          <span style={{
+            fontSize: '11px', color: '#9ca3af',
+            backgroundColor: '#f9fafb', padding: '2px 8px', borderRadius: '99px',
+          }}>
+            {insights.length}
+          </span>
         </div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-          {insights.map(i => <InsightCard key={i.id} insight={i} />)}
+          {insights.map(i => <InsightCard key={i.id} insight={i} type={type} />)}
         </div>
       </div>
     )
@@ -171,7 +211,7 @@ export default function AnalyticsHome() {
   if (loading) {
     return (
       <Layout>
-        <div style={{ display: 'flex', justifyContent: 'center', padding: '60px', color: '#555', fontSize: '13px' }}>
+        <div style={{ display: 'flex', justifyContent: 'center', padding: '80px', color: '#9ca3af', fontSize: '13px' }}>
           Memuat data...
         </div>
       </Layout>
@@ -182,83 +222,98 @@ export default function AnalyticsHome() {
     <Layout>
       <Head><title>Morning Brief — AMARIS</title></Head>
 
-      <div style={{ maxWidth: '680px', margin: '0 auto', padding: '32px 16px' }}>
+      <div style={{ maxWidth: '720px', margin: '0 auto', padding: '32px 24px' }}>
 
         {/* Header */}
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '28px' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '32px' }}>
           <div>
-            <h1 style={{ fontSize: '20px', fontWeight: '700', color: '#fff', marginBottom: '4px' }}>
-              Morning Brief
+            <div style={{ fontSize: '11px', fontWeight: '600', color: '#9ca3af', letterSpacing: '0.1em', marginBottom: '4px' }}>
+              MORNING BRIEF
+            </div>
+            <h1 style={{ fontSize: '24px', fontWeight: '800', color: '#111827', margin: 0, letterSpacing: '-0.02em' }}>
+              {lastDate ? formatDate(lastDate) : 'Belum ada data'}
             </h1>
-            {lastDate && (
-              <div style={{ fontSize: '12px', color: '#555' }}>
-                Data per {lastDate}
-              </div>
-            )}
           </div>
 
-          <div style={{ display: 'flex', gap: '8px' }}>
-            <button
-              onClick={() => router.push('/analytics/upload')}
-              style={{
-                padding: '8px 14px',
-                borderRadius: '6px',
-                border: '1px solid #333',
-                backgroundColor: 'transparent',
-                color: '#888',
-                fontSize: '12px',
-                cursor: 'pointer',
-              }}
-            >
-              Upload Data
-            </button>
-            {lastDate && !brief && (
+          <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+            {lastDate && !brief && !generating && (
+              <button
+                onClick={generateBrief}
+                style={{
+                  padding: '9px 18px', borderRadius: '8px', border: 'none',
+                  backgroundColor: '#0344D8', color: '#fff',
+                  fontSize: '13px', fontWeight: '600', cursor: 'pointer',
+                }}
+              >
+                Generate Brief
+              </button>
+            )}
+            {brief && (
               <button
                 onClick={generateBrief}
                 disabled={generating}
                 style={{
-                  padding: '8px 14px',
-                  borderRadius: '6px',
-                  border: 'none',
-                  backgroundColor: generating ? '#222' : '#D1EA2C',
-                  color: generating ? '#444' : '#000',
-                  fontSize: '12px',
-                  fontWeight: '700',
-                  cursor: generating ? 'not-allowed' : 'pointer',
+                  padding: '9px 18px', borderRadius: '8px',
+                  border: '1px solid #e5e7eb', backgroundColor: '#fff',
+                  color: '#6b7280', fontSize: '13px', cursor: 'pointer',
                 }}
               >
-                {generating ? 'Generating...' : 'Generate Brief'}
+                {generating ? 'Generating...' : 'Regenerate'}
               </button>
             )}
+            <button
+              onClick={() => router.push('/analytics/upload')}
+              style={{
+                padding: '9px 18px', borderRadius: '8px',
+                border: '1px solid #e5e7eb', backgroundColor: '#fff',
+                color: '#374151', fontSize: '13px', fontWeight: '500', cursor: 'pointer',
+              }}
+            >
+              Upload Data
+            </button>
           </div>
         </div>
 
-        {/* Tidak ada data */}
+        {/* Data availability pills */}
+        {sessions.length > 0 && (
+          <div style={{ display: 'flex', gap: '6px', marginBottom: '28px', flexWrap: 'wrap' }}>
+            {sessions.map(s => (
+              <div
+                key={s.upload_date}
+                title={`${s.upload_date} — ${s.nobu_row_count?.toLocaleString('id')} trx`}
+                style={{
+                  padding: '4px 10px', borderRadius: '99px', fontSize: '11px', fontWeight: '500',
+                  backgroundColor: s.upload_date === lastDate ? '#0344D8' : '#f3f4f6',
+                  color: s.upload_date === lastDate ? '#fff' : '#9ca3af',
+                  cursor: 'default',
+                }}
+              >
+                {new Date(s.upload_date).toLocaleDateString('id-ID', { day: 'numeric', month: 'short' })}
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* No data state */}
         {sessions.length === 0 && (
           <div style={{
-            padding: '40px',
-            textAlign: 'center',
-            color: '#555',
-            backgroundColor: '#111',
-            borderRadius: '8px',
-            border: '1px dashed #333',
+            textAlign: 'center', padding: '60px 40px',
+            backgroundColor: '#f9fafb', borderRadius: '12px',
+            border: '1px dashed #e5e7eb',
           }}>
-            <div style={{ fontSize: '32px', marginBottom: '12px' }}>📊</div>
-            <div style={{ fontSize: '14px', marginBottom: '8px', color: '#888' }}>Belum ada data</div>
-            <div style={{ fontSize: '12px', color: '#555', marginBottom: '20px' }}>
+            <div style={{ fontSize: '40px', marginBottom: '16px' }}>📊</div>
+            <div style={{ fontSize: '16px', fontWeight: '600', color: '#374151', marginBottom: '8px' }}>
+              Belum ada data
+            </div>
+            <div style={{ fontSize: '13px', color: '#9ca3af', marginBottom: '24px' }}>
               Upload data NOBU, ESA, dan Master Agen untuk mulai
             </div>
             <button
               onClick={() => router.push('/analytics/upload')}
               style={{
-                padding: '10px 20px',
-                borderRadius: '6px',
-                border: 'none',
-                backgroundColor: '#D1EA2C',
-                color: '#000',
-                fontSize: '13px',
-                fontWeight: '700',
-                cursor: 'pointer',
+                padding: '10px 24px', borderRadius: '8px', border: 'none',
+                backgroundColor: '#0344D8', color: '#fff',
+                fontSize: '13px', fontWeight: '600', cursor: 'pointer',
               }}
             >
               Upload Data Sekarang
@@ -266,63 +321,22 @@ export default function AnalyticsHome() {
           </div>
         )}
 
-        {/* Upload sessions summary */}
-        {sessions.length > 0 && (
-          <div style={{
-            display: 'flex',
-            gap: '6px',
-            marginBottom: '24px',
-            overflowX: 'auto',
-            paddingBottom: '4px',
-          }}>
-            {sessions.slice(0, 14).map(s => (
-              <div
-                key={s.upload_date}
-                title={`${s.upload_date} — ${s.nobu_row_count?.toLocaleString('id')} trx — match ${s.refnum_match_rate?.toFixed(1)}%`}
-                style={{
-                  minWidth: '36px',
-                  height: '36px',
-                  borderRadius: '6px',
-                  backgroundColor: '#1a1a1a',
-                  border: `1px solid ${s.upload_date === lastDate ? '#D1EA2C' : '#333'}`,
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  fontSize: '10px',
-                  color: s.upload_date === lastDate ? '#D1EA2C' : '#555',
-                  cursor: 'default',
-                  flexShrink: 0,
-                }}
-              >
-                {new Date(s.upload_date).getDate()}
-              </div>
-            ))}
-          </div>
-        )}
-
-        {/* Brief belum di-generate */}
+        {/* Brief not generated yet */}
         {sessions.length > 0 && !brief && !generating && (
           <div style={{
-            padding: '32px',
-            textAlign: 'center',
-            backgroundColor: '#111',
-            borderRadius: '8px',
-            border: '1px dashed #333',
+            textAlign: 'center', padding: '48px 40px',
+            backgroundColor: '#f9fafb', borderRadius: '12px',
+            border: '1px dashed #e5e7eb',
           }}>
-            <div style={{ fontSize: '13px', color: '#666', marginBottom: '16px' }}>
+            <div style={{ fontSize: '13px', color: '#6b7280', marginBottom: '20px' }}>
               Data tersedia. Klik Generate Brief untuk melihat insight hari ini.
             </div>
             <button
               onClick={generateBrief}
               style={{
-                padding: '10px 24px',
-                borderRadius: '6px',
-                border: 'none',
-                backgroundColor: '#D1EA2C',
-                color: '#000',
-                fontSize: '13px',
-                fontWeight: '700',
-                cursor: 'pointer',
+                padding: '10px 24px', borderRadius: '8px', border: 'none',
+                backgroundColor: '#0344D8', color: '#fff',
+                fontSize: '13px', fontWeight: '600', cursor: 'pointer',
               }}
             >
               Generate Brief
@@ -330,16 +344,12 @@ export default function AnalyticsHome() {
           </div>
         )}
 
-        {/* Generating state */}
+        {/* Generating */}
         {generating && (
           <div style={{
-            padding: '32px',
-            textAlign: 'center',
-            backgroundColor: '#111',
-            borderRadius: '8px',
-            border: '1px solid #222',
-            color: '#666',
-            fontSize: '13px',
+            textAlign: 'center', padding: '48px',
+            backgroundColor: '#f9fafb', borderRadius: '12px',
+            border: '1px solid #e5e7eb', color: '#6b7280', fontSize: '13px',
           }}>
             Menganalisis data dan menyusun brief...
           </div>
@@ -351,42 +361,52 @@ export default function AnalyticsHome() {
             {/* Narrative */}
             {brief.narrative && (
               <div style={{
-                padding: '16px',
-                backgroundColor: '#0a0f0a',
-                border: '1px solid #1a2e1a',
-                borderRadius: '8px',
-                marginBottom: '24px',
-                fontSize: '13px',
-                color: '#aaa',
-                lineHeight: '1.7',
+                backgroundColor: '#f0f7ff',
+                border: '1px solid #bfdbfe',
+                borderRadius: '12px',
+                padding: '20px 24px',
+                marginBottom: '32px',
               }}>
-                {brief.narrative}
+                <div style={{ fontSize: '10px', fontWeight: '700', color: '#3b82f6', letterSpacing: '0.1em', marginBottom: '10px' }}>
+                  RINGKASAN EKSEKUTIF
+                </div>
+                <p style={{ fontSize: '14px', color: '#1e40af', lineHeight: '1.75', margin: 0, fontWeight: '500' }}>
+                  {brief.narrative}
+                </p>
               </div>
             )}
 
             {/* Insights */}
-            <Section title="🔴 RISIKO UTAMA" insights={brief.top_risks} color="#fca5a5" />
-            <Section title="🟢 PELUANG UTAMA" insights={brief.top_opportunities} color="#86efac" />
-            <Section title="👁 PERLU DIPERHATIKAN" insights={brief.top_watchlist} color="#fde68a" />
+            <Section
+              title="RISIKO UTAMA"
+              icon="🔴"
+              insights={brief.top_risks ?? []}
+              type="risk"
+              color="#dc2626"
+            />
+            <Section
+              title="PELUANG UTAMA"
+              icon="🟢"
+              insights={brief.top_opportunities ?? []}
+              type="opportunity"
+              color="#16a34a"
+            />
+            <Section
+              title="PERLU DIPERHATIKAN"
+              icon="👁"
+              insights={brief.top_watchlist ?? []}
+              type="watch"
+              color="#ca8a04"
+            />
 
-            {/* Regenerate */}
-            <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '8px' }}>
-              <button
-                onClick={generateBrief}
-                disabled={generating}
-                style={{
-                  padding: '8px 14px',
-                  borderRadius: '6px',
-                  border: '1px solid #333',
-                  backgroundColor: 'transparent',
-                  color: '#555',
-                  fontSize: '11px',
-                  cursor: 'pointer',
-                }}
-              >
-                Regenerate
-              </button>
-            </div>
+            {/* Footer */}
+            {brief.generated_at && (
+              <div style={{ fontSize: '11px', color: '#d1d5db', textAlign: 'center', marginTop: '8px' }}>
+                Dibuat {new Date(brief.generated_at).toLocaleString('id-ID', {
+                  day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit'
+                })}
+              </div>
+            )}
           </>
         )}
       </div>
