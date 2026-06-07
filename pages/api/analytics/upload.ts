@@ -146,6 +146,19 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       })
     }
 
+    // ── Validasi simetri tanggal NOBU vs ESA ─────────────────────────────────
+    const esaDates = new Set(esaRows.map(r => r.transaction_date))
+    const missingDates = nobuDates.filter(d => !esaDates.has(d))
+    if (missingDates.length > 0) {
+      await deleteFromStorage([masterPath, nobuPath, esaPath])
+      return res.status(400).json({
+        error: `ESA tidak memiliki data untuk tanggal: ${missingDates.join(', ')}. Pastikan file ESA mencakup semua tanggal yang ada di file NOBU.`,
+        missing_dates: missingDates,
+        nobu_dates: nobuDates,
+        esa_dates: Array.from(esaDates).sort(),
+      })
+    }
+
     // 3. Match rate
     const matchRates: Record<string, number> = {}
     for (const date of nobuDates) {
@@ -178,8 +191,13 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       sessionIds[date] = session.id
     }
 
-    // 5. Upsert Master
-    await upsertMaster(masterRows)
+    // 5. Upsert Master — inject upload_session_id dari session pertama
+    const firstSessionId = sessionIds[nobuDates[0]]
+    const masterRowsWithSession = masterRows.map(r => ({
+      ...r,
+      upload_session_id: firstSessionId,
+    }))
+    await upsertMaster(masterRowsWithSession)
 
     // 6. Upsert NOBU & ESA per tanggal
     for (const date of nobuDates) {

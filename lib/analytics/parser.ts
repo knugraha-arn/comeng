@@ -6,6 +6,7 @@ export interface MasterAgenRow {
   terminal_id: string
   serial_number: string
   snapshot_date: string
+  upload_session_id?: string | null
   cif_arranet: string | null
   kode_sub_ca: string | null
   nama_sub_ca: string | null
@@ -165,6 +166,7 @@ export function parseMasterAgen(buffer: Buffer): { rows: MasterAgenRow[], errors
       terminal_id,
       serial_number,
       snapshot_date:    toISODate(row['date_capture']) ?? new Date().toISOString().split('T')[0],
+      upload_session_id: null, // akan diisi oleh upload.ts setelah session dibuat
       cif_arranet:      str(row['cif_arranet']),
       kode_sub_ca:      str(row['kode_sub_ca']),
       nama_sub_ca:      str(row['nama_sub_ca']),
