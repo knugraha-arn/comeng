@@ -176,7 +176,7 @@ export function parseMasterAgen(buffer: Buffer): { rows: MasterAgenRow[], errors
       kecamatan:        str(row['kecamatan']),
       kelurahan:        str(row['kelurahan']),
       kode_pos:         str(row['kode_pos']),
-      pic:              str(row['PIC']),
+      pic:              str(row['PIC'])?.toUpperCase().trim() ?? null,
       no_telp_pic:      str(row['no_telp_pic']),
       no_telp_merchant: str(row['no_telp_merchant']),
       koneksi_bank:     str(row['koneksi_bank']),
