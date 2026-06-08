@@ -93,9 +93,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           entity_id:          p.pic,
           entity_name:        p.pic,
           priority_score:     priorityScore(impactScore, urgencyScore, reachScore),
-          impact_score:       Math.round(impactScore * 100) / 100,
-          urgency_score:      urgencyScore,
-          reachability_score: reachScore,
           summary:            `${agentCount} agen Potential. Rata-rata ${avgTrxPerDay.toFixed(1)} trx/hari aktif tapi tidak konsisten. Potensi tambahan fee Rp ${potFee.toLocaleString('id')}/bulan.`,
           data_snapshot: {
             mitra:           p.mitra,
@@ -142,9 +139,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           entity_id:          `at_risk_${p.pic}`,
           entity_name:        p.pic,
           priority_score:     priorityScore(impactScore, urgencyScore, reachScore),
-          impact_score:       Math.round(impactScore * 100) / 100,
-          urgency_score:      urgencyScore,
-          reachability_score: reachScore,
           summary:            `${p.count} agen At Risk — jarang aktif dan volume rendah. Perlu intervensi segera sebelum dormant.`,
           data_snapshot: {
             mitra:       p.mitra,
@@ -192,9 +186,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
             entity_id:          m.mitra,
             entity_name:        m.mitra,
             priority_score:     priorityScore(impactScore, urgencyScore, reachScore),
-            impact_score:       Math.round(impactScore * 100) / 100,
-            urgency_score:      urgencyScore,
-            reachability_score: reachScore,
             summary:            `Hanya ${Math.round(activeRatio)}% agen aktif (${active} dari ${total}). ${trend < 0 ? `Turun ${Math.abs(trend)} dari kemarin.` : trend > 0 ? `Naik ${trend} dari kemarin.` : 'Sama dengan kemarin.'}`,
             data_snapshot: {
               total_agents:    total,
@@ -234,9 +225,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
             entity_id:          `risk_${p.pic}`,
             entity_name:        p.pic,
             priority_score:     priorityScore(impactScore, urgencyScore, reachScore),
-            impact_score:       Math.round(impactScore * 100) / 100,
-            urgency_score:      urgencyScore,
-            reachability_score: reachScore,
             summary:            `Hanya ${Math.round(activeRatio)}% agen aktif (${active} dari ${total}). ${p.at_risk_count} agen At Risk, ${p.potential_count} agen Potential belum dioptimalkan.`,
             data_snapshot: {
               mitra:           p.mitra,
