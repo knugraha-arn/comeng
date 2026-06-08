@@ -26,8 +26,7 @@ interface MorningBrief {
 interface UploadSession {
   upload_date: string
   status: string
-  nobu_row_count: number
-  refnum_match_rate: number
+  row_count: number | null
 }
 
 const CATEGORY_LABEL: Record<string, string> = {
@@ -65,7 +64,7 @@ export default function AnalyticsHome() {
     try {
       const { data: sessionData } = await supabase
         .from('am_upload_sessions')
-        .select('upload_date, status, nobu_row_count, refnum_match_rate')
+        .select('upload_date, status, row_count')
         .eq('status', 'completed')
         .order('upload_date', { ascending: false })
         .limit(14)
@@ -280,7 +279,7 @@ export default function AnalyticsHome() {
             {sessions.map(s => (
               <div
                 key={s.upload_date}
-                title={`${s.upload_date} — ${s.nobu_row_count?.toLocaleString('id')} trx`}
+                title={`${s.upload_date} — ${s.row_count?.toLocaleString('id') ?? 0} trx`}
                 style={{
                   padding: '4px 10px', borderRadius: '99px', fontSize: '11px', fontWeight: '500',
                   backgroundColor: s.upload_date === lastDate ? '#0344D8' : '#f3f4f6',
