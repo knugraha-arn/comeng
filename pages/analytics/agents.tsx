@@ -82,6 +82,7 @@ export default function AgentDashboard() {
   const [filterPic, setFilterPic] = useState('')
   const [lastDate, setLastDate] = useState('')
   const [sinceDate, setSinceDate] = useState('')
+  const [avgActivePerDay, setAvgActivePerDay] = useState(0)
 
   useEffect(() => { init() }, [])
   useEffect(() => { loadAgents() }, [page, bucket, filterMitra, filterPic])
@@ -109,7 +110,7 @@ export default function AgentDashboard() {
       const now = new Date(maxDate)
 
       // Load summary + target parallel (cepat)
-      const [summaryRes, targetRes] = await Promise.all([
+      const [summaryRes, targetRes, avgRes] = await Promise.all([
         supabase.rpc('get_agent_bucket_summary', {
           p_since: sinceStr,
           p_until: maxDate,
@@ -121,10 +122,15 @@ export default function AgentDashboard() {
           .eq('period_year', now.getFullYear())
           .eq('period_month', now.getMonth() + 1)
           .single(),
+        supabase.rpc('get_avg_daily_active_agents', {
+          p_since: sinceStr,
+          p_until: maxDate,
+        }),
       ])
 
       setSummary(summaryRes.data ?? [])
       setTarget(targetRes.data)
+      setAvgActivePerDay(Number(avgRes.data ?? 0))
       setLoading(false)
 
       // Load filter options di background (tidak blocking)
@@ -247,7 +253,7 @@ export default function AgentDashboard() {
 
   // Latest day active agents (Growing = aktif hari ini sebenarnya perlu query terpisah)
   // Gunakan growing sebagai proxy untuk "konsisten aktif"
-  const activeToday = Math.round((growingCount + potentialCount + atRiskCount) / 14) // rata-rata agen aktif per hari
+  const activeToday = avgActivePerDay
 
   // Unique mitras dan pics dari filterOptions
   const mitras = [...new Set(filterOptions.map(f => f.mitra))].sort()
