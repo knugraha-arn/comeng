@@ -59,7 +59,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const buffer = await downloadFromStorage(filePath)
 
     // ── 2. Parse ──────────────────────────────────────────────────────────
-    const { rows, dates, errors } = parseTransactions(buffer)
+    const filename = filePath.split('/').pop() ?? 'data.xlsx'
+    const { rows, dates, errors } = await parseTransactions(buffer, filename)
 
     console.log('[upload] parse result:', {
       rows: rows.length, dates, errors: errors.slice(0, 5)
