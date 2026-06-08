@@ -1,11 +1,6 @@
 import { NextApiRequest, NextApiResponse } from 'next'
 import { createClient } from '@supabase/supabase-js'
-import {
-  parseMasterAgen,
-  parseNobu,
-  parseEsa,
-  calcRefnumMatchRate,
-} from '../../../lib/analytics/parser'
+import { parseTransactions } from '../../../lib/analytics/parser'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -23,59 +18,20 @@ async function downloadFromStorage(path: string): Promise<Buffer> {
     .from('amaris-uploads')
     .download(path)
   if (error || !data) throw new Error(`Download gagal (${path}): ${error?.message}`)
-  const arrayBuffer = await data.arrayBuffer()
-  return Buffer.from(arrayBuffer)
+  return Buffer.from(await data.arrayBuffer())
 }
 
 async function deleteFromStorage(paths: string[]): Promise<void> {
   await supabase.storage.from('amaris-uploads').remove(paths)
 }
 
-async function upsertMaster(rows: ReturnType<typeof parseMasterAgen>['rows']): Promise<void> {
-  for (const batch of chunk(rows, 500)) {
-    const { error } = await supabase
-      .from('am_agent_master')
-      .upsert(batch, { onConflict: 'terminal_id,serial_number' })
-    if (error) throw new Error(`Master upsert failed: ${error.message}`)
-  }
-}
-
-async function upsertNobu(
-  rows: ReturnType<typeof parseNobu>['rows'],
-  sessionId: string
-): Promise<void> {
-  const mapped = rows.map(r => ({ ...r, upload_session_id: sessionId }))
-  for (const batch of chunk(mapped, 500)) {
-    const { error } = await supabase
-      .from('am_transactions_nobu')
-      .upsert(batch, { onConflict: 'reference_number,transaction_date' })
-    if (error) throw new Error(`NOBU upsert failed: ${error.message}`)
-  }
-}
-
-async function upsertEsa(
-  rows: ReturnType<typeof parseEsa>['rows'],
-  sessionId: string
-): Promise<void> {
-  const mapped = rows.map(r => ({ ...r, upload_session_id: sessionId }))
-  for (const batch of chunk(mapped, 500)) {
-    const { error } = await supabase
-      .from('am_transactions_esa')
-      .upsert(batch, { onConflict: 'refnum,transaction_date' })
-    if (error) throw new Error(`ESA upsert failed: ${error.message}`)
-  }
-}
-
-async function triggerComputeMetrics(dates: string[], token: string): Promise<void> {
-  const baseUrl = process.env.NEXTAUTH_URL ?? process.env.NEXT_PUBLIC_APP_URL ?? ''
+function triggerComputeMetrics(dates: string[], token: string): void {
+  const baseUrl = process.env.NEXT_PUBLIC_APP_URL ?? ''
   if (!baseUrl) return
   for (const date of dates) {
     fetch(`${baseUrl}/api/analytics/compute-metrics`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${token}`,
-      },
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
       body: JSON.stringify({ date }),
     }).catch(() => {})
   }
@@ -84,103 +40,50 @@ async function triggerComputeMetrics(dates: string[], token: string): Promise<vo
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
 
+  // Auth
   const token = (req.headers.authorization ?? '').replace('Bearer ', '')
   const { data: { user }, error: authError } = await supabase.auth.getUser(token)
   if (authError || !user) return res.status(401).json({ error: 'Unauthorized' })
 
-  const { data: userData, error: roleError } = await supabase
-    .from('users')
-    .select('role')
-    .eq('id', user.id)
-    .single()
-  console.log('[upload] user:', user.id, 'role:', userData?.role, 'error:', roleError?.message)
+  const { data: userData } = await supabase
+    .from('users').select('role').eq('id', user.id).single()
   if (!['admin', 'super_admin'].includes(userData?.role ?? '')) {
-    return res.status(403).json({ error: 'Hanya admin yang dapat upload data', debug: { userId: user.id, role: userData?.role, roleError: roleError?.message } })
+    return res.status(403).json({ error: 'Hanya admin yang dapat upload data' })
   }
 
-  const { masterPath, nobuPath, esaPath } = req.body as {
-    masterPath?: string
-    nobuPath?: string
-    esaPath?: string
-  }
-
-  if (!masterPath || !nobuPath || !esaPath) {
-    return res.status(400).json({ error: 'masterPath, nobuPath, esaPath wajib diisi' })
-  }
-
-  const allErrors: string[] = []
+  const { filePath } = req.body as { filePath?: string }
+  if (!filePath) return res.status(400).json({ error: 'filePath wajib diisi' })
 
   try {
-    // 1. Download dari Storage
-    const [masterBuffer, nobuBuffer, esaBuffer] = await Promise.all([
-      downloadFromStorage(masterPath),
-      downloadFromStorage(nobuPath),
-      downloadFromStorage(esaPath),
-    ])
+    // ── 1. Download dari Storage ───────────────────────────────────────────
+    const buffer = await downloadFromStorage(filePath)
 
-    // 2. Parse
-    const { rows: masterRows, errors: masterErrors } = parseMasterAgen(masterBuffer)
-    const { rows: nobuRows, dates: nobuDates, errors: nobuErrors } = parseNobu(nobuBuffer)
-    const { rows: esaRows, errors: esaErrors } = parseEsa(esaBuffer)
+    // ── 2. Parse ──────────────────────────────────────────────────────────
+    const { rows, dates, errors } = parseTransactions(buffer)
 
-    console.log('[upload] parse results:', {
-      masterRows: masterRows.length, masterErrors,
-      nobuRows: nobuRows.length, nobuDates, nobuErrors,
-      esaRows: esaRows.length, esaErrors,
-      bufferSizes: { master: masterBuffer.length, nobu: nobuBuffer.length, esa: esaBuffer.length },
+    console.log('[upload] parse result:', {
+      rows: rows.length, dates, errors: errors.slice(0, 5)
     })
 
-    allErrors.push(...masterErrors, ...nobuErrors, ...esaErrors)
-
-    if (masterRows.length === 0 || nobuRows.length === 0 || esaRows.length === 0) {
-      await deleteFromStorage([masterPath, nobuPath, esaPath])
+    if (rows.length === 0) {
+      await deleteFromStorage([filePath])
       return res.status(400).json({
-        error: 'Parsing gagal — satu atau lebih file tidak menghasilkan data valid',
-        details: allErrors,
-        debug: {
-          masterRows: masterRows.length,
-          nobuRows: nobuRows.length,
-          esaRows: esaRows.length,
-          bufferSizes: { master: masterBuffer.length, nobu: nobuBuffer.length, esa: esaBuffer.length },
-        }
+        error: 'Parsing gagal — file tidak menghasilkan data valid',
+        details: errors,
       })
     }
 
-    // ── Validasi simetri tanggal NOBU vs ESA ─────────────────────────────────
-    const esaDates = new Set(esaRows.map(r => r.transaction_date))
-    const missingDates = nobuDates.filter(d => !esaDates.has(d))
-    if (missingDates.length > 0) {
-      await deleteFromStorage([masterPath, nobuPath, esaPath])
-      return res.status(400).json({
-        error: `ESA tidak memiliki data untuk tanggal: ${missingDates.join(', ')}. Pastikan file ESA mencakup semua tanggal yang ada di file NOBU.`,
-        missing_dates: missingDates,
-        nobu_dates: nobuDates,
-        esa_dates: Array.from(esaDates).sort(),
-      })
-    }
-
-    // 3. Match rate
-    const matchRates: Record<string, number> = {}
-    for (const date of nobuDates) {
-      matchRates[date] = calcRefnumMatchRate(nobuRows, esaRows, date)
-    }
-    const avgMatchRate = nobuDates.length > 0
-      ? nobuDates.reduce((s, d) => s + matchRates[d], 0) / nobuDates.length
-      : 0
-
-    // 4. Upload sessions
+    // ── 3. Upsert upload sessions per tanggal ─────────────────────────────
     const sessionIds: Record<string, string> = {}
-    for (const date of nobuDates) {
+    for (const date of dates) {
+      const rowCount = rows.filter(r => r.transaction_date === date).length
       const { data: session, error: sessionError } = await supabase
         .from('am_upload_sessions')
         .upsert({
-          upload_date:       date,
-          uploaded_by:       user.id,
-          status:            'processing',
-          nobu_row_count:    nobuRows.filter(r => r.transaction_date === date).length,
-          esa_row_count:     esaRows.filter(r => r.transaction_date === date).length,
-          master_row_count:  masterRows.length,
-          refnum_match_rate: matchRates[date],
+          upload_date:  date,
+          uploaded_by:  user.id,
+          status:       'processing',
+          row_count:    rowCount,
         }, { onConflict: 'upload_date' })
         .select('id')
         .single()
@@ -191,55 +94,50 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       sessionIds[date] = session.id
     }
 
-    // 5. Upsert Master — inject upload_session_id dari session pertama
-    const firstSessionId = sessionIds[nobuDates[0]]
-    const masterRowsWithSession = masterRows.map(r => ({
-      ...r,
-      upload_session_id: firstSessionId,
-    }))
-    await upsertMaster(masterRowsWithSession)
+    // ── 4. Upsert transaksi per tanggal ───────────────────────────────────
+    for (const date of dates) {
+      const dateRows = rows
+        .filter(r => r.transaction_date === date)
+        .map(r => ({ ...r, upload_session_id: sessionIds[date] }))
 
-    // 6. Upsert NOBU & ESA per tanggal
-    for (const date of nobuDates) {
-      await upsertNobu(nobuRows.filter(r => r.transaction_date === date), sessionIds[date])
-      const esaForDate = esaRows.filter(r => r.transaction_date === date)
-      if (esaForDate.length > 0) await upsertEsa(esaForDate, sessionIds[date])
+      for (const batch of chunk(dateRows, 500)) {
+        const { error } = await supabase
+          .from('am_transactions')
+          .upsert(batch, { onConflict: 'refnum,transaction_date' })
+        if (error) throw new Error(`Transactions upsert failed: ${error.message}`)
+      }
     }
 
-    // 7. Update session status
-    for (const date of nobuDates) {
+    // ── 5. Update session status → completed ──────────────────────────────
+    for (const date of dates) {
       await supabase
         .from('am_upload_sessions')
         .update({ status: 'completed', completed_at: new Date().toISOString() })
         .eq('id', sessionIds[date])
     }
 
-    // 8. Purge > 14 hari
+    // ── 6. Purge data > 14 hari ───────────────────────────────────────────
     await supabase.rpc('am_purge_old_data')
 
-    // 9. Trigger compute metrics
-    triggerComputeMetrics(nobuDates, token)
+    // ── 7. Trigger compute metrics (background) ───────────────────────────
+    triggerComputeMetrics(dates, token)
 
-    // 10. Hapus file dari storage
-    await deleteFromStorage([masterPath, nobuPath, esaPath])
+    // ── 8. Cleanup storage ────────────────────────────────────────────────
+    await deleteFromStorage([filePath])
 
     return res.status(200).json({
       success: true,
       summary: {
-        dates_processed: nobuDates,
-        master_rows:     masterRows.length,
-        nobu_rows:       nobuRows.length,
-        esa_rows:        esaRows.length,
-        match_rates:     matchRates,
-        avg_match_rate:  Math.round(avgMatchRate * 100) / 100,
-        warnings:        allErrors.length > 0 ? allErrors : undefined,
+        dates_processed: dates,
+        total_rows:      rows.length,
+        warnings:        errors.length > 0 ? errors : undefined,
       },
     })
 
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Unknown error'
     console.error('[analytics/upload]', message)
-    deleteFromStorage([masterPath, nobuPath, esaPath]).catch(() => {})
+    deleteFromStorage([filePath]).catch(() => {})
     return res.status(500).json({ error: 'Upload gagal', details: message })
   }
 }
