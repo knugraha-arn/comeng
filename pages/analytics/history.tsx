@@ -66,34 +66,21 @@ export default function UploadHistory() {
         uploader_name: s.uploaded_by ? (userMap[s.uploaded_by] ?? '—') : '—',
       })))
 
-      // Load stats dari am_transactions per tanggal
+      // Load stats via SQL function (aggregate di DB, tidak ada limit)
       const dates = sessionData.map(s => s.upload_date)
-      const { data: trxStats } = await supabase
-        .from('am_transactions')
-        .select('transaction_date, sharing_fee, serial_number, trntype')
-        .in('transaction_date', dates)
+      const { data: trxStats } = await supabase.rpc('get_daily_transaction_stats', {
+        p_dates: dates,
+      })
 
-      // Aggregate per tanggal
       const statsMap: Record<string, DailyStats> = {}
       for (const row of trxStats ?? []) {
-        const d = row.transaction_date
-        if (!statsMap[d]) {
-          statsMap[d] = { transaction_date: d, total_trx: 0, total_fee: 0, unique_agents: 0 }
+        statsMap[row.transaction_date] = {
+          transaction_date: row.transaction_date,
+          total_trx:        Number(row.total_trx),
+          total_fee:        Number(row.total_fee),
+          unique_agents:    Number(row.unique_agents),
         }
-        statsMap[d].total_trx++
-        statsMap[d].total_fee += Number(row.sharing_fee) || 0
       }
-
-      // Hitung unique agents per tanggal
-      const agentsByDate: Record<string, Set<string>> = {}
-      for (const row of trxStats ?? []) {
-        if (!agentsByDate[row.transaction_date]) agentsByDate[row.transaction_date] = new Set()
-        if (row.serial_number) agentsByDate[row.transaction_date].add(row.serial_number)
-      }
-      for (const d of Object.keys(statsMap)) {
-        statsMap[d].unique_agents = agentsByDate[d]?.size ?? 0
-      }
-
       setStats(statsMap)
     } finally {
       setLoading(false)
