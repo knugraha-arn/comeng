@@ -106,9 +106,10 @@ export default function AgentDashboard() {
       setLastDate(maxDate)
       setSinceDate(sinceStr)
 
-      // Load summary + target + filter options parallel
       const now = new Date(maxDate)
-      const [summaryRes, targetRes, filterRes] = await Promise.all([
+
+      // Load summary + target parallel (cepat)
+      const [summaryRes, targetRes] = await Promise.all([
         supabase.rpc('get_agent_bucket_summary', {
           p_since: sinceStr,
           p_until: maxDate,
@@ -120,16 +121,19 @@ export default function AgentDashboard() {
           .eq('period_year', now.getFullYear())
           .eq('period_month', now.getMonth() + 1)
           .single(),
-        supabase.rpc('get_agent_filter_options', {
-          p_since: sinceStr,
-          p_until: maxDate,
-        }),
       ])
 
       setSummary(summaryRes.data ?? [])
       setTarget(targetRes.data)
-      setFilterOptions(filterRes.data ?? [])
-    } finally {
+      setLoading(false)
+
+      // Load filter options di background (tidak blocking)
+      supabase.rpc('get_agent_filter_options', {
+        p_since: sinceStr,
+        p_until: maxDate,
+      }).then(({ data }) => setFilterOptions(data ?? []))
+
+    } catch (err) {
       setLoading(false)
     }
   }
