@@ -14,7 +14,6 @@ const navItems = [
 ]
 
 const analyticsNavItems = [
-  { href: '/analytics/agents', label: 'Dashboard', icon: '📊' },
   { href: '/analytics', label: 'Morning Brief', icon: '📊' },
   { href: '/analytics/history', label: 'Upload History', icon: '🗂', adminOnly: true },
   { href: '/analytics/targets', label: 'Target', icon: '🎯', adminOnly: true },
@@ -181,7 +180,7 @@ export default function Layout({ children, title }: { children: React.ReactNode;
           {analyticsNavItems
             .filter(item => !item.adminOnly || isSuperAdmin)
             .map((item) => {
-              const isActive = router.pathname === item.href || (item.href !== '/' && router.pathname.startsWith(item.href))
+              const isActive = router.pathname === item.href || (item.href !== '/' && item.href !== '/analytics' && router.pathname.startsWith(item.href))
               return (
                 <div key={item.href} onClick={() => router.push(item.href)}
                   style={{

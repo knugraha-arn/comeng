@@ -35,7 +35,7 @@ interface FilterOption {
   pic:   string
 }
 
-const PAGE_SIZE = 50
+const PAGE_SIZE = 20
 const MIN_TRX_POTENTIAL = 20
 
 const BUCKET_CONFIG = {
@@ -247,7 +247,7 @@ export default function AgentDashboard() {
 
   // Latest day active agents (Growing = aktif hari ini sebenarnya perlu query terpisah)
   // Gunakan growing sebagai proxy untuk "konsisten aktif"
-  const activeToday = growingCount + potentialCount // approximation
+  const activeToday = Math.round((growingCount + potentialCount + atRiskCount) / 14) // rata-rata agen aktif per hari
 
   // Unique mitras dan pics dari filterOptions
   const mitras = [...new Set(filterOptions.map(f => f.mitra))].sort()
@@ -308,7 +308,7 @@ export default function AgentDashboard() {
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '20px' }}>
               {[
-                { label: 'Agen Aktif/Hari', current: activeToday, target: target.daily_active_agents, suffix: 'terminal', color: '#0344D8' },
+                { label: 'Rata-rata Agen Aktif/Hari', current: Math.round((Number(getSummary('growing')?.agent_count ?? 0) + Number(getSummary('potential')?.agent_count ?? 0) + Number(getSummary('at_risk')?.agent_count ?? 0)) / 14), target: target.daily_active_agents, suffix: 'terminal', color: '#0344D8' },
                 { label: 'Trx/Hari (est.)', current: Number(getSummary('growing')?.total_trx ?? 0) / 14, target: target.daily_transfer_trx, suffix: 'trx', color: '#7c3aed' },
                 { label: 'Fee/Hari (est.)', current: (Number(getSummary('growing')?.total_fee ?? 0) + Number(getSummary('potential')?.total_fee ?? 0)) / 14, target: target.daily_fee, suffix: '', color: '#059669', isRp: true },
               ].map(t => (
