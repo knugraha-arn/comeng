@@ -102,7 +102,7 @@ export default function SporadicPage() {
         agent.activeDays.add(trx.transaction_date)
         agent.total_trx++
         agent.total_fee += Number(trx.sharing_fee) || 0
-        if (trx.last_active < trx.transaction_date) agent.last_active = trx.transaction_date
+        if (agent.last_active < trx.transaction_date) agent.last_active = trx.transaction_date
 
         if (trx.trntype === 'TRANSFER') {
           agent.transfer_trx++
