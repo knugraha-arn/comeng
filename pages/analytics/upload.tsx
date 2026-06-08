@@ -170,7 +170,16 @@ export default function UploadCenter() {
       })
     }
 
-    return { rows, dates: Array.from(dateSet).sort(), errors }
+    // Deduplicate: refnum + transaction_date harus unique
+    const seen = new Set<string>()
+    const uniqueRows = rows.filter(r => {
+      const key = `${r.refnum}__${r.transaction_date}`
+      if (seen.has(key)) return false
+      seen.add(key)
+      return true
+    })
+
+    return { rows: uniqueRows, dates: Array.from(dateSet).sort(), errors }
   }
 
   // ── Main upload handler ──────────────────────────────────────────────────
