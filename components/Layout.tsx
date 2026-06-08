@@ -14,6 +14,7 @@ const navItems = [
 ]
 
 const analyticsNavItems = [
+  { href: '/analytics/agents', label: 'Dashboard', icon: '📊' },
   { href: '/analytics', label: 'Morning Brief', icon: '📊' },
   { href: '/analytics/history', label: 'Upload History', icon: '🗂', adminOnly: true },
   { href: '/analytics/targets', label: 'Target', icon: '🎯', adminOnly: true },
