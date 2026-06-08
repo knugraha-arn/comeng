@@ -100,7 +100,7 @@ export default function RangerDetail() {
           const sorted = Object.entries(counts)
             .map(([display_name, total]) => ({ display_name, total }))
             .sort((a, b) => b.total - a.total)
-            .slice(0, 3)
+            .slice(0, 5)
           setTopMembers(sorted)
         }
       }
@@ -269,7 +269,7 @@ export default function RangerDetail() {
         {/* Top 3 */}
         <div style={{ background: '#FFFFFF', border: '1px solid #e5e5e5', borderRadius: '10px', padding: '18px' }}>
           <div style={{ fontSize: '13px', fontWeight: '500', marginBottom: '12px' }}>
-            Top 3 agen paling aktif
+            Top 5 agen paling aktif
             <span style={{ marginLeft: '8px', fontSize: '11px', color: '#999', fontWeight: '400' }}>all time</span>
           </div>
           {topMembers.length === 0 ? (
