@@ -155,7 +155,7 @@ export default function UploadCenter() {
         amount:                num(row['amount']),
         sharing_fee:           num(row['sharing_fee']),
         qris_amount:           0,
-        serial_number,
+        serial_number:         serial_number.toUpperCase().trim(),
         merchant_name:         str(row['merchant_name']),
         alamat_struk:          str(row['alamat_struk']),
         brand:                 str(row['brand']),
