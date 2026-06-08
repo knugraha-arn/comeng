@@ -87,16 +87,25 @@ export default function RangerDetail() {
       setRanger(rangerData as unknown as RangerDetail)
       const wagId = (rangerData as unknown as RangerDetail).wags?.id
       if (wagId) {
-        const [memberRes, msgRes] = await Promise.all([
+        const [memberRes, msgRes, observerRes] = await Promise.all([
           supabase.from('members').select('id, display_name, status, last_active_at, joined_at, greeted_at').eq('wag_id', wagId).order('last_active_at', { ascending: false }),
           supabase.from('messages').select('sender_name').eq('wag_id', wagId).eq('sender_type', 'member'),
+          supabase.from('observers').select('display_name').eq('wag_id', wagId),
         ])
+
         if (memberRes.data) setMembers(memberRes.data as Member[])
+
         if (msgRes.data) {
-          const counts = msgRes.data.reduce((acc: Record<string, number>, m) => {
-            acc[m.sender_name] = (acc[m.sender_name] || 0) + 1
-            return acc
-          }, {})
+          // Exclude observer dari top members
+          const observerNames = new Set((observerRes.data || []).map(o => o.display_name.toLowerCase()))
+
+          const counts = msgRes.data
+            .filter(m => !observerNames.has(m.sender_name.toLowerCase()))
+            .reduce((acc: Record<string, number>, m) => {
+              acc[m.sender_name] = (acc[m.sender_name] || 0) + 1
+              return acc
+            }, {})
+
           const sorted = Object.entries(counts)
             .map(([display_name, total]) => ({ display_name, total }))
             .sort((a, b) => b.total - a.total)
@@ -266,7 +275,7 @@ export default function RangerDetail() {
           )}
         </div>
 
-        {/* Top 3 */}
+        {/* Top 5 */}
         <div style={{ background: '#FFFFFF', border: '1px solid #e5e5e5', borderRadius: '10px', padding: '18px' }}>
           <div style={{ fontSize: '13px', fontWeight: '500', marginBottom: '12px' }}>
             Top 5 agen paling aktif
@@ -276,7 +285,7 @@ export default function RangerDetail() {
             <div style={{ fontSize: '12px', color: '#999' }}>Belum ada data</div>
           ) : (
             topMembers.map((m, i) => (
-              <div key={m.display_name} style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '10px 0', borderBottom: i < topMembers.length - 1 ? '1px solid #f5f5f5' : 'none' }}>
+              <div key={m.display_name} style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '8px 0', borderBottom: i < topMembers.length - 1 ? '1px solid #f5f5f5' : 'none' }}>
                 <div style={{ width: '22px', height: '22px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', background: i === 0 ? '#D1EA2C' : i === 1 ? '#e5e5e5' : '#F8F9FB', color: i === 0 ? '#1A1F2E' : '#555', fontSize: '11px', fontWeight: '700', minWidth: '22px' }}>
                   {i + 1}
                 </div>
