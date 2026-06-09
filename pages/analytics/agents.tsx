@@ -96,6 +96,8 @@ export default function AgentDashboard() {
   const [lastDate, setLastDate] = useState('')
   const [sinceDate, setSinceDate] = useState('')
   const [avgActivePerDay, setAvgActivePerDay] = useState(0)
+  const [avgTrxPerDay, setAvgTrxPerDay] = useState(0)
+  const [avgFeePerDay, setAvgFeePerDay] = useState(0)
   const [selectedAgent, setSelectedAgent] = useState<Agent | null>(null)
   const [agentDetail, setAgentDetail] = useState<AgentDayDetail[]>([])
   const [loadingDetail, setLoadingDetail] = useState(false)
@@ -144,6 +146,14 @@ export default function AgentDashboard() {
       // Load avg + filter options di background
       supabase.rpc('get_avg_active_from_metrics', { p_since: sinceStr, p_until: maxDate })
         .then(({ data }) => setAvgActivePerDay(Number(data ?? 0)))
+
+      supabase.rpc('get_avg_daily_metrics', { p_since: sinceStr, p_until: maxDate })
+        .then(({ data }) => {
+          if (data && data.length > 0) {
+            setAvgTrxPerDay(Number(data[0].avg_trx_per_day ?? 0))
+            setAvgFeePerDay(Number(data[0].avg_fee_per_day ?? 0))
+          }
+        })
 
       supabase.rpc('get_dashboard_filter_options', { p_date: maxDate })
         .then(({ data }) => setFilterOptions(data ?? []))
@@ -269,8 +279,8 @@ export default function AgentDashboard() {
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '20px' }}>
               {[
                 { label: 'Rata-rata Agen Aktif/Hari', current: avgActivePerDay, target: target.daily_active_agents, color: '#0344D8' },
-                { label: 'Trx/Hari', current: Number(getSummary('growing')?.total_trx ?? 0) / 14, target: target.daily_transfer_trx, color: '#7c3aed' },
-                { label: 'Fee/Hari (est.)', current: (Number(getSummary('growing')?.total_fee ?? 0) + Number(getSummary('potential')?.total_fee ?? 0)) / 14, target: target.daily_fee, isRp: true, color: '#059669' },
+                { label: 'Rata-rata TRX/Hari', current: avgTrxPerDay, target: target.daily_transfer_trx, color: '#7c3aed' },
+                { label: 'Rata-rata Fee/Hari', current: avgFeePerDay, target: target.daily_fee, isRp: true, color: '#059669' },
               ].map(t => (
                 <div key={t.label}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px' }}>
