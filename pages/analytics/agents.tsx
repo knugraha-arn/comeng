@@ -594,8 +594,6 @@ export default function AgentDashboard() {
           </div>
         )}
       </div>
-    </Layout>
-
       {/* Agent Detail Drawer */}
       {selectedAgent && (
         <div style={{
@@ -776,5 +774,6 @@ export default function AgentDashboard() {
           </div>
         </div>
       )}
+    </Layout>
   )
 }
