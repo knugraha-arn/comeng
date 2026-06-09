@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState } from 'react'
 import Head from 'next/head'
 import Layout from '../../components/Layout'
 import { createBrowserClient } from '@supabase/ssr'
@@ -15,6 +15,25 @@ interface Agent {
   total_fee:      number
   last_active:    string
   bucket:         string
+}
+
+interface AgentDayDetail {
+  transaction_date:     string
+  total_trx:            number
+  transfer_trx:         number
+  cek_saldo_trx:        number
+  total_fee:            number
+  total_amount:         number
+  dip_count:            number
+  swipe_count:          number
+  merchant_name:        string | null
+  mitra:                string | null
+  pic:                  string | null
+  alamat_struk:         string | null
+  brand:                string | null
+  tipe_mesin:           string | null
+  source_app:           string | null
+  terminal_data_source: string | null
 }
 
 interface BucketSummary {
@@ -82,6 +101,9 @@ export default function AgentDashboard() {
   const [filterPic, setFilterPic] = useState('')
   const [lastDate, setLastDate] = useState('')
   const [sinceDate, setSinceDate] = useState('')
+  const [selectedAgent, setSelectedAgent] = useState<Agent | null>(null)
+  const [agentDetail, setAgentDetail] = useState<AgentDayDetail[]>([])
+  const [loadingDetail, setLoadingDetail] = useState(false)
   const [avgActivePerDay, setAvgActivePerDay] = useState(0)
 
   useEffect(() => { init() }, [])
@@ -187,6 +209,33 @@ export default function AgentDashboard() {
       setTotal(countRes.data ?? 0)
     } finally {
       setLoadingList(false)
+    }
+  }
+
+  async function openDrawer(agent: Agent) {
+    setSelectedAgent(agent)
+    setAgentDetail([])
+    setLoadingDetail(true)
+    try {
+      const { data: latest } = await supabase
+        .from('am_transactions')
+        .select('transaction_date')
+        .order('transaction_date', { ascending: false })
+        .limit(1)
+        .single()
+      if (!latest) return
+      const maxDate = latest.transaction_date
+      const sd = new Date(maxDate)
+      sd.setDate(sd.getDate() - 13)
+      const sinceStr = sd.toISOString().split('T')[0]
+      const { data } = await supabase.rpc('get_agent_detail', {
+        p_serial: agent.serial_number,
+        p_since:  sinceStr,
+        p_until:  maxDate,
+      })
+      setAgentDetail(data ?? [])
+    } finally {
+      setLoadingDetail(false)
     }
   }
 
@@ -468,14 +517,18 @@ export default function AgentDashboard() {
             </div>
 
             {agents.map((agent, i) => (
-              <div key={agent.serial_number} style={{
+              <div key={agent.serial_number} onClick={() => openDrawer(agent)} style={{
                 display: 'grid',
                 gridTemplateColumns: '120px 1fr 150px 150px 60px 70px 80px 80px 90px',
                 padding: '11px 16px',
                 borderBottom: i < agents.length - 1 ? '1px solid #f3f4f6' : 'none',
                 alignItems: 'center',
                 backgroundColor: '#fff',
-              }}>
+                cursor: 'pointer',
+              }}
+              onMouseEnter={e => e.currentTarget.style.backgroundColor = '#f9fafb'}
+              onMouseLeave={e => e.currentTarget.style.backgroundColor = '#fff'}
+              >
                 <div><BucketChip b={agent.bucket} /></div>
                 <div>
                   <div style={{ fontSize: '13px', fontWeight: '600', color: '#111827' }}>
@@ -542,5 +595,186 @@ export default function AgentDashboard() {
         )}
       </div>
     </Layout>
+
+      {/* Agent Detail Drawer */}
+      {selectedAgent && (
+        <div style={{
+          position: 'fixed', inset: 0, zIndex: 1000,
+          display: 'flex', justifyContent: 'flex-end',
+        }}>
+          {/* Backdrop */}
+          <div
+            onClick={() => setSelectedAgent(null)}
+            style={{ position: 'absolute', inset: 0, backgroundColor: 'rgba(0,0,0,0.3)' }}
+          />
+
+          {/* Drawer */}
+          <div style={{
+            position: 'relative', width: '480px', height: '100%',
+            backgroundColor: '#fff', boxShadow: '-4px 0 24px rgba(0,0,0,0.12)',
+            display: 'flex', flexDirection: 'column', overflowY: 'auto',
+          }}>
+            {/* Header */}
+            <div style={{
+              padding: '20px 24px', borderBottom: '1px solid #f3f4f6',
+              display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start',
+              position: 'sticky', top: 0, backgroundColor: '#fff', zIndex: 1,
+            }}>
+              <div>
+                <div style={{ fontSize: '18px', fontWeight: '800', color: '#111827', marginBottom: '4px' }}>
+                  {selectedAgent.merchant_name ?? selectedAgent.serial_number}
+                </div>
+                <div style={{ fontSize: '11px', color: '#9ca3af', marginBottom: '6px' }}>
+                  {selectedAgent.serial_number}
+                </div>
+                <BucketChip b={selectedAgent.bucket} />
+              </div>
+              <button
+                onClick={() => setSelectedAgent(null)}
+                style={{
+                  padding: '6px 10px', borderRadius: '8px',
+                  border: '1px solid #e5e7eb', backgroundColor: '#fff',
+                  color: '#6b7280', fontSize: '18px', cursor: 'pointer', lineHeight: 1,
+                }}
+              >✕</button>
+            </div>
+
+            {loadingDetail ? (
+              <div style={{ padding: '40px', textAlign: 'center', color: '#9ca3af', fontSize: '13px' }}>
+                Memuat data...
+              </div>
+            ) : agentDetail.length > 0 ? (
+              <div style={{ padding: '20px 24px' }}>
+
+                {/* Info agen */}
+                {(() => {
+                  const latest = agentDetail[agentDetail.length - 1]
+                  return (
+                    <div style={{ marginBottom: '24px' }}>
+                      <div style={{ fontSize: '11px', fontWeight: '700', color: '#9ca3af', letterSpacing: '0.08em', marginBottom: '12px' }}>
+                        INFO AGEN
+                      </div>
+                      {[
+                        { label: 'Mitra', value: latest.mitra },
+                        { label: 'PIC', value: latest.pic },
+                        { label: 'Alamat', value: latest.alamat_struk },
+                        { label: 'Brand EDC', value: latest.brand },
+                        { label: 'Tipe Mesin', value: latest.tipe_mesin },
+                        { label: 'Aplikasi', value: latest.source_app },
+                        { label: 'Terminal', value: latest.terminal_data_source },
+                      ].filter(r => r.value).map(r => (
+                        <div key={r.label} style={{
+                          display: 'flex', gap: '12px', padding: '7px 0',
+                          borderBottom: '1px solid #f9fafb',
+                        }}>
+                          <span style={{ fontSize: '12px', color: '#9ca3af', minWidth: '80px', flexShrink: 0 }}>{r.label}</span>
+                          <span style={{ fontSize: '12px', color: '#111827', fontWeight: '500' }}>{r.value}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )
+                })()}
+
+                {/* Summary 14 hari */}
+                <div style={{ marginBottom: '24px' }}>
+                  <div style={{ fontSize: '11px', fontWeight: '700', color: '#9ca3af', letterSpacing: '0.08em', marginBottom: '12px' }}>
+                    RINGKASAN 14 HARI
+                  </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '10px' }}>
+                    {[
+                      { label: 'Total TRX', value: agentDetail.reduce((s, d) => s + Number(d.total_trx), 0).toLocaleString('id') },
+                      { label: 'Transfer', value: agentDetail.reduce((s, d) => s + Number(d.transfer_trx), 0).toLocaleString('id') },
+                      { label: 'Cek Saldo', value: agentDetail.reduce((s, d) => s + Number(d.cek_saldo_trx), 0).toLocaleString('id') },
+                      { label: 'Total Fee', value: formatFee(agentDetail.reduce((s, d) => s + Number(d.total_fee), 0)) },
+                      { label: 'Total Amount', value: formatFee(agentDetail.reduce((s, d) => s + Number(d.total_amount), 0)) },
+                      { label: 'Hari Aktif', value: `${agentDetail.length} hari` },
+                    ].map(s => (
+                      <div key={s.label} style={{
+                        padding: '10px 12px', backgroundColor: '#f9fafb',
+                        borderRadius: '8px', textAlign: 'center',
+                      }}>
+                        <div style={{ fontSize: '14px', fontWeight: '700', color: '#111827' }}>{s.value}</div>
+                        <div style={{ fontSize: '10px', color: '#9ca3af', marginTop: '2px' }}>{s.label}</div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* DIP vs SWIPE */}
+                {(() => {
+                  const totalDip   = agentDetail.reduce((s, d) => s + Number(d.dip_count), 0)
+                  const totalSwipe = agentDetail.reduce((s, d) => s + Number(d.swipe_count), 0)
+                  const total      = totalDip + totalSwipe
+                  if (total === 0) return null
+                  return (
+                    <div style={{ marginBottom: '24px' }}>
+                      <div style={{ fontSize: '11px', fontWeight: '700', color: '#9ca3af', letterSpacing: '0.08em', marginBottom: '12px' }}>
+                        TIPE PENGGUNAAN KARTU
+                      </div>
+                      <div style={{ display: 'flex', gap: '8px', marginBottom: '8px' }}>
+                        <div style={{
+                          flex: totalDip / total, padding: '8px', borderRadius: '6px',
+                          backgroundColor: '#eff6ff', textAlign: 'center',
+                        }}>
+                          <div style={{ fontSize: '14px', fontWeight: '700', color: '#1d4ed8' }}>{totalDip.toLocaleString('id')}</div>
+                          <div style={{ fontSize: '10px', color: '#6b7280' }}>DIP (Chip)</div>
+                        </div>
+                        <div style={{
+                          flex: totalSwipe / total, padding: '8px', borderRadius: '6px',
+                          backgroundColor: '#fef9c3', textAlign: 'center',
+                        }}>
+                          <div style={{ fontSize: '14px', fontWeight: '700', color: '#ca8a04' }}>{totalSwipe.toLocaleString('id')}</div>
+                          <div style={{ fontSize: '10px', color: '#6b7280' }}>SWIPE (Bansos)</div>
+                        </div>
+                      </div>
+                    </div>
+                  )
+                })()}
+
+                {/* Grafik TRX per hari */}
+                <div>
+                  <div style={{ fontSize: '11px', fontWeight: '700', color: '#9ca3af', letterSpacing: '0.08em', marginBottom: '12px' }}>
+                    TRANSAKSI PER HARI
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'flex-end', gap: '4px', height: '80px' }}>
+                    {(() => {
+                      const maxTrx = Math.max(...agentDetail.map(d => Number(d.total_trx)), 1)
+                      // Fill semua 14 hari termasuk yang tidak aktif
+                      const allDays: { date: string, trx: number }[] = []
+                      const sd = new Date(sinceDate)
+                      for (let i = 0; i < 14; i++) {
+                        const d = new Date(sd)
+                        d.setDate(sd.getDate() + i)
+                        const dateStr = d.toISOString().split('T')[0]
+                        const found = agentDetail.find(a => a.transaction_date === dateStr)
+                        allDays.push({ date: dateStr, trx: found ? Number(found.total_trx) : 0 })
+                      }
+                      return allDays.map(day => (
+                        <div key={day.date} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px' }}>
+                          <div style={{
+                            width: '100%',
+                            height: `${Math.max(4, (day.trx / maxTrx) * 64)}px`,
+                            backgroundColor: day.trx > 0 ? '#0344D8' : '#f3f4f6',
+                            borderRadius: '3px 3px 0 0',
+                            transition: 'height 0.3s',
+                          }} title={`${day.date}: ${day.trx} trx`} />
+                          <div style={{ fontSize: '8px', color: '#d1d5db', writingMode: 'vertical-rl', transform: 'rotate(180deg)' }}>
+                            {new Date(day.date).toLocaleDateString('id-ID', { day: 'numeric', month: 'short' })}
+                          </div>
+                        </div>
+                      ))
+                    })()}
+                  </div>
+                </div>
+
+              </div>
+            ) : (
+              <div style={{ padding: '40px', textAlign: 'center', color: '#9ca3af', fontSize: '13px' }}>
+                Tidak ada data
+              </div>
+            )}
+          </div>
+        </div>
+      )}
   )
 }
