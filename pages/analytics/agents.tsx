@@ -110,7 +110,7 @@ export default function AgentDashboard() {
       const now = new Date(maxDate)
 
       // Load summary + target parallel (cepat)
-      const [summaryRes, targetRes, avgRes] = await Promise.all([
+      const [summaryRes, targetRes] = await Promise.all([
         supabase.rpc('get_agent_bucket_summary', {
           p_since: sinceStr,
           p_until: maxDate,
@@ -122,16 +122,17 @@ export default function AgentDashboard() {
           .eq('period_year', now.getFullYear())
           .eq('period_month', now.getMonth() + 1)
           .single(),
-        supabase.rpc('get_avg_daily_active_agents', {
-          p_since: sinceStr,
-          p_until: maxDate,
-        }),
       ])
 
       setSummary(summaryRes.data ?? [])
       setTarget(targetRes.data)
-      setAvgActivePerDay(Number(avgRes.data ?? 0))
       setLoading(false)
+
+      // Load avg active agents terpisah
+      supabase.rpc('get_avg_daily_active_agents', {
+        p_since: sinceStr,
+        p_until: maxDate,
+      }).then(({ data }) => setAvgActivePerDay(Number(data ?? 0)))
 
       // Load filter options di background (tidak blocking)
       supabase.rpc('get_agent_filter_options', {
