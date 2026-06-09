@@ -132,10 +132,7 @@ export default function AgentDashboard() {
       supabase.rpc('get_avg_daily_active_agents', {
         p_since: sinceStr,
         p_until: maxDate,
-      }).then(({ data, error }) => {
-        console.log('[avg] data:', data, 'error:', error)
-        setAvgActivePerDay(Number(data ?? 0))
-      })
+      }).then(({ data }) => setAvgActivePerDay(Number(data ?? 0)))
 
       // Load filter options di background (tidak blocking)
       supabase.rpc('get_agent_filter_options', {
@@ -318,7 +315,7 @@ export default function AgentDashboard() {
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '20px' }}>
               {[
-                { label: 'Rata-rata Agen Aktif/Hari', current: Math.round((Number(getSummary('growing')?.agent_count ?? 0) + Number(getSummary('potential')?.agent_count ?? 0) + Number(getSummary('at_risk')?.agent_count ?? 0)) / 14), target: target.daily_active_agents, suffix: 'terminal', color: '#0344D8' },
+                { label: 'Rata-rata Agen Aktif/Hari', current: activeToday, target: target.daily_active_agents, suffix: 'terminal', color: '#0344D8' },
                 { label: 'Trx/Hari (est.)', current: Number(getSummary('growing')?.total_trx ?? 0) / 14, target: target.daily_transfer_trx, suffix: 'trx', color: '#7c3aed' },
                 { label: 'Fee/Hari (est.)', current: (Number(getSummary('growing')?.total_fee ?? 0) + Number(getSummary('potential')?.total_fee ?? 0)) / 14, target: target.daily_fee, suffix: '', color: '#059669', isRp: true },
               ].map(t => (
