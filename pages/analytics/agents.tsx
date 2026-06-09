@@ -132,7 +132,10 @@ export default function AgentDashboard() {
       supabase.rpc('get_avg_daily_active_agents', {
         p_since: sinceStr,
         p_until: maxDate,
-      }).then(({ data }) => setAvgActivePerDay(Number(data ?? 0)))
+      }).then(({ data, error }) => {
+        console.log('[avg] data:', data, 'error:', error)
+        setAvgActivePerDay(Number(data ?? 0))
+      })
 
       // Load filter options di background (tidak blocking)
       supabase.rpc('get_agent_filter_options', {
