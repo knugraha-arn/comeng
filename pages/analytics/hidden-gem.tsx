@@ -4,18 +4,18 @@ import Layout from '../../components/Layout'
 import { createBrowserClient } from '@supabase/ssr'
 
 interface HiddenGemAgent {
-  r_serial_number: string
-  r_merchant_name: string | null
-  r_mitra: string | null
-  r_pic: string | null
-  r_active_days_14: number
-  r_avg_trx_per_active_day_14: number
-  r_active_days_month: number
-  r_total_trx_month: number
-  r_avg_trx_per_active_day_month: number
-  r_growth_pct: number
-  r_trend: 'growing' | 'declining' | 'consistent'
-  r_bucket: string
+  serial_number: string
+  merchant_name: string | null
+  mitra: string | null
+  pic: string | null
+  active_days_14: number
+  avg_trx_per_active_day_14: number
+  active_days_month: number
+  total_trx_month: number
+  avg_trx_per_active_day_month: number
+  growth_pct: number
+  trend: 'growing' | 'declining' | 'consistent'
+  bucket: string
 }
 
 interface AgentDayDetail {
@@ -175,7 +175,7 @@ export default function HiddenGemPage() {
     setLoadingDetail(true)
     try {
       const { data } = await supabase.rpc('get_agent_detail', {
-        p_serial: agent.r_serial_number,
+        p_serial: agent.serial_number,
         p_since: sinceDate,
         p_until: lastDate,
       })
@@ -186,23 +186,23 @@ export default function HiddenGemPage() {
   }
 
   async function generateAI(agent: HiddenGemAgent) {
-    const key = agent.r_serial_number
+    const key = agent.serial_number
     setAiLoading(key)
     try {
       const prompt = `Kamu adalah analis bisnis untuk jaringan agen Mini ATM di Indonesia.
 
 Data agen:
-- Nama: ${agent.r_merchant_name ?? agent.r_serial_number}
-- Mitra: ${agent.r_mitra ?? '—'}
-- PIC: ${agent.r_pic ?? '—'}
-- Bucket: ${agent.r_bucket}
-- Trend: ${agent.r_trend}
-- Hari aktif 14 hari: ${agent.r_active_days_14} hari
-- Rata-rata TRX/hari aktif (14 hari): ${agent.r_avg_trx_per_active_day_14}
-- Hari aktif bulan ini: ${agent.r_active_days_month} hari
-- Total TRX bulan ini: ${agent.r_total_trx_month}
-- Rata-rata TRX/hari aktif bulan ini: ${agent.r_avg_trx_per_active_day_month}
-- Growth: ${agent.r_growth_pct > 0 ? '+' : ''}${agent.r_growth_pct}%
+- Nama: ${agent.merchant_name ?? agent.serial_number}
+- Mitra: ${agent.mitra ?? '—'}
+- PIC: ${agent.pic ?? '—'}
+- Bucket: ${agent.bucket}
+- Trend: ${agent.trend}
+- Hari aktif 14 hari: ${agent.active_days_14} hari
+- Rata-rata TRX/hari aktif (14 hari): ${agent.avg_trx_per_active_day_14}
+- Hari aktif bulan ini: ${agent.active_days_month} hari
+- Total TRX bulan ini: ${agent.total_trx_month}
+- Rata-rata TRX/hari aktif bulan ini: ${agent.avg_trx_per_active_day_month}
+- Growth: ${agent.growth_pct > 0 ? '+' : ''}${agent.growth_pct}%
 
 Berikan response dalam JSON dengan format:
 {
@@ -242,10 +242,10 @@ Jawab HANYA dengan JSON, tanpa penjelasan lain.`
     navigator.clipboard.writeText(text)
   }
 
-  const filtered = agents.filter(a => a.r_trend === activeTab)
-  const growingCount = agents.filter(a => a.r_trend === 'growing').length
-  const decliningCount = agents.filter(a => a.r_trend === 'declining').length
-  const consistentCount = agents.filter(a => a.r_trend === 'consistent').length
+  const filtered = agents.filter(a => a.trend === activeTab)
+  const growingCount = agents.filter(a => a.trend === 'growing').length
+  const decliningCount = agents.filter(a => a.trend === 'declining').length
+  const consistentCount = agents.filter(a => a.trend === 'consistent').length
 
   const feeProgress = progress && monthlyTarget
     ? Math.min(100, Math.round(progress.total_fee / monthlyTarget * 100))
@@ -379,13 +379,13 @@ Jawab HANYA dengan JSON, tanpa penjelasan lain.`
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
                 {filtered.map(agent => {
-                  const cfg = TREND_CONFIG[agent.r_trend]
-                  const bucketCfg = BUCKET_CONFIG[agent.r_bucket] ?? BUCKET_CONFIG.sporadic
-                  const ai = aiResults[agent.r_serial_number]
-                  const isLoadingAI = aiLoading === agent.r_serial_number
+                  const cfg = TREND_CONFIG[agent.trend]
+                  const bucketCfg = BUCKET_CONFIG[agent.bucket] ?? BUCKET_CONFIG.sporadic
+                  const ai = aiResults[agent.serial_number]
+                  const isLoadingAI = aiLoading === agent.serial_number
 
                   return (
-                    <div key={agent.r_serial_number} style={{
+                    <div key={agent.serial_number} style={{
                       backgroundColor: '#fff', border: `1px solid #e5e7eb`,
                       borderRadius: '10px', overflow: 'hidden',
                     }}>
@@ -406,7 +406,7 @@ Jawab HANYA dengan JSON, tanpa penjelasan lain.`
                         <div style={{ flex: 1, minWidth: 0 }}>
                           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
                             <span style={{ fontSize: '14px', fontWeight: '700', color: '#111827' }}>
-                              {agent.r_merchant_name ?? agent.r_serial_number}
+                              {agent.merchant_name ?? agent.serial_number}
                             </span>
                             <span style={{
                               padding: '1px 7px', borderRadius: '99px', fontSize: '10px', fontWeight: '700',
@@ -414,7 +414,7 @@ Jawab HANYA dengan JSON, tanpa penjelasan lain.`
                             }}>{bucketCfg.label}</span>
                           </div>
                           <div style={{ fontSize: '11px', color: '#9ca3af' }}>
-                            {agent.r_serial_number} · {agent.r_mitra ?? '—'} · {agent.r_pic ?? '—'}
+                            {agent.serial_number} · {agent.mitra ?? '—'} · {agent.pic ?? '—'}
                           </div>
                         </div>
 
@@ -423,16 +423,16 @@ Jawab HANYA dengan JSON, tanpa penjelasan lain.`
                           <div style={{ textAlign: 'center' }}>
                             <div style={{ fontSize: '11px', color: '#9ca3af', marginBottom: '2px' }}>14 hari</div>
                             <div style={{ fontSize: '13px', fontWeight: '600', color: '#374151' }}>
-                              {agent.r_avg_trx_per_active_day_14} TRX/hari
+                              {agent.avg_trx_per_active_day_14} TRX/hari
                             </div>
                           </div>
                           <div style={{ textAlign: 'center' }}>
                             <div style={{ fontSize: '11px', color: '#9ca3af', marginBottom: '2px' }}>bulan ini</div>
                             <div style={{ fontSize: '13px', fontWeight: '600', color: '#374151' }}>
-                              {agent.r_avg_trx_per_active_day_month} TRX/hari
+                              {agent.avg_trx_per_active_day_month} TRX/hari
                             </div>
                           </div>
-                          <GrowthBadge pct={agent.r_growth_pct} />
+                          <GrowthBadge pct={agent.growth_pct} />
                         </div>
                       </div>
 
@@ -501,18 +501,18 @@ Jawab HANYA dengan JSON, tanpa penjelasan lain.`
             <div style={{ padding: '20px 24px', borderBottom: '1px solid #f3f4f6', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', position: 'sticky', top: 0, backgroundColor: '#fff', zIndex: 1 }}>
               <div>
                 <div style={{ fontSize: '18px', fontWeight: '800', color: '#111827', marginBottom: '4px' }}>
-                  {selectedAgent.r_merchant_name ?? selectedAgent.r_serial_number}
+                  {selectedAgent.merchant_name ?? selectedAgent.serial_number}
                 </div>
-                <div style={{ fontSize: '11px', color: '#9ca3af', marginBottom: '6px' }}>{selectedAgent.r_serial_number}</div>
+                <div style={{ fontSize: '11px', color: '#9ca3af', marginBottom: '6px' }}>{selectedAgent.serial_number}</div>
                 <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
                   <span style={{
                     padding: '2px 8px', borderRadius: '99px', fontSize: '11px', fontWeight: '700',
-                    backgroundColor: TREND_CONFIG[selectedAgent.r_trend].badgeBg,
-                    color: TREND_CONFIG[selectedAgent.r_trend].color,
+                    backgroundColor: TREND_CONFIG[selectedAgent.trend].badgeBg,
+                    color: TREND_CONFIG[selectedAgent.trend].color,
                   }}>
-                    {TREND_CONFIG[selectedAgent.r_trend].icon} {TREND_CONFIG[selectedAgent.r_trend].label}
+                    {TREND_CONFIG[selectedAgent.trend].icon} {TREND_CONFIG[selectedAgent.trend].label}
                   </span>
-                  <GrowthBadge pct={selectedAgent.r_growth_pct} />
+                  <GrowthBadge pct={selectedAgent.growth_pct} />
                 </div>
               </div>
               <button onClick={() => setSelectedAgent(null)} style={{ padding: '6px 10px', borderRadius: '8px', border: '1px solid #e5e7eb', backgroundColor: '#fff', color: '#6b7280', fontSize: '18px', cursor: 'pointer', lineHeight: 1 }}>✕</button>
@@ -528,19 +528,19 @@ Jawab HANYA dengan JSON, tanpa penjelasan lain.`
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
                     <div style={{ padding: '12px', backgroundColor: '#f9fafb', borderRadius: '8px', textAlign: 'center' }}>
                       <div style={{ fontSize: '11px', color: '#9ca3af', marginBottom: '4px' }}>Avg TRX/hari (14 hari)</div>
-                      <div style={{ fontSize: '20px', fontWeight: '800', color: '#374151' }}>{selectedAgent.r_avg_trx_per_active_day_14}</div>
+                      <div style={{ fontSize: '20px', fontWeight: '800', color: '#374151' }}>{selectedAgent.avg_trx_per_active_day_14}</div>
                     </div>
-                    <div style={{ padding: '12px', backgroundColor: TREND_CONFIG[selectedAgent.r_trend].bg, borderRadius: '8px', textAlign: 'center', border: `1px solid ${TREND_CONFIG[selectedAgent.r_trend].border}` }}>
+                    <div style={{ padding: '12px', backgroundColor: TREND_CONFIG[selectedAgent.trend].bg, borderRadius: '8px', textAlign: 'center', border: `1px solid ${TREND_CONFIG[selectedAgent.trend].border}` }}>
                       <div style={{ fontSize: '11px', color: '#9ca3af', marginBottom: '4px' }}>Avg TRX/hari (bulan ini)</div>
-                      <div style={{ fontSize: '20px', fontWeight: '800', color: TREND_CONFIG[selectedAgent.r_trend].color }}>{selectedAgent.r_avg_trx_per_active_day_month}</div>
+                      <div style={{ fontSize: '20px', fontWeight: '800', color: TREND_CONFIG[selectedAgent.trend].color }}>{selectedAgent.avg_trx_per_active_day_month}</div>
                     </div>
                     <div style={{ padding: '12px', backgroundColor: '#f9fafb', borderRadius: '8px', textAlign: 'center' }}>
                       <div style={{ fontSize: '11px', color: '#9ca3af', marginBottom: '4px' }}>Hari aktif 14 hari</div>
-                      <div style={{ fontSize: '20px', fontWeight: '800', color: '#374151' }}>{selectedAgent.r_active_days_14}</div>
+                      <div style={{ fontSize: '20px', fontWeight: '800', color: '#374151' }}>{selectedAgent.active_days_14}</div>
                     </div>
                     <div style={{ padding: '12px', backgroundColor: '#f9fafb', borderRadius: '8px', textAlign: 'center' }}>
                       <div style={{ fontSize: '11px', color: '#9ca3af', marginBottom: '4px' }}>Hari aktif bulan ini</div>
-                      <div style={{ fontSize: '20px', fontWeight: '800', color: '#374151' }}>{selectedAgent.r_active_days_month}</div>
+                      <div style={{ fontSize: '20px', fontWeight: '800', color: '#374151' }}>{selectedAgent.active_days_month}</div>
                     </div>
                   </div>
                 </div>
@@ -587,7 +587,7 @@ Jawab HANYA dengan JSON, tanpa penjelasan lain.`
                             <div style={{
                               width: '100%',
                               height: `${Math.max(4, (trx / maxTrx) * 64)}px`,
-                              backgroundColor: trx > 0 ? (isThisMonth ? TREND_CONFIG[selectedAgent.r_trend].color : '#94a3b8') : '#f3f4f6',
+                              backgroundColor: trx > 0 ? (isThisMonth ? TREND_CONFIG[selectedAgent.trend].color : '#94a3b8') : '#f3f4f6',
                               borderRadius: '3px 3px 0 0',
                               transition: 'height 0.3s',
                               opacity: trx > 0 ? 1 : 0.3,
@@ -602,7 +602,7 @@ Jawab HANYA dengan JSON, tanpa penjelasan lain.`
                   </div>
                   <div style={{ display: 'flex', gap: '12px', marginTop: '8px', fontSize: '10px', color: '#9ca3af' }}>
                     <span>▪ <span style={{ color: '#94a3b8' }}>Bulan lalu</span></span>
-                    <span>▪ <span style={{ color: TREND_CONFIG[selectedAgent.r_trend].color }}>Bulan ini</span></span>
+                    <span>▪ <span style={{ color: TREND_CONFIG[selectedAgent.trend].color }}>Bulan ini</span></span>
                   </div>
                 </div>
               </div>
