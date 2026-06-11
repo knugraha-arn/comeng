@@ -51,6 +51,25 @@ interface Target {
 
 const PAGE_SIZE = 20
 
+function Skeleton({ width, height = 14, radius = 6 }: { width: string | number, height?: number, radius?: number }) {
+  return (
+    <div style={{
+      width, height, borderRadius: radius,
+      backgroundColor: '#e5e7eb',
+      background: 'linear-gradient(90deg, #e5e7eb 25%, #f3f4f6 50%, #e5e7eb 75%)',
+      backgroundSize: '200% 100%',
+      animation: 'shimmer 1.4s infinite',
+    }} />
+  )
+}
+
+const SKELETON_STYLE = `
+  @keyframes shimmer {
+    0% { background-position: 200% 0 }
+    100% { background-position: -200% 0 }
+  }
+`
+
 const BUCKET_CONFIG = {
   productive: { label: 'Productive', icon: '🌱', color: '#166534', bg: '#dcfce7', border: '#bbf7d0' },
   moderate:   { label: 'Moderate',   icon: '⚡', color: '#ca8a04', bg: '#fef9c3', border: '#fde68a' },
@@ -97,6 +116,7 @@ export default function AgentDashboard() {
   const [avgActivePerDay, setAvgActivePerDay] = useState(0)
   const [avgTrxPerDay, setAvgTrxPerDay] = useState(0)
   const [avgFeePerDay, setAvgFeePerDay] = useState(0)
+  const [loadingAvg, setLoadingAvg] = useState(true)
   const [selectedAgent, setSelectedAgent] = useState<Agent | null>(null)
   const [agentDetail, setAgentDetail] = useState<AgentDayDetail[]>([])
   const [loadingDetail, setLoadingDetail] = useState(false)
@@ -143,16 +163,17 @@ export default function AgentDashboard() {
       setLoading(false)
 
       // Load avg + filter options di background
-      supabase.rpc('get_avg_active_from_metrics', { p_since: sinceStr, p_until: maxDate })
-        .then(({ data }) => setAvgActivePerDay(Number(data ?? 0)))
-
-      supabase.rpc('get_avg_daily_metrics', { p_since: sinceStr, p_until: maxDate })
-        .then(({ data }) => {
-          if (data && data.length > 0) {
-            setAvgTrxPerDay(Number(data[0].avg_trx_per_day ?? 0))
-            setAvgFeePerDay(Number(data[0].avg_fee_per_day ?? 0))
-          }
-        })
+      Promise.all([
+        supabase.rpc('get_avg_active_from_metrics', { p_since: sinceStr, p_until: maxDate })
+          .then(({ data }) => setAvgActivePerDay(Number(data ?? 0))),
+        supabase.rpc('get_avg_daily_metrics', { p_since: sinceStr, p_until: maxDate })
+          .then(({ data }) => {
+            if (data && data.length > 0) {
+              setAvgTrxPerDay(Number(data[0].avg_trx_per_day ?? 0))
+              setAvgFeePerDay(Number(data[0].avg_fee_per_day ?? 0))
+            }
+          }),
+      ]).finally(() => setLoadingAvg(false))
 
       supabase.rpc('get_dashboard_filter_options', { p_date: maxDate })
         .then(({ data }) => setFilterOptions(data ?? []))
@@ -257,6 +278,7 @@ export default function AgentDashboard() {
 
   return (
     <Layout>
+      <style>{SKELETON_STYLE}</style>
       <Head><title>Dashboard Agen — AMARIS</title></Head>
       <div style={{ maxWidth: '1200px', margin: '0 auto', padding: '32px 24px' }}>
 
@@ -284,12 +306,20 @@ export default function AgentDashboard() {
                 <div key={t.label}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px' }}>
                     <span style={{ fontSize: '12px', color: '#6b7280' }}>{t.label}</span>
-                    <span style={{ fontSize: '12px', fontWeight: '600', color: '#374151' }}>
-                      {(t as {isRp?: boolean}).isRp ? formatFee(Math.round(t.current)) : Math.round(t.current).toLocaleString('id')}
-                      {t.target && <span style={{ color: '#9ca3af', fontWeight: '400' }}> / {(t as {isRp?: boolean}).isRp ? formatFee(t.target) : t.target.toLocaleString('id')}</span>}
-                    </span>
+                    {loadingAvg ? (
+                      <Skeleton width={80} height={12} />
+                    ) : (
+                      <span style={{ fontSize: '12px', fontWeight: '600', color: '#374151' }}>
+                        {(t as {isRp?: boolean}).isRp ? formatFee(Math.round(t.current)) : Math.round(t.current).toLocaleString('id')}
+                        {t.target && <span style={{ color: '#9ca3af', fontWeight: '400' }}> / {(t as {isRp?: boolean}).isRp ? formatFee(t.target) : t.target.toLocaleString('id')}</span>}
+                      </span>
+                    )}
                   </div>
-                  {t.target && <ProgressBar value={t.current} max={t.target} color={t.color} />}
+                  {loadingAvg ? (
+                    <Skeleton width="100%" height={6} radius={99} />
+                  ) : (
+                    t.target && <ProgressBar value={t.current} max={t.target} color={t.color} />
+                  )}
                 </div>
               ))}
             </div>
@@ -317,13 +347,23 @@ export default function AgentDashboard() {
                 transition: 'all 0.15s',
               }}>
                 <div style={{ fontSize: '20px', marginBottom: '8px' }}>{cfg.icon}</div>
-                <div style={{ fontSize: '22px', fontWeight: '800', color: cfg.color }}>{count.toLocaleString('id')}</div>
-                <div style={{ fontSize: '12px', fontWeight: '600', color: '#374151', marginBottom: '2px' }}>{cfg.label}</div>
-                <div style={{ fontSize: '11px', color: '#9ca3af' }}>{totalAgents > 0 ? Math.round(count / totalAgents * 100) : 0}% dari total</div>
-                {data && Number(data.total_fee) > 0 && (
-                  <div style={{ fontSize: '11px', color: cfg.color, marginTop: '4px', fontWeight: '600' }}>
-                    {formatFee(Number(data.total_fee))} fee/hari ini
-                  </div>
+                {loading ? (
+                  <>
+                    <Skeleton width={60} height={22} radius={4} />
+                    <div style={{ marginTop: '8px' }}><Skeleton width={80} height={12} /></div>
+                    <div style={{ marginTop: '6px' }}><Skeleton width={50} height={10} /></div>
+                  </>
+                ) : (
+                  <>
+                    <div style={{ fontSize: '22px', fontWeight: '800', color: cfg.color }}>{count.toLocaleString('id')}</div>
+                    <div style={{ fontSize: '12px', fontWeight: '600', color: '#374151', marginBottom: '2px' }}>{cfg.label}</div>
+                    <div style={{ fontSize: '11px', color: '#9ca3af' }}>{totalAgents > 0 ? Math.round(count / totalAgents * 100) : 0}% dari total</div>
+                    {data && Number(data.total_fee) > 0 && (
+                      <div style={{ fontSize: '11px', color: cfg.color, marginTop: '4px', fontWeight: '600' }}>
+                        {formatFee(Number(data.total_fee))} fee/hari ini
+                      </div>
+                    )}
+                  </>
                 )}
               </div>
             )
@@ -418,7 +458,30 @@ export default function AgentDashboard() {
               </div>
 
               {loadingDetail ? (
-                <div style={{ padding: '40px', textAlign: 'center', color: '#9ca3af', fontSize: '13px' }}>Memuat data...</div>
+                <div style={{ padding: '40px 24px' }}>
+                  <div style={{ fontSize: '11px', fontWeight: '700', color: '#9ca3af', letterSpacing: '0.08em', marginBottom: '16px' }}>MEMUAT DATA AGEN...</div>
+                  {[1,2,3,4,5].map(i => (
+                    <div key={i} style={{ display: 'flex', gap: '12px', padding: '10px 0', borderBottom: '1px solid #f9fafb' }}>
+                      <Skeleton width={80} height={12} />
+                      <Skeleton width={140} height={12} />
+                    </div>
+                  ))}
+                  <div style={{ marginTop: '24px', marginBottom: '12px' }}><Skeleton width={120} height={12} /></div>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '10px' }}>
+                    {[1,2,3,4,5,6].map(i => (
+                      <div key={i} style={{ padding: '10px 12px', backgroundColor: '#f9fafb', borderRadius: '8px' }}>
+                        <Skeleton width="60%" height={14} />
+                        <div style={{ marginTop: '6px' }}><Skeleton width="80%" height={10} /></div>
+                      </div>
+                    ))}
+                  </div>
+                  <div style={{ marginTop: '24px', marginBottom: '12px' }}><Skeleton width={140} height={12} /></div>
+                  <div style={{ display: 'flex', alignItems: 'flex-end', gap: '3px', height: '80px' }}>
+                    {Array.from({ length: 14 }, (_, i) => (
+                      <div key={i} style={{ flex: 1, height: `${20 + Math.random() * 50}px`, backgroundColor: '#e5e7eb', borderRadius: '3px 3px 0 0' }} />
+                    ))}
+                  </div>
+                </div>
               ) : agentDetail.length > 0 ? (
                 <div style={{ padding: '20px 24px' }}>
                   {/* Info Agen */}
