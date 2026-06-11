@@ -120,7 +120,7 @@ export default function HiddenGemPage() {
     setLoading(true)
     try {
       const [agentsRes, progressRes] = await Promise.all([
-        supabase.rpc('get_hidden_gem_agents', { p_min_active_days_month: 2, p_min_trx_month: 5, p_min_avg_trx_14: 1 }),
+        supabase.rpc('get_hidden_gem_agents_3500', { p_min_active_days_month: 2, p_min_trx_month: 5, p_min_avg_trx_14: 1 }),
         supabase.rpc('get_monthly_progress'),
       ])
 
@@ -228,7 +228,7 @@ export default function HiddenGemPage() {
           <div style={{ fontSize: '11px', fontWeight: '600', color: '#9ca3af', letterSpacing: '0.1em', marginBottom: '4px' }}>ANALITIK AGEN</div>
           <h1 style={{ fontSize: '24px', fontWeight: '800', color: '#111827', margin: 0, letterSpacing: '-0.02em' }}>💰 Dashboard 3500</h1>
           <p style={{ fontSize: '13px', color: '#6b7280', marginTop: '4px' }}>
-            Agen dengan transaksi fee Rp 3.500 — MiniATM & BayarBayarPlus via terminal NOBU.
+            Agen dengan transaksi fee Rp 3.500 — Lita dan Plus
           </p>
         </div>
 
@@ -446,10 +446,10 @@ export default function HiddenGemPage() {
                       { label: 'Avg TRX/hari (bulan ini)', value: String(selectedAgent.avg_trx_per_active_day_month), highlight: true },
                       { label: 'Hari aktif (14 hari)', value: `${selectedAgent.active_days_14} hari` },
                       { label: 'Hari aktif (bulan ini)', value: `${selectedAgent.active_days_month} hari` },
+                      { label: 'TRX Fee 3500 (14H)', value: String(selectedAgent.active_days_14) + ' hari aktif' },
+                      { label: 'TRX Fee 3500 (Bln)', value: Number(selectedAgent.total_trx_month).toLocaleString('id') + ' trx' },      
                       { label: 'Total TRX bulan ini', value: Number(selectedAgent.total_trx_month).toLocaleString('id') },
                       { label: 'Growth', value: `${selectedAgent.growth_pct > 0 ? '+' : ''}${selectedAgent.growth_pct}%`, highlight: true },
-                      { label: 'TRX Fee 3500 (14H)', value: String(selectedAgent.active_days_14) + ' hari aktif' },
-                      { label: 'TRX Fee 3500 (Bln)', value: Number(selectedAgent.total_trx_month).toLocaleString('id') + ' trx' },
                     ].map(s => (
                       <div key={s.label} style={{
                         padding: '10px 12px', backgroundColor: s.highlight ? TREND_CONFIG[selectedAgent.trend].bg : '#f9fafb',
