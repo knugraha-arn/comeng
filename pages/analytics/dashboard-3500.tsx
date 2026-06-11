@@ -120,7 +120,7 @@ export default function HiddenGemPage() {
     setLoading(true)
     try {
       const [agentsRes, progressRes] = await Promise.all([
-        supabase.rpc('get_hidden_gem_agents_3500', { p_min_active_days_month: 2, p_min_trx_month: 5, p_min_avg_trx_14: 1 }),
+        supabase.rpc('get_hidden_gem_agents', { p_min_active_days_month: 2, p_min_trx_month: 5, p_min_avg_trx_14: 1 }),
         supabase.rpc('get_monthly_progress'),
       ])
 
@@ -220,15 +220,15 @@ export default function HiddenGemPage() {
   return (
     <Layout>
       <style>{SKELETON_STYLE}</style>
-      <Head><title>Dashboard Lite dan Plus — AMARIS</title></Head>
+      <Head><title>Dashboard 3500 — AMARIS</title></Head>
       <div style={{ maxWidth: '1200px', margin: '0 auto', padding: '32px 24px' }}>
 
         {/* Header */}
         <div style={{ marginBottom: '24px' }}>
           <div style={{ fontSize: '11px', fontWeight: '600', color: '#9ca3af', letterSpacing: '0.1em', marginBottom: '4px' }}>ANALITIK AGEN</div>
-          <h1 style={{ fontSize: '24px', fontWeight: '800', color: '#111827', margin: 0, letterSpacing: '-0.02em' }}>💰 Dashboard Lite dan Plus</h1>
+          <h1 style={{ fontSize: '24px', fontWeight: '800', color: '#111827', margin: 0, letterSpacing: '-0.02em' }}>💰 Dashboard 3500</h1>
           <p style={{ fontSize: '13px', color: '#6b7280', marginTop: '4px' }}>
-            Agen dengan transaksi fee Rp 3.500 — Lite dan Plus
+            Agen dengan transaksi fee Rp 3.500 — MiniATM & BayarBayarPlus via terminal NOBU.
           </p>
         </div>
 
@@ -448,6 +448,8 @@ export default function HiddenGemPage() {
                       { label: 'Hari aktif (bulan ini)', value: `${selectedAgent.active_days_month} hari` },
                       { label: 'Total TRX bulan ini', value: Number(selectedAgent.total_trx_month).toLocaleString('id') },
                       { label: 'Growth', value: `${selectedAgent.growth_pct > 0 ? '+' : ''}${selectedAgent.growth_pct}%`, highlight: true },
+                      { label: 'TRX Fee 3500 (14H)', value: String(selectedAgent.active_days_14) + ' hari aktif' },
+                      { label: 'TRX Fee 3500 (Bln)', value: Number(selectedAgent.total_trx_month).toLocaleString('id') + ' trx' },
                     ].map(s => (
                       <div key={s.label} style={{
                         padding: '10px 12px', backgroundColor: s.highlight ? TREND_CONFIG[selectedAgent.trend].bg : '#f9fafb',
@@ -496,8 +498,6 @@ export default function HiddenGemPage() {
                       { label: 'Total Fee',    value: formatFee(agentDetail.reduce((s, d) => s + Number(d.total_fee), 0)) },
                       { label: 'Total Amount', value: formatFee(agentDetail.reduce((s, d) => s + Number(d.total_amount), 0)) },
                       { label: 'Hari Aktif',   value: `${agentDetail.length} hari` },
-                      { label: 'TRX Fee 3500 (14H)', value: String(selectedAgent.active_days_14) + ' hari aktif' },
-                      { label: 'TRX Fee 3500 (Bln)', value: Number(selectedAgent.total_trx_month).toLocaleString('id') + ' trx' },
                     ].map(s => (
                       <div key={s.label} style={{ padding: '10px 12px', backgroundColor: '#f9fafb', borderRadius: '8px', textAlign: 'center' }}>
                         <div style={{ fontSize: '14px', fontWeight: '700', color: '#111827' }}>{s.value}</div>
