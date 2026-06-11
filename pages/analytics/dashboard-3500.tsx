@@ -120,7 +120,7 @@ export default function HiddenGemPage() {
     setLoading(true)
     try {
       const [agentsRes, progressRes] = await Promise.all([
-        supabase.rpc('get_hidden_gem_agents', { p_min_active_days_month: 2, p_min_trx_month: 5, p_min_avg_trx_14: 1 }),
+        supabase.rpc('get_hidden_gem_agents_3500', { p_min_active_days_month: 2, p_min_trx_month: 5, p_min_avg_trx_14: 1 }),
         supabase.rpc('get_monthly_progress'),
       ])
 
@@ -220,15 +220,15 @@ export default function HiddenGemPage() {
   return (
     <Layout>
       <style>{SKELETON_STYLE}</style>
-      <Head><title>Dashboard 3500 — AMARIS</title></Head>
+      <Head><title>Dashboard Lite dan Plus — AMARIS</title></Head>
       <div style={{ maxWidth: '1200px', margin: '0 auto', padding: '32px 24px' }}>
 
         {/* Header */}
         <div style={{ marginBottom: '24px' }}>
           <div style={{ fontSize: '11px', fontWeight: '600', color: '#9ca3af', letterSpacing: '0.1em', marginBottom: '4px' }}>ANALITIK AGEN</div>
-          <h1 style={{ fontSize: '24px', fontWeight: '800', color: '#111827', margin: 0, letterSpacing: '-0.02em' }}>💰 Dashboard 3500</h1>
+          <h1 style={{ fontSize: '24px', fontWeight: '800', color: '#111827', margin: 0, letterSpacing: '-0.02em' }}>💰 Dashboard Lite dan Plus</h1>
           <p style={{ fontSize: '13px', color: '#6b7280', marginTop: '4px' }}>
-            Agen dengan transaksi fee Rp 3.500 — Lita dan Plus
+            Agen dengan transaksi fee Rp 3.500 — Lite dan Plus
           </p>
         </div>
 
