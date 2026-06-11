@@ -142,9 +142,9 @@ export default function AgentDashboard() {
       const maxDate = await getLatestDate()
       if (!maxDate) { setLoading(false); return }
 
-      const sd = new Date(maxDate)
-      sd.setDate(sd.getDate() - 13)
-      const sinceStr = sd.toISOString().split('T')[0]
+      const [_y, _m, _d] = maxDate.split("-").map(Number)
+      const sd = new Date(_y, _m - 1, _d - 13)
+      const sinceStr = `${sd.getFullYear()}-${String(sd.getMonth() + 1).padStart(2, "0")}-${String(sd.getDate()).padStart(2, "0")}`
       setLastDate(maxDate)
       setSinceDate(sinceStr)
 
@@ -211,11 +211,13 @@ export default function AgentDashboard() {
     setAgentDetail([])
     setLoadingDetail(true)
     try {
-      const sd = new Date(lastDate)
-      sd.setDate(sd.getDate() - 13)
-      const { data } = await supabase.rpc('get_agent_detail', {
+      const [__y, __m, __d] = lastDate.split("-").map(Number)
+      const dsd = new Date(__y, __m - 1, __d - 13)
+      const drawerSince = `${dsd.getFullYear()}-${String(dsd.getMonth() + 1).padStart(2, "0")}-${String(dsd.getDate()).padStart(2, "0")}`
+      const { data } = await supabase.rpc("get_agent_detail", {
         p_serial: agent.serial_number,
-        p_since:  sd.toISOString().split('T')[0],
+        p_since:  drawerSince,
+        p_until:  lastDate,
         p_until:  lastDate,
       })
       setAgentDetail(data ?? [])
