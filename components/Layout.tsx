@@ -14,9 +14,10 @@ const navItems = [
 ]
 
 const analyticsNavItems = [
-  { href: '/analytics/agents',  label: 'Dashboard Agen', icon: '▦' },
+  { href: '/analytics/agents',  label: 'Dashboard 14 Hari', icon: '▦' },
+  { href: '/analytics/hidden-gem', label: 'Dashboard Produktifitas',  icon: '◈' },
+  { href: '/analytics/dashboard-3500', label: 'Dashboard 3500',  icon: '◈' },
   { href: '/analytics',         label: 'Morning Brief',  icon: '◉' },
-  { href: '/analytics/hidden-gem', label: 'Hidden Gem',  icon: '◈' },
 ]
 
 const adminNavItems = [
