@@ -293,10 +293,10 @@ export default function UploadCenter() {
       setProgressLabel('Menghitung metrics...')
 
       // Trigger compute_agent_metrics langsung via RPC
-      await supabase.rpc('compute_agent_metrics').catch(() => {})
+      try { await supabase.rpc('compute_agent_metrics') } catch {}
 
       // Purge data lama
-      await supabase.rpc('am_purge_old_data').catch(() => {})
+      try { await supabase.rpc('am_purge_old_data') } catch {}
 
       setProgress(100)
       setStage('success')
