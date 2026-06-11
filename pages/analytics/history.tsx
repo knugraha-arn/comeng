@@ -118,9 +118,8 @@ export default function UploadHistory() {
   }
 
   function formatDateTime(d: string) {
-    return new Date(d).toLocaleString('id-ID', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })
+  return new Date(d).toLocaleString('id-ID', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })
   }
-
   function formatRp(val: number) {
     if (val >= 1000000) return `Rp ${(val / 1000000).toFixed(1)}jt`
     if (val >= 1000) return `Rp ${(val / 1000).toFixed(0)}rb`
