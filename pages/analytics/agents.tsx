@@ -52,10 +52,9 @@ interface Target {
 const PAGE_SIZE = 20
 
 const BUCKET_CONFIG = {
-  growing:   { label: 'Growing',   icon: '🌱', color: '#166534', bg: '#dcfce7', border: '#bbf7d0' },
-  potential: { label: 'Potential', icon: '⚡', color: '#ca8a04', bg: '#fef9c3', border: '#fde68a' },
-  at_risk:   { label: 'At Risk',   icon: '⚠️', color: '#dc2626', bg: '#fee2e2', border: '#fecaca' },
-  dormant:   { label: 'Dormant',   icon: '🔴', color: '#6b7280', bg: '#f3f4f6', border: '#e5e7eb' },
+  productive: { label: 'Productive', icon: '🌱', color: '#166534', bg: '#dcfce7', border: '#bbf7d0' },
+  moderate:   { label: 'Moderate',   icon: '⚡', color: '#ca8a04', bg: '#fef9c3', border: '#fde68a' },
+  sporadic:   { label: 'Sporadic',   icon: '⚠️', color: '#dc2626', bg: '#fee2e2', border: '#fecaca' },
 }
 
 function formatFee(val: number): string {
@@ -236,7 +235,7 @@ export default function AgentDashboard() {
   const totalPages = Math.ceil(total / PAGE_SIZE)
 
   function BucketChip({ b }: { b: string }) {
-    const cfg = BUCKET_CONFIG[b as keyof typeof BUCKET_CONFIG] ?? BUCKET_CONFIG.dormant
+    const cfg = BUCKET_CONFIG[b as keyof typeof BUCKET_CONFIG] ?? BUCKET_CONFIG.sporadic
     return (
       <span style={{
         padding: '2px 8px', borderRadius: '99px', fontSize: '11px', fontWeight: '700',
@@ -266,7 +265,7 @@ export default function AgentDashboard() {
           <div style={{ fontSize: '11px', fontWeight: '600', color: '#9ca3af', letterSpacing: '0.1em', marginBottom: '4px' }}>ANALITIK AGEN</div>
           <h1 style={{ fontSize: '24px', fontWeight: '800', color: '#111827', margin: 0, letterSpacing: '-0.02em' }}>Dashboard Agen</h1>
           <p style={{ fontSize: '13px', color: '#6b7280', marginTop: '4px' }}>
-            Data per {lastDate ? new Date(lastDate).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' }) : '—'} · {totalAgents.toLocaleString('id')} agen aktif hari ini
+            Data per {lastDate ? new Date(lastDate).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' }) : '—'} · {totalAgents.toLocaleString('id')} agen aktif 14 hari terakhir
           </p>
         </div>
 
@@ -297,15 +296,15 @@ export default function AgentDashboard() {
             {target.daily_active_agents && avgActivePerDay > 0 && avgActivePerDay < target.daily_active_agents && (
               <div style={{ marginTop: '16px', padding: '10px 14px', backgroundColor: '#fffbeb', borderRadius: '8px', border: '1px solid #fde68a', fontSize: '12px', color: '#92400e' }}>
                 💡 Kurang <strong>{(target.daily_active_agents - avgActivePerDay).toLocaleString('id')} agen/hari</strong> dari target.
-                {Number(getSummary('potential')?.agent_count ?? 0) > 0 && ` Ada ${Number(getSummary('potential')?.agent_count ?? 0)} agen Potential yang bisa didorong.`}
+                {Number(getSummary('moderate')?.agent_count ?? 0) > 0 && ` Ada ${Number(getSummary('moderate')?.agent_count ?? 0)} agen Moderate yang bisa didorong.`}
               </div>
             )}
           </div>
         )}
 
-        {/* Bucket Cards */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '12px', marginBottom: '24px' }}>
-          {(['growing', 'potential', 'at_risk', 'dormant'] as const).map(b => {
+        {/* Bucket Cards — 3 buckets */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '12px', marginBottom: '24px' }}>
+          {(['productive', 'moderate', 'sporadic'] as const).map(b => {
             const cfg  = BUCKET_CONFIG[b]
             const data = getSummary(b)
             const count = Number(data?.agent_count ?? 0)
@@ -422,7 +421,7 @@ export default function AgentDashboard() {
                 <div style={{ padding: '40px', textAlign: 'center', color: '#9ca3af', fontSize: '13px' }}>Memuat data...</div>
               ) : agentDetail.length > 0 ? (
                 <div style={{ padding: '20px 24px' }}>
-                  {/* Info */}
+                  {/* Info Agen */}
                   {(() => {
                     const latest = agentDetail[agentDetail.length - 1]
                     return (
@@ -446,23 +445,44 @@ export default function AgentDashboard() {
                     )
                   })()}
 
-                  {/* Summary */}
+                  {/* Ringkasan 14 Hari */}
                   <div style={{ marginBottom: '24px' }}>
                     <div style={{ fontSize: '11px', fontWeight: '700', color: '#9ca3af', letterSpacing: '0.08em', marginBottom: '12px' }}>RINGKASAN 14 HARI</div>
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '10px' }}>
                       {[
-                        { label: 'Total TRX',   value: agentDetail.reduce((s, d) => s + Number(d.total_trx), 0).toLocaleString('id') },
-                        { label: 'Transfer',    value: agentDetail.reduce((s, d) => s + Number(d.transfer_trx), 0).toLocaleString('id') },
-                        { label: 'Cek Saldo',   value: agentDetail.reduce((s, d) => s + Number(d.cek_saldo_trx), 0).toLocaleString('id') },
-                        { label: 'Total Fee',   value: formatFee(agentDetail.reduce((s, d) => s + Number(d.total_fee), 0)) },
-                        { label: 'Total Amount',value: formatFee(agentDetail.reduce((s, d) => s + Number(d.total_amount), 0)) },
-                        { label: 'Hari Aktif',  value: `${agentDetail.length} hari` },
+                        { label: 'Total TRX',    value: agentDetail.reduce((s, d) => s + Number(d.total_trx), 0).toLocaleString('id') },
+                        { label: 'Transfer',     value: agentDetail.reduce((s, d) => s + Number(d.transfer_trx), 0).toLocaleString('id') },
+                        { label: 'Cek Saldo',    value: agentDetail.reduce((s, d) => s + Number(d.cek_saldo_trx), 0).toLocaleString('id') },
+                        { label: 'Total Fee',    value: formatFee(agentDetail.reduce((s, d) => s + Number(d.total_fee), 0)) },
+                        { label: 'Total Amount', value: formatFee(agentDetail.reduce((s, d) => s + Number(d.total_amount), 0)) },
+                        { label: 'Hari Aktif',   value: `${agentDetail.length} hari` },
                       ].map(s => (
                         <div key={s.label} style={{ padding: '10px 12px', backgroundColor: '#f9fafb', borderRadius: '8px', textAlign: 'center' }}>
                           <div style={{ fontSize: '14px', fontWeight: '700', color: '#111827' }}>{s.value}</div>
                           <div style={{ fontSize: '10px', color: '#9ca3af', marginTop: '2px' }}>{s.label}</div>
                         </div>
                       ))}
+                    </div>
+                  </div>
+
+                  {/* Bucket Badge di Drawer */}
+                  <div style={{ marginBottom: '24px', padding: '12px 16px', borderRadius: '8px', backgroundColor: BUCKET_CONFIG[selectedAgent.bucket as keyof typeof BUCKET_CONFIG]?.bg ?? '#f9fafb', border: `1px solid ${BUCKET_CONFIG[selectedAgent.bucket as keyof typeof BUCKET_CONFIG]?.border ?? '#e5e7eb'}` }}>
+                    <div style={{ fontSize: '11px', fontWeight: '700', color: '#9ca3af', letterSpacing: '0.08em', marginBottom: '8px' }}>KLASIFIKASI</div>
+                    <div style={{ display: 'flex', gap: '16px' }}>
+                      <div>
+                        <div style={{ fontSize: '11px', color: '#9ca3af' }}>Bucket</div>
+                        <div style={{ marginTop: '4px' }}><BucketChip b={selectedAgent.bucket} /></div>
+                      </div>
+                      <div>
+                        <div style={{ fontSize: '11px', color: '#9ca3af' }}>Hari Aktif</div>
+                        <div style={{ fontSize: '16px', fontWeight: '700', color: selectedAgent.active_days >= 8 ? '#166534' : selectedAgent.active_days >= 5 ? '#ca8a04' : '#dc2626' }}>
+                          {selectedAgent.active_days} / 14 hari
+                        </div>
+                      </div>
+                      <div>
+                        <div style={{ fontSize: '11px', color: '#9ca3af' }}>Total TRX</div>
+                        <div style={{ fontSize: '16px', fontWeight: '700', color: '#111827' }}>{Number(selectedAgent.total_trx).toLocaleString('id')}</div>
+                      </div>
                     </div>
                   </div>
 
