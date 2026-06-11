@@ -11,18 +11,14 @@ const MONTHS = [
 interface Target {
   period_year: number
   period_month: number
-  // Harian
   daily_active_agents: number | null
   daily_transfer_trx: number | null
   daily_fee: number | null
-  // Bulanan
   monthly_transfer_trx: number | null
   monthly_fee: number | null
-  // Bucket
   daily_growing_agents: number | null
   monthly_potential_converted: number | null
   daily_at_risk_max: number | null
-  // Threshold
   mitra_min_active_ratio: number | null
   pic_min_active_ratio: number | null
   min_transfer_trx_potential: number | null
@@ -42,16 +38,78 @@ const DEFAULTS: Omit<Target, 'period_year' | 'period_month'> = {
   min_transfer_trx_potential: 5,
 }
 
-function formatRp(val: number | null): string {
-  if (!val) return ''
-  return val.toLocaleString('id-ID')
-}
-
 function parseRp(val: string): number | null {
   const cleaned = val.replace(/\./g, '').replace(/,/g, '')
   const n = parseInt(cleaned)
   return isNaN(n) ? null : n
 }
+
+// ── Dipindahkan ke luar TargetsPage agar tidak re-mount saat state berubah ──
+
+function Field({
+  label, value, onChange, prefix, suffix, hint
+}: {
+  label: string
+  value: number | null
+  onChange: (v: number | null) => void
+  prefix?: string
+  suffix?: string
+  hint?: string
+}) {
+  const [raw, setRaw] = useState(value?.toLocaleString('id-ID') ?? '')
+
+  useEffect(() => {
+    setRaw(value?.toLocaleString('id-ID') ?? '')
+  }, [value])
+
+  return (
+    <div style={{ marginBottom: '16px' }}>
+      <label style={{ fontSize: '12px', fontWeight: '600', color: '#374151', display: 'block', marginBottom: '6px' }}>
+        {label}
+      </label>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+        {prefix && <span style={{ fontSize: '13px', color: '#9ca3af', flexShrink: 0 }}>{prefix}</span>}
+        <input
+          type="text"
+          value={raw}
+          onChange={e => {
+            setRaw(e.target.value)
+            onChange(parseRp(e.target.value))
+          }}
+          style={{
+            flex: 1, padding: '9px 12px', borderRadius: '8px',
+            border: '1px solid #e5e7eb', fontSize: '14px', color: '#111827',
+            outline: 'none', fontWeight: '500',
+          }}
+          onFocus={e => e.target.style.borderColor = '#0344D8'}
+          onBlur={e => {
+            e.target.style.borderColor = '#e5e7eb'
+            if (value) setRaw(value.toLocaleString('id-ID'))
+          }}
+        />
+        {suffix && <span style={{ fontSize: '13px', color: '#9ca3af', flexShrink: 0 }}>{suffix}</span>}
+      </div>
+      {hint && <div style={{ fontSize: '11px', color: '#9ca3af', marginTop: '4px' }}>{hint}</div>}
+    </div>
+  )
+}
+
+function Section({ title, icon, children }: { title: string, icon: string, children: React.ReactNode }) {
+  return (
+    <div style={{
+      backgroundColor: '#fff', border: '1px solid #e5e7eb',
+      borderRadius: '12px', padding: '20px 24px', marginBottom: '16px',
+    }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '20px' }}>
+        <span style={{ fontSize: '16px' }}>{icon}</span>
+        <span style={{ fontSize: '14px', fontWeight: '700', color: '#111827' }}>{title}</span>
+      </div>
+      {children}
+    </div>
+  )
+}
+
+// ────────────────────────────────────────────────────────────────────────────
 
 export default function TargetsPage() {
   const supabase = createBrowserClient(
@@ -78,17 +136,17 @@ export default function TargetsPage() {
       const { data } = await res.json()
       if (data) {
         setForm({
-          daily_active_agents:        data.daily_active_agents,
-          daily_transfer_trx:         data.daily_transfer_trx,
-          daily_fee:                  data.daily_fee,
-          monthly_transfer_trx:       data.monthly_transfer_trx,
-          monthly_fee:                data.monthly_fee,
-          daily_growing_agents:       data.daily_growing_agents,
+          daily_active_agents:         data.daily_active_agents,
+          daily_transfer_trx:          data.daily_transfer_trx,
+          daily_fee:                   data.daily_fee,
+          monthly_transfer_trx:        data.monthly_transfer_trx,
+          monthly_fee:                 data.monthly_fee,
+          daily_growing_agents:        data.daily_growing_agents,
           monthly_potential_converted: data.monthly_potential_converted,
-          daily_at_risk_max:          data.daily_at_risk_max,
-          mitra_min_active_ratio:     data.mitra_min_active_ratio,
-          pic_min_active_ratio:       data.pic_min_active_ratio,
-          min_transfer_trx_potential: data.min_transfer_trx_potential,
+          daily_at_risk_max:           data.daily_at_risk_max,
+          mitra_min_active_ratio:      data.mitra_min_active_ratio,
+          pic_min_active_ratio:        data.pic_min_active_ratio,
+          min_transfer_trx_potential:  data.min_transfer_trx_potential,
         })
         setIsNew(false)
       } else {
@@ -127,70 +185,6 @@ export default function TargetsPage() {
     } finally {
       setSaving(false)
     }
-  }
-
-  function Field({
-    label, value, onChange, prefix, suffix, hint
-  }: {
-    label: string
-    value: number | null
-    onChange: (v: number | null) => void
-    prefix?: string
-    suffix?: string
-    hint?: string
-  }) {
-    const [raw, setRaw] = useState(value?.toLocaleString('id-ID') ?? '')
-
-    useEffect(() => {
-      setRaw(value?.toLocaleString('id-ID') ?? '')
-    }, [value])
-
-    return (
-      <div style={{ marginBottom: '16px' }}>
-        <label style={{ fontSize: '12px', fontWeight: '600', color: '#374151', display: 'block', marginBottom: '6px' }}>
-          {label}
-        </label>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-          {prefix && <span style={{ fontSize: '13px', color: '#9ca3af', flexShrink: 0 }}>{prefix}</span>}
-          <input
-            type="text"
-            value={raw}
-            onChange={e => {
-              setRaw(e.target.value)
-              onChange(parseRp(e.target.value))
-            }}
-            style={{
-              flex: 1, padding: '9px 12px', borderRadius: '8px',
-              border: '1px solid #e5e7eb', fontSize: '14px', color: '#111827',
-              outline: 'none', fontWeight: '500',
-            }}
-            onFocus={e => e.target.style.borderColor = '#0344D8'}
-            onBlur={e => {
-              e.target.style.borderColor = '#e5e7eb'
-              // Format dengan separator ribuan
-              if (value) setRaw(value.toLocaleString('id-ID'))
-            }}
-          />
-          {suffix && <span style={{ fontSize: '13px', color: '#9ca3af', flexShrink: 0 }}>{suffix}</span>}
-        </div>
-        {hint && <div style={{ fontSize: '11px', color: '#9ca3af', marginTop: '4px' }}>{hint}</div>}
-      </div>
-    )
-  }
-
-  function Section({ title, icon, children }: { title: string, icon: string, children: React.ReactNode }) {
-    return (
-      <div style={{
-        backgroundColor: '#fff', border: '1px solid #e5e7eb',
-        borderRadius: '12px', padding: '20px 24px', marginBottom: '16px',
-      }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '20px' }}>
-          <span style={{ fontSize: '16px' }}>{icon}</span>
-          <span style={{ fontSize: '14px', fontWeight: '700', color: '#111827' }}>{title}</span>
-        </div>
-        {children}
-      </div>
-    )
   }
 
   return (
@@ -303,25 +297,25 @@ export default function TargetsPage() {
             {/* Target Bucket */}
             <Section title="Target Bucket Agen" icon="🎯">
               <Field
-                label="Minimum agen Growing per hari"
+                label="Minimum agen Productive per hari"
                 value={form.daily_growing_agents}
                 onChange={v => setForm(f => ({ ...f, daily_growing_agents: v }))}
                 suffix="terminal"
                 hint="Agen aktif 8–14 hari dengan trx konsisten"
               />
               <Field
-                label="Target konversi Potential → Growing per bulan"
+                label="Target konversi Moderate → Productive per bulan"
                 value={form.monthly_potential_converted}
                 onChange={v => setForm(f => ({ ...f, monthly_potential_converted: v }))}
                 suffix="terminal"
-                hint="Berapa agen Potential yang berhasil naik ke Growing"
+                hint="Berapa agen Moderate yang berhasil naik ke Productive"
               />
               <Field
-                label="Maksimum agen At Risk per hari (alarm)"
+                label="Maksimum agen Sporadic per hari (alarm)"
                 value={form.daily_at_risk_max}
                 onChange={v => setForm(f => ({ ...f, daily_at_risk_max: v }))}
                 suffix="terminal"
-                hint="Kalau At Risk melewati angka ini, muncul alert di Morning Brief"
+                hint="Kalau Sporadic melewati angka ini, muncul alert di Morning Brief"
               />
             </Section>
 
@@ -342,11 +336,11 @@ export default function TargetsPage() {
                 hint="Di bawah ini → PIC masuk Risiko Utama"
               />
               <Field
-                label="Minimum trx TRANSFER per hari aktif (Potential)"
+                label="Minimum trx TRANSFER per hari aktif (Moderate)"
                 value={form.min_transfer_trx_potential}
                 onChange={v => setForm(f => ({ ...f, min_transfer_trx_potential: v }))}
                 suffix="trx"
-                hint="Di atas ini → agen Sporadic dikategorikan sebagai Potential"
+                hint="Di atas ini → agen Sporadic dikategorikan sebagai Moderate"
               />
             </Section>
 
