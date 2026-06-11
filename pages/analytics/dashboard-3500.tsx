@@ -161,7 +161,7 @@ export default function HiddenGemPage() {
     setAgentDetail([])
     setLoadingDetail(true)
     try {
-      const { data } = await supabase.rpc('get_agent_detail', {
+      const { data } = await supabase.rpc('get_agent_detail_3500', {
         p_serial: agent.serial_number,
         p_since: sinceDate,
         p_until: lastDate,
@@ -228,7 +228,7 @@ export default function HiddenGemPage() {
           <div style={{ fontSize: '11px', fontWeight: '600', color: '#9ca3af', letterSpacing: '0.1em', marginBottom: '4px' }}>ANALITIK AGEN</div>
           <h1 style={{ fontSize: '24px', fontWeight: '800', color: '#111827', margin: 0, letterSpacing: '-0.02em' }}>💰 Dashboard 3500</h1>
           <p style={{ fontSize: '13px', color: '#6b7280', marginTop: '4px' }}>
-            Agen dengan transaksi fee Rp 3.500 — MiniATM & BayarBayarPlus via terminal NOBU.
+            Agen dengan transaksi fee Rp 3.500 — Lita dan Plus
           </p>
         </div>
 
