@@ -14,10 +14,16 @@ const navItems = [
 ]
 
 const analyticsNavItems = [
-  { href: '/analytics', label: 'Morning Brief', icon: '📊' },
-  { href: '/analytics/history', label: 'Upload History', icon: '🗂', adminOnly: true },
-  { href: '/analytics/targets', label: 'Target', icon: '🎯', adminOnly: true },
-  { href: '/analytics/upload', label: 'Upload Data', icon: '⬆', adminOnly: true },
+  { href: '/analytics/agents',  label: 'Dashboard Agen', icon: '▦' },
+  { href: '/analytics',         label: 'Morning Brief',  icon: '◉' },
+  { href: '/analytics/hidden-gem', label: 'Hidden Gem',  icon: '◈' },
+]
+
+const adminNavItems = [
+  { href: '/analytics/upload',   label: 'Upload Data',    icon: '↑' },
+  { href: '/analytics/history',  label: 'Upload History', icon: '◎' },
+  { href: '/analytics/targets',  label: 'Target',         icon: '◎' },
+  { href: '/analytics/trigger',  label: 'Compute',        icon: '▦' },
 ]
 
 // Cache di module level — persist selama session browser, tidak reset saat ganti halaman
@@ -37,7 +43,6 @@ export default function Layout({ children, title }: { children: React.ReactNode;
   const [role, setRole] = useState(sessionRole)
 
   useEffect(() => {
-    // Kalau sudah dicek sebelumnya, skip query
     if (sessionChecked) {
       if (!sessionApproved) {
         router.replace('/unauthorized')
@@ -55,12 +60,10 @@ export default function Layout({ children, title }: { children: React.ReactNode;
       const userName = session.user.user_metadata?.full_name ?? ''
       const userAvatar = session.user.user_metadata?.avatar_url ?? ''
 
-      // Update state
       setEmail(userEmail)
       setName(userName)
       setAvatar(userAvatar)
 
-      // Upsert user ke tabel users (non-blocking)
       supabase.from('users').upsert({
         id: session.user.id,
         email: userEmail,
@@ -69,14 +72,12 @@ export default function Layout({ children, title }: { children: React.ReactNode;
         last_login_at: new Date().toISOString(),
       }, { onConflict: 'id' }).then(() => {})
 
-      // Cek is_approved dan role
       const { data: userData } = await supabase
         .from('users')
         .select('is_approved, role')
         .eq('id', session.user.id)
         .single()
 
-      // Cache hasil
       sessionChecked = true
       sessionEmail = userEmail
       sessionName = userName
@@ -97,7 +98,6 @@ export default function Layout({ children, title }: { children: React.ReactNode;
   }, [router])
 
   const handleLogout = async () => {
-    // Reset cache saat logout
     sessionChecked = false
     sessionApproved = false
     sessionEmail = ''
@@ -122,6 +122,38 @@ export default function Layout({ children, title }: { children: React.ReactNode;
     </div>
   )
 
+  function NavItem({ href, label, icon }: { href: string, label: string, icon: string }) {
+    const isActive = router.pathname === href || (href !== '/' && href !== '/analytics' && router.pathname.startsWith(href))
+    return (
+      <div onClick={() => router.push(href)}
+        style={{
+          display: 'flex', alignItems: 'center', gap: '10px',
+          padding: '9px 12px', borderRadius: '8px', cursor: 'pointer',
+          fontSize: '13px', marginBottom: '2px',
+          background: isActive ? '#0344D8' : 'transparent',
+          color: isActive ? '#FFFFFF' : 'rgba(255,255,255,0.55)',
+          fontWeight: isActive ? '500' : '400',
+          transition: 'all 0.15s',
+        }}
+        onMouseEnter={e => { if (!isActive) e.currentTarget.style.background = 'rgba(255,255,255,0.06)' }}
+        onMouseLeave={e => { if (!isActive) e.currentTarget.style.background = 'transparent' }}
+      >
+        <span style={{ fontSize: '14px', minWidth: '16px', textAlign: 'center' }}>{icon}</span>
+        <span>{label}</span>
+      </div>
+    )
+  }
+
+  function SectionLabel({ label }: { label: string }) {
+    return (
+      <div style={{ margin: '10px 8px 6px', borderTop: '1px solid rgba(255,255,255,0.08)', paddingTop: '10px' }}>
+        <div style={{ fontSize: '9px', color: 'rgba(255,255,255,0.25)', letterSpacing: '0.12em', fontWeight: '600', paddingLeft: '4px', marginBottom: '4px' }}>
+          {label}
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div style={{ display: 'flex', minHeight: '100vh', fontFamily: 'system-ui, sans-serif', background: '#F8F9FB' }}>
 
@@ -142,64 +174,21 @@ export default function Layout({ children, title }: { children: React.ReactNode;
         {/* Nav */}
         <nav style={{ padding: '10px 8px', flex: 1, overflowY: 'auto' }}>
 
-          {/* Menu WAG */}
-          {navItems.map((item) => {
-            const isActive = router.pathname === item.href || (item.href !== '/' && router.pathname.startsWith(item.href))
-            return (
-              <div key={item.href} onClick={() => router.push(item.href)}
-                style={{
-                  display: 'flex', alignItems: 'center', gap: '10px',
-                  padding: '9px 12px', borderRadius: '8px', cursor: 'pointer',
-                  fontSize: '13px', marginBottom: '2px',
-                  background: isActive ? '#0344D8' : 'transparent',
-                  color: isActive ? '#FFFFFF' : 'rgba(255,255,255,0.55)',
-                  fontWeight: isActive ? '500' : '400',
-                  transition: 'all 0.15s',
-                }}
-                onMouseEnter={e => { if (!isActive) e.currentTarget.style.background = 'rgba(255,255,255,0.06)' }}
-                onMouseLeave={e => { if (!isActive) e.currentTarget.style.background = 'transparent' }}
-              >
-                <span style={{ fontSize: '14px', minWidth: '16px', textAlign: 'center' }}>{item.icon}</span>
-                <span>{item.label}</span>
-              </div>
-            )
-          })}
+          {/* WAG */}
+          {navItems.map(item => <NavItem key={item.href} {...item} />)}
 
-          {/* Divider Analytics */}
-          <div style={{
-            margin: '10px 8px 6px',
-            borderTop: '1px solid rgba(255,255,255,0.08)',
-            paddingTop: '10px',
-          }}>
-            <div style={{ fontSize: '9px', color: 'rgba(255,255,255,0.25)', letterSpacing: '0.12em', fontWeight: '600', paddingLeft: '4px', marginBottom: '4px' }}>
-              ANALYTICS
-            </div>
-          </div>
+          {/* Analytics */}
+          <SectionLabel label="ANALYTICS" />
+          {analyticsNavItems.map(item => <NavItem key={item.href} {...item} />)}
 
-          {/* Menu Analytics */}
-          {analyticsNavItems
-            .filter(item => !item.adminOnly || isSuperAdmin)
-            .map((item) => {
-              const isActive = router.pathname === item.href || (item.href !== '/' && item.href !== '/analytics' && router.pathname.startsWith(item.href))
-              return (
-                <div key={item.href} onClick={() => router.push(item.href)}
-                  style={{
-                    display: 'flex', alignItems: 'center', gap: '10px',
-                    padding: '9px 12px', borderRadius: '8px', cursor: 'pointer',
-                    fontSize: '13px', marginBottom: '2px',
-                    background: isActive ? '#0344D8' : 'transparent',
-                    color: isActive ? '#FFFFFF' : 'rgba(255,255,255,0.55)',
-                    fontWeight: isActive ? '500' : '400',
-                    transition: 'all 0.15s',
-                  }}
-                  onMouseEnter={e => { if (!isActive) e.currentTarget.style.background = 'rgba(255,255,255,0.06)' }}
-                  onMouseLeave={e => { if (!isActive) e.currentTarget.style.background = 'transparent' }}
-                >
-                  <span style={{ fontSize: '14px', minWidth: '16px', textAlign: 'center' }}>{item.icon}</span>
-                  <span>{item.label}</span>
-                </div>
-              )
-            })}
+          {/* Admin */}
+          {isSuperAdmin && (
+            <>
+              <SectionLabel label="ADMIN" />
+              {adminNavItems.map(item => <NavItem key={item.href} {...item} />)}
+            </>
+          )}
+
         </nav>
 
         {/* Footer */}
