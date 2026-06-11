@@ -442,14 +442,14 @@ export default function HiddenGemPage() {
                   <div style={{ fontSize: '11px', fontWeight: '700', color: '#9ca3af', letterSpacing: '0.08em', marginBottom: '12px' }}>PERBANDINGAN PERFORMA</div>
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
                     {[
-                      { label: 'Avg TRX/hari (14 hari)', value: String(selectedAgent.avg_trx_per_active_day_14) },
+                      { label: 'Avg TRX/hari (14 hari)', value: String(selectedAgent.avg_trx_per_active_day_14), highlight: true },
                       { label: 'Avg TRX/hari (bulan ini)', value: String(selectedAgent.avg_trx_per_active_day_month), highlight: true },
                       { label: 'Hari aktif (14 hari)', value: `${selectedAgent.active_days_14} hari` },
                       { label: 'Hari aktif (bulan ini)', value: `${selectedAgent.active_days_month} hari` },
-                      { label: 'TRX Fee 3500 (14H)', value: agentDetail.reduce((s, d) => s + Number(d.total_trx), 0).toLocaleString('id') + ' trx' },
-                      { label: 'TRX Fee 3500 (Bln)', value: Number(selectedAgent.total_trx_month).toLocaleString('id') + ' trx' },      
+                      { label: 'TRX Fee 3500 (14H)', value: agentDetail.reduce((s, d) => s + Number(d.total_trx), 0).toLocaleString('id') + ' trx', highlight: true },
+                      { label: 'TRX Fee 3500 (Bln)', value: Number(selectedAgent.total_trx_month).toLocaleString('id') + ' trx', highlight: true },
                       { label: 'Total TRX bulan ini', value: Number(selectedAgent.total_trx_month).toLocaleString('id') },
-                      { label: 'Growth', value: `${selectedAgent.growth_pct > 0 ? '+' : ''}${selectedAgent.growth_pct}%`, highlight: true },
+                      { label: 'Growth', value: `${selectedAgent.growth_pct > 0 ? '+' : ''}${selectedAgent.growth_pct}%` },
                     ].map(s => (
                       <div key={s.label} style={{
                         padding: '10px 12px', backgroundColor: s.highlight ? TREND_CONFIG[selectedAgent.trend].bg : '#f9fafb',
