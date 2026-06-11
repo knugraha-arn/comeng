@@ -99,11 +99,13 @@ export default function HiddenGemPage() {
 
   const [agents, setAgents] = useState<HiddenGemAgent[]>([])
   const [loading, setLoading] = useState(true)
-  const [activeTab, setActiveTab] = useState<'growing' | 'declining' | 'consistent'>('growing')
+  const [activeTab, setActiveTab] = useState<'growing' | 'declining' | 'consistent' | null>(null)
   const [progress, setProgress] = useState<MonthlyProgress | null>(null)
   const [monthlyTarget, setMonthlyTarget] = useState<number | null>(null)
   const [filterMitra, setFilterMitra] = useState('')
   const [filterPic, setFilterPic] = useState('')
+  const [page, setPage] = useState(0)
+  const PAGE_SIZE = 20
   const [lastDate, setLastDate] = useState('')
   const [sinceDate, setSinceDate] = useState('')
 
@@ -171,9 +173,11 @@ export default function HiddenGemPage() {
   }
 
   const filtered = agents
-    .filter(a => a.trend === activeTab)
+    .filter(a => activeTab === null || a.trend === activeTab)
     .filter(a => !filterMitra || a.mitra === filterMitra)
     .filter(a => !filterPic || a.pic === filterPic)
+  const totalPages = Math.ceil(filtered.length / PAGE_SIZE)
+  const paginated = filtered.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE)
 
   const growingCount = agents.filter(a => a.trend === 'growing').length
   const decliningCount = agents.filter(a => a.trend === 'declining').length
@@ -288,7 +292,7 @@ export default function HiddenGemPage() {
             const count = tab === 'growing' ? growingCount : tab === 'declining' ? decliningCount : consistentCount
             const isActive = activeTab === tab
             return (
-              <button key={tab} onClick={() => setActiveTab(tab)} style={{
+              <button key={tab} onClick={() => { setActiveTab(activeTab === tab ? null : tab); setPage(0) }} style={{
                 padding: '9px 18px', borderRadius: '8px', cursor: 'pointer',
                 border: `2px solid ${isActive ? cfg.color : '#e5e7eb'}`,
                 backgroundColor: isActive ? cfg.bg : '#fff',
@@ -363,9 +367,9 @@ export default function HiddenGemPage() {
               <div style={{ textAlign: 'right' }}>GROWTH</div>
             </div>
             {/* Rows */}
-            {filtered.map((agent, i) => (
+            {paginated.map((agent, i) => (
               <div key={agent.serial_number} onClick={() => openDrawer(agent)}
-                style={{ display: 'grid', gridTemplateColumns: '100px 1fr 150px 150px 60px 80px 80px 80px', padding: '11px 16px', borderBottom: i < filtered.length - 1 ? '1px solid #f3f4f6' : 'none', alignItems: 'center', backgroundColor: '#fff', cursor: 'pointer' }}
+                style={{ display: 'grid', gridTemplateColumns: '100px 1fr 150px 150px 60px 80px 80px 80px', padding: '11px 16px', borderBottom: i < paginated.length - 1 ? '1px solid #f3f4f6' : 'none', alignItems: 'center', backgroundColor: '#fff', cursor: 'pointer' }}
                 onMouseEnter={e => e.currentTarget.style.backgroundColor = '#f9fafb'}
                 onMouseLeave={e => e.currentTarget.style.backgroundColor = '#fff'}
               >
@@ -397,6 +401,15 @@ export default function HiddenGemPage() {
         ) : (
           <div style={{ textAlign: 'center', padding: '60px', backgroundColor: '#f9fafb', borderRadius: '10px', border: '1px dashed #e5e7eb', color: '#9ca3af', fontSize: '13px' }}>
             Tidak ada agen di kategori ini
+          </div>
+        )}
+
+        {/* Pagination */}
+        {totalPages > 1 && (
+          <div style={{ display: 'flex', justifyContent: 'center', gap: '8px', alignItems: 'center', marginTop: '16px' }}>
+            <button onClick={() => setPage(p => Math.max(0, p - 1))} disabled={page === 0} style={{ padding: '7px 14px', borderRadius: '8px', border: '1px solid #e5e7eb', backgroundColor: '#fff', color: page === 0 ? '#d1d5db' : '#374151', fontSize: '13px', cursor: page === 0 ? 'not-allowed' : 'pointer' }}>← Prev</button>
+            <span style={{ fontSize: '13px', color: '#6b7280' }}>{page + 1} / {totalPages}</span>
+            <button onClick={() => setPage(p => Math.min(totalPages - 1, p + 1))} disabled={page >= totalPages - 1} style={{ padding: '7px 14px', borderRadius: '8px', border: '1px solid #e5e7eb', backgroundColor: '#fff', color: page >= totalPages - 1 ? '#d1d5db' : '#374151', fontSize: '13px', cursor: page >= totalPages - 1 ? 'not-allowed' : 'pointer' }}>Next →</button>
           </div>
         )}
       </div>
