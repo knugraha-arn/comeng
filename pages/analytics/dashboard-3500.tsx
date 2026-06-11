@@ -446,7 +446,7 @@ export default function HiddenGemPage() {
                       { label: 'Avg TRX/hari (bulan ini)', value: String(selectedAgent.avg_trx_per_active_day_month), highlight: true },
                       { label: 'Hari aktif (14 hari)', value: `${selectedAgent.active_days_14} hari` },
                       { label: 'Hari aktif (bulan ini)', value: `${selectedAgent.active_days_month} hari` },
-                      { label: 'TRX Fee 3500 (14H)', value: String(selectedAgent.active_days_14) + ' hari aktif' },
+                      { label: 'TRX Fee 3500 (14H)', value: agentDetail.reduce((s, d) => s + Number(d.total_trx), 0).toLocaleString('id') + ' trx' },
                       { label: 'TRX Fee 3500 (Bln)', value: Number(selectedAgent.total_trx_month).toLocaleString('id') + ' trx' },      
                       { label: 'Total TRX bulan ini', value: Number(selectedAgent.total_trx_month).toLocaleString('id') },
                       { label: 'Growth', value: `${selectedAgent.growth_pct > 0 ? '+' : ''}${selectedAgent.growth_pct}%`, highlight: true },
