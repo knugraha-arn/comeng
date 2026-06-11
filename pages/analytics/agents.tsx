@@ -218,7 +218,6 @@ export default function AgentDashboard() {
         p_serial: agent.serial_number,
         p_since:  drawerSince,
         p_until:  lastDate,
-        p_until:  lastDate,
       })
       setAgentDetail(data ?? [])
     } finally { setLoadingDetail(false) }
