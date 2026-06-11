@@ -36,7 +36,8 @@ interface UploadSummary {
   warnings?: string[]
 }
 
-const REQUIRED_COLUMNS = ['refnum', 'datetime_tran', 'serial_number', 'trntype', 'sharing_fee', 'Mitra', 'PIC']
+// Kolom wajib — semua lowercase untuk matching case-insensitive
+const REQUIRED_COLUMNS = ['refnum', 'datetime_tran', 'serial_number', 'trntype', 'sharing_fee', 'mitra']
 const CHUNK_SIZE = 500
 
 type Stage = 'idle' | 'reading' | 'parsing' | 'inserting' | 'computing' | 'success' | 'error'
@@ -65,6 +66,15 @@ function toISODatetime(val: unknown): string | null {
   return null
 }
 
+// Normalize row keys ke lowercase
+function normalizeRow(row: Record<string, unknown>): Record<string, unknown> {
+  const normalized: Record<string, unknown> = {}
+  for (const key of Object.keys(row)) {
+    normalized[key.toLowerCase().trim()] = row[key]
+  }
+  return normalized
+}
+
 export default function UploadCenter() {
   const router = useRouter()
   const supabase = createBrowserClient(
@@ -83,7 +93,6 @@ export default function UploadCenter() {
 
   const isBusy = !['idle', 'success', 'error'].includes(stage)
 
-  // ── File drop handlers ───────────────────────────────────────────────────
   const onDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault()
     setIsDragging(false)
@@ -96,7 +105,6 @@ export default function UploadCenter() {
     }
   }, [])
 
-  // ── Parse file di browser ────────────────────────────────────────────────
   async function parseFile(f: File): Promise<{ rows: TransactionRow[], dates: string[], errors: string[] }> {
     const errors: string[] = []
     const rows: TransactionRow[] = []
@@ -121,20 +129,23 @@ export default function UploadCenter() {
       return { rows, dates: [], errors }
     }
 
-    // Validasi kolom wajib
-    const headers = Object.keys(raw[0])
+    // Normalize semua header ke lowercase
+    const normalizedRaw = raw.map(normalizeRow)
+
+    // Validasi kolom wajib (semua lowercase)
+    const headers = Object.keys(normalizedRaw[0])
     const missing = REQUIRED_COLUMNS.filter(c => !headers.includes(c))
     if (missing.length > 0) {
       errors.push(`Kolom wajib tidak ditemukan: ${missing.join(', ')}`)
       return { rows, dates: [], errors }
     }
 
-    if (raw.length < 10) {
-      errors.push(`File hanya berisi ${raw.length} baris — kemungkinan file salah`)
+    if (normalizedRaw.length < 10) {
+      errors.push(`File hanya berisi ${normalizedRaw.length} baris — kemungkinan file salah`)
       return { rows, dates: [], errors }
     }
 
-    for (const row of raw) {
+    for (const row of normalizedRaw) {
       const refnum = str(row['refnum'])
       const serial_number = str(row['serial_number'])
       if (!refnum || !serial_number) continue
@@ -150,7 +161,7 @@ export default function UploadCenter() {
         datetime_tran,
         refnum,
         trntype:               str(row['trntype']),
-        jenis_transaksi:       str(row['JenisTransaksi']),
+        jenis_transaksi:       str(row['jenistransaksi']) ?? str(row['jenis_transaksi']),
         tipe_penggunaan_kartu: str(row['tipe_penggunaan_kartu']),
         amount:                num(row['amount']),
         sharing_fee:           num(row['sharing_fee']),
@@ -162,15 +173,15 @@ export default function UploadCenter() {
         tipe_mesin:            str(row['tipe_mesin']),
         source_app:            str(row['source_app']),
         terminal_data_source:  str(row['terminal_data_source']),
-        mitra:                 str(row['Mitra']),
-        pic:                   str(row['PIC'])?.toUpperCase().trim() ?? null,
+        mitra:                 str(row['mitra']),
+        pic:                   str(row['pic'])?.toUpperCase().trim() ?? null,
         from_account:          str(row['from_account']),
         to_account:            str(row['to_account']),
         private_data:          str(row['private_data']),
       })
     }
 
-    // Deduplicate: refnum + transaction_date harus unique
+    // Deduplicate
     const seen = new Set<string>()
     const uniqueRows = rows.filter(r => {
       const key = `${r.refnum}__${r.transaction_date}`
@@ -182,7 +193,6 @@ export default function UploadCenter() {
     return { rows: uniqueRows, dates: Array.from(dateSet).sort(), errors }
   }
 
-  // ── Main upload handler ──────────────────────────────────────────────────
   async function handleUpload() {
     if (!file) return
 
@@ -193,11 +203,10 @@ export default function UploadCenter() {
       const { data: { session } } = await supabase.auth.getSession()
       if (!session) { router.push('/login'); return }
 
-      // ── 1. Parse di browser ───────────────────────────────────────────────
       setStage('reading')
       setProgress(5)
       setProgressLabel('Membaca file...')
-      await new Promise(r => setTimeout(r, 100)) // allow UI update
+      await new Promise(r => setTimeout(r, 100))
 
       setStage('parsing')
       setProgress(15)
@@ -210,7 +219,6 @@ export default function UploadCenter() {
         return
       }
 
-      // ── 2. Buat upload sessions per tanggal ───────────────────────────────
       setProgress(20)
       setProgressLabel(`Mempersiapkan ${dates.length} tanggal...`)
 
@@ -245,7 +253,6 @@ export default function UploadCenter() {
         }
       }
 
-      // ── 3. Insert rows langsung ke Supabase ───────────────────────────────
       setStage('inserting')
       const totalChunks = Math.ceil(rows.length / CHUNK_SIZE)
       let chunksInserted = 0
@@ -272,7 +279,6 @@ export default function UploadCenter() {
         }
       }
 
-      // ── 4. Update session status ──────────────────────────────────────────
       for (const date of dates) {
         if (sessionIds[date]) {
           await supabase.from('am_upload_sessions').update({
@@ -282,24 +288,15 @@ export default function UploadCenter() {
         }
       }
 
-      // ── 5. Trigger compute metrics via API ────────────────────────────────
       setStage('computing')
       setProgress(90)
       setProgressLabel('Menghitung metrics...')
 
-      for (const date of dates) {
-        await fetch('/api/analytics/compute-metrics', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${session.access_token}`,
-          },
-          body: JSON.stringify({ date }),
-        }).catch(() => {})
-      }
+      // Trigger compute_agent_metrics langsung via RPC
+      await supabase.rpc('compute_agent_metrics').catch(() => {})
 
-      // ── 6. Purge data lama ────────────────────────────────────────────────
-      await supabase.rpc('am_purge_old_data')
+      // Purge data lama
+      await supabase.rpc('am_purge_old_data').catch(() => {})
 
       setProgress(100)
       setStage('success')
@@ -341,7 +338,6 @@ export default function UploadCenter() {
 
       <div style={{ maxWidth: '520px', margin: '0 auto', padding: '32px 24px' }}>
 
-        {/* Header */}
         <div style={{ marginBottom: '28px' }}>
           <div style={{ fontSize: '11px', fontWeight: '600', color: '#9ca3af', letterSpacing: '0.1em', marginBottom: '4px' }}>
             UPLOAD DATA
@@ -356,7 +352,6 @@ export default function UploadCenter() {
 
         {stage !== 'success' && (
           <>
-            {/* Drop zone */}
             {!isBusy && (
               <div
                 onClick={() => inputRef.current?.click()}
@@ -403,10 +398,8 @@ export default function UploadCenter() {
               </div>
             )}
 
-            {/* Progress */}
             {isBusy && (
               <div style={{ marginBottom: '20px' }}>
-                {/* Stage indicators */}
                 <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
                   {(['reading', 'parsing', 'inserting', 'computing'] as Stage[]).map(s => (
                     <div key={s} style={{
@@ -422,7 +415,6 @@ export default function UploadCenter() {
                   ))}
                 </div>
 
-                {/* Progress bar */}
                 <div style={{ height: '8px', backgroundColor: '#f3f4f6', borderRadius: '99px', overflow: 'hidden', marginBottom: '10px' }}>
                   <div style={{
                     height: '100%',
@@ -440,7 +432,6 @@ export default function UploadCenter() {
               </div>
             )}
 
-            {/* Upload button */}
             {!isBusy && (
               <button
                 onClick={handleUpload}
@@ -458,7 +449,6 @@ export default function UploadCenter() {
               </button>
             )}
 
-            {/* Error */}
             {stage === 'error' && (
               <div style={{
                 marginTop: '16px', padding: '14px', borderRadius: '8px',
@@ -480,7 +470,6 @@ export default function UploadCenter() {
           </>
         )}
 
-        {/* Success */}
         {stage === 'success' && summary && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
             <div style={{
