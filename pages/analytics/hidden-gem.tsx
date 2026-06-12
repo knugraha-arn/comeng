@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { useRouter } from 'next/router'
 import Head from 'next/head'
 import Layout from '../../components/Layout'
 import { createBrowserClient } from '@supabase/ssr'
@@ -9,11 +10,11 @@ interface HiddenGemAgent {
   mitra: string | null
   pic: string | null
   active_days_14: number
-  avg_trx_14: number            // FIX: was avg_trx_per_active_day_14
+  avg_trx_14: number
   active_days_month: number
   total_trx_month: number
-  avg_trx_month: number         // FIX: was avg_trx_per_active_day_month
-  trx_change_pct: number        // FIX: was growth_pct
+  avg_trx_month: number
+  trx_change_pct: number
   trend: 'growing' | 'declining' | 'consistent'
   bucket: string
   avg_daily_amount_14d: number
@@ -120,6 +121,7 @@ function ProgressBar({ value, max, color }: { value: number, max: number, color:
 }
 
 export default function HiddenGemPage() {
+  const router = useRouter()
   const supabase = createBrowserClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
@@ -137,17 +139,12 @@ export default function HiddenGemPage() {
   const [lastDate, setLastDate] = useState('')
   const [sinceDate, setSinceDate] = useState('')
 
-  // Drawer
   const [selectedAgent, setSelectedAgent] = useState<HiddenGemAgent | null>(null)
   const [agentDetail, setAgentDetail] = useState<AgentDayDetail[]>([])
   const [liquidityDetail, setLiquidityDetail] = useState<AgentLiquidityDetail[]>([])
   const [loadingDetail, setLoadingDetail] = useState(false)
 
- import { useRouter } from 'next/router'
-
-const router = useRouter()
-
-useEffect(() => { init() }, [router.asPath])
+  useEffect(() => { init() }, [router.asPath])
 
   async function init() {
     setLoading(true)
@@ -196,14 +193,8 @@ useEffect(() => { init() }, [router.asPath])
     setLoadingDetail(true)
     try {
       const [detailRes, liquidityRes] = await Promise.all([
-        supabase.rpc('get_agent_detail', {
-          p_serial: agent.serial_number,
-          p_since: sinceDate,
-          p_until: lastDate,
-        }),
-        supabase.rpc('get_agent_liquidity_summary', {
-          p_serial: agent.serial_number,
-        }),
+        supabase.rpc('get_agent_detail', { p_serial: agent.serial_number, p_since: sinceDate, p_until: lastDate }),
+        supabase.rpc('get_agent_liquidity_summary', { p_serial: agent.serial_number }),
       ])
       setAgentDetail(detailRes.data ?? [])
       setLiquidityDetail(liquidityRes.data ?? [])
@@ -219,8 +210,8 @@ useEffect(() => { init() }, [router.asPath])
   const totalPages = Math.ceil(filtered.length / PAGE_SIZE)
   const paginated = filtered.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE)
 
-  const growingCount   = agents.filter(a => a.trend === 'growing').length
-  const decliningCount = agents.filter(a => a.trend === 'declining').length
+  const growingCount    = agents.filter(a => a.trend === 'growing').length
+  const decliningCount  = agents.filter(a => a.trend === 'declining').length
   const consistentCount = agents.filter(a => a.trend === 'consistent').length
 
   const mitras = [...new Set(agents.map(a => a.mitra).filter(Boolean) as string[])].sort()
@@ -230,35 +221,21 @@ useEffect(() => { init() }, [router.asPath])
   const projectedFee = progress && progress.days_elapsed > 0 ? Math.round(progress.total_fee / progress.days_elapsed * progress.days_in_month) : null
   const currentMonth = progress ? MONTHS[new Date(progress.end_date).getMonth()] : ''
   const currentYear  = progress ? new Date(progress.end_date).getFullYear() : ''
-
-  // Liquidity summary dari row pertama (nilai konstan)
   const liquiditySummary = liquidityDetail[0] ?? null
 
   function TrendChip({ trend }: { trend: string }) {
     const cfg = TREND_CONFIG[trend as keyof typeof TREND_CONFIG] ?? TREND_CONFIG.consistent
-    return (
-      <span style={{ padding: '2px 8px', borderRadius: '99px', fontSize: '11px', fontWeight: '700', backgroundColor: cfg.bg, color: cfg.color, border: `1px solid ${cfg.border}`, whiteSpace: 'nowrap' }}>
-        {cfg.icon} {cfg.label}
-      </span>
-    )
+    return <span style={{ padding: '2px 8px', borderRadius: '99px', fontSize: '11px', fontWeight: '700', backgroundColor: cfg.bg, color: cfg.color, border: `1px solid ${cfg.border}`, whiteSpace: 'nowrap' }}>{cfg.icon} {cfg.label}</span>
   }
 
   function BucketChip({ b }: { b: string }) {
     const cfg = BUCKET_CONFIG[b] ?? BUCKET_CONFIG.sporadic
-    return (
-      <span style={{ padding: '2px 8px', borderRadius: '99px', fontSize: '11px', fontWeight: '700', backgroundColor: cfg.bg, color: cfg.color, border: `1px solid ${cfg.border}`, whiteSpace: 'nowrap' }}>
-        {cfg.label}
-      </span>
-    )
+    return <span style={{ padding: '2px 8px', borderRadius: '99px', fontSize: '11px', fontWeight: '700', backgroundColor: cfg.bg, color: cfg.color, border: `1px solid ${cfg.border}`, whiteSpace: 'nowrap' }}>{cfg.label}</span>
   }
 
   function LiquidityChip({ status }: { status: string }) {
     const cfg = LIQUIDITY_CONFIG[status as keyof typeof LIQUIDITY_CONFIG] ?? LIQUIDITY_CONFIG.no_data
-    return (
-      <span style={{ padding: '2px 8px', borderRadius: '99px', fontSize: '11px', fontWeight: '700', backgroundColor: cfg.bg, color: cfg.color, border: `1px solid ${cfg.border}`, whiteSpace: 'nowrap' }}>
-        {cfg.label}
-      </span>
-    )
+    return <span style={{ padding: '2px 8px', borderRadius: '99px', fontSize: '11px', fontWeight: '700', backgroundColor: cfg.bg, color: cfg.color, border: `1px solid ${cfg.border}`, whiteSpace: 'nowrap' }}>{cfg.label}</span>
   }
 
   return (
@@ -267,16 +244,12 @@ useEffect(() => { init() }, [router.asPath])
       <Head><title>Hidden Gem — AMARIS</title></Head>
       <div style={{ maxWidth: '1200px', margin: '0 auto', padding: '32px 24px' }}>
 
-        {/* Header */}
         <div style={{ marginBottom: '24px' }}>
           <div style={{ fontSize: '11px', fontWeight: '600', color: '#9ca3af', letterSpacing: '0.1em', marginBottom: '4px' }}>ANALITIK AGEN</div>
           <h1 style={{ fontSize: '24px', fontWeight: '800', color: '#111827', margin: 0, letterSpacing: '-0.02em' }}>💎 Hidden Gem</h1>
-          <p style={{ fontSize: '13px', color: '#6b7280', marginTop: '4px' }}>
-            Irisan history 14 hari vs target bulan ini — siapa yang perlu di-push dan siapa yang perlu diselamatkan.
-          </p>
+          <p style={{ fontSize: '13px', color: '#6b7280', marginTop: '4px' }}>Irisan history 14 hari vs target bulan ini — siapa yang perlu di-push dan siapa yang perlu diselamatkan.</p>
         </div>
 
-        {/* Target Progress */}
         {progress && (
           <div style={{ backgroundColor: '#fff', border: '1px solid #e5e7eb', borderRadius: '12px', padding: '20px 24px', marginBottom: '20px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '16px' }}>
@@ -294,10 +267,7 @@ useEffect(() => { init() }, [router.asPath])
               <div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px' }}>
                   <span style={{ fontSize: '12px', color: '#6b7280' }}>Fee terkumpul</span>
-                  <span style={{ fontSize: '12px', fontWeight: '600', color: '#374151' }}>
-                    {formatFee(progress.total_fee)}
-                    {monthlyTarget && <span style={{ color: '#9ca3af', fontWeight: '400' }}> / {formatFee(monthlyTarget)}</span>}
-                  </span>
+                  <span style={{ fontSize: '12px', fontWeight: '600', color: '#374151' }}>{formatFee(progress.total_fee)}{monthlyTarget && <span style={{ color: '#9ca3af', fontWeight: '400' }}> / {formatFee(monthlyTarget)}</span>}</span>
                 </div>
                 <ProgressBar value={progress.total_fee} max={monthlyTarget ?? progress.total_fee} color='#0344D8' />
                 {feeProgress !== null && <div style={{ fontSize: '11px', color: '#9ca3af', marginTop: '4px' }}>{feeProgress}% tercapai</div>}
@@ -308,34 +278,21 @@ useEffect(() => { init() }, [router.asPath])
                   <span style={{ fontSize: '12px', fontWeight: '600', color: '#374151' }}>{progress.total_trx.toLocaleString('id')}</span>
                 </div>
                 <ProgressBar value={progress.days_elapsed} max={progress.days_in_month} color='#7c3aed' />
-                <div style={{ fontSize: '11px', color: '#9ca3af', marginTop: '4px' }}>
-                  {Math.round(progress.total_trx / Math.max(progress.days_elapsed, 1)).toLocaleString('id')} TRX/hari rata-rata
-                </div>
+                <div style={{ fontSize: '11px', color: '#9ca3af', marginTop: '4px' }}>{Math.round(progress.total_trx / Math.max(progress.days_elapsed, 1)).toLocaleString('id')} TRX/hari rata-rata</div>
               </div>
             </div>
-            {!monthlyTarget && (
-              <div style={{ marginTop: '12px', fontSize: '12px', color: '#9ca3af' }}>
-                💡 <a href="/analytics/target-simple" style={{ color: '#0344D8' }}>Set target bulan ini</a> untuk lihat proyeksi lengkap.
-              </div>
-            )}
+            {!monthlyTarget && <div style={{ marginTop: '12px', fontSize: '12px', color: '#9ca3af' }}>💡 <a href="/analytics/target-simple" style={{ color: '#0344D8' }}>Set target bulan ini</a> untuk lihat proyeksi lengkap.</div>}
           </div>
         )}
 
-        {/* Tabs */}
         <div style={{ display: 'flex', gap: '8px', marginBottom: '20px' }}>
           {(['growing', 'declining', 'consistent'] as const).map(tab => {
             const cfg = TREND_CONFIG[tab]
             const count = tab === 'growing' ? growingCount : tab === 'declining' ? decliningCount : consistentCount
             const isActive = activeTab === tab
             return (
-              <button key={tab} onClick={() => { setActiveTab(activeTab === tab ? null : tab); setPage(0) }} style={{
-                padding: '9px 18px', borderRadius: '8px', cursor: 'pointer',
-                border: `2px solid ${isActive ? cfg.color : '#e5e7eb'}`,
-                backgroundColor: isActive ? cfg.bg : '#fff',
-                color: isActive ? cfg.color : '#6b7280',
-                fontSize: '13px', fontWeight: '600', transition: 'all 0.15s',
-                display: 'flex', alignItems: 'center', gap: '8px',
-              }}>
+              <button key={tab} onClick={() => { setActiveTab(activeTab === tab ? null : tab); setPage(0) }}
+                style={{ padding: '9px 18px', borderRadius: '8px', cursor: 'pointer', border: `2px solid ${isActive ? cfg.color : '#e5e7eb'}`, backgroundColor: isActive ? cfg.bg : '#fff', color: isActive ? cfg.color : '#6b7280', fontSize: '13px', fontWeight: '600', transition: 'all 0.15s', display: 'flex', alignItems: 'center', gap: '8px' }}>
                 <span>{cfg.icon}</span>
                 <span>{cfg.label}</span>
                 <span style={{ padding: '1px 8px', borderRadius: '99px', fontSize: '11px', backgroundColor: isActive ? '#fff' : '#f3f4f6', color: isActive ? cfg.color : '#9ca3af', fontWeight: '700' }}>{count}</span>
@@ -344,7 +301,6 @@ useEffect(() => { init() }, [router.asPath])
           })}
         </div>
 
-        {/* Filters */}
         <div style={{ display: 'flex', gap: '10px', marginBottom: '16px', flexWrap: 'wrap', alignItems: 'center' }}>
           <select value={filterMitra} onChange={e => { setFilterMitra(e.target.value); setFilterPic('') }}
             style={{ padding: '7px 12px', borderRadius: '8px', border: '1px solid #e5e7eb', fontSize: '12px', color: '#374151', backgroundColor: '#fff', cursor: 'pointer' }}>
@@ -358,38 +314,24 @@ useEffect(() => { init() }, [router.asPath])
           </select>
           {(filterMitra || filterPic) && (
             <button onClick={() => { setFilterMitra(''); setFilterPic('') }}
-              style={{ padding: '7px 12px', borderRadius: '8px', border: '1px solid #e5e7eb', backgroundColor: '#fff', color: '#6b7280', fontSize: '12px', cursor: 'pointer' }}>
-              ✕ Reset
-            </button>
+              style={{ padding: '7px 12px', borderRadius: '8px', border: '1px solid #e5e7eb', backgroundColor: '#fff', color: '#6b7280', fontSize: '12px', cursor: 'pointer' }}>✕ Reset</button>
           )}
-          <span style={{ marginLeft: 'auto', fontSize: '13px', color: '#6b7280' }}>
-            {loading ? 'Memuat...' : `${filtered.length.toLocaleString('id')} agen`}
-          </span>
+          <span style={{ marginLeft: 'auto', fontSize: '13px', color: '#6b7280' }}>{loading ? 'Memuat...' : `${filtered.length.toLocaleString('id')} agen`}</span>
         </div>
 
-        {/* Table */}
         {loading ? (
           <div style={{ border: '1px solid #e5e7eb', borderRadius: '10px', overflow: 'hidden' }}>
             {[1,2,3,4,5].map(i => (
               <div key={i} style={{ display: 'grid', gridTemplateColumns: '100px 1fr 150px 150px 60px 80px 80px 80px', padding: '13px 16px', borderBottom: '1px solid #f3f4f6', gap: '16px', alignItems: 'center' }}>
-                <Skeleton width={70} height={20} />
-                <div><Skeleton width={120} height={13} /><div style={{marginTop:4}}><Skeleton width={80} height={10} /></div></div>
-                <Skeleton width={100} height={12} />
-                <Skeleton width={100} height={12} />
-                <Skeleton width={30} height={12} />
-                <Skeleton width={50} height={12} />
-                <Skeleton width={50} height={12} />
-                <Skeleton width={60} height={20} />
+                <Skeleton width={70} height={20} /><div><Skeleton width={120} height={13} /><div style={{marginTop:4}}><Skeleton width={80} height={10} /></div></div>
+                <Skeleton width={100} height={12} /><Skeleton width={100} height={12} /><Skeleton width={30} height={12} /><Skeleton width={50} height={12} /><Skeleton width={50} height={12} /><Skeleton width={60} height={20} />
               </div>
             ))}
           </div>
         ) : filtered.length > 0 ? (
           <div style={{ border: '1px solid #e5e7eb', borderRadius: '10px', overflow: 'hidden' }}>
             <div style={{ display: 'grid', gridTemplateColumns: '100px 1fr 150px 150px 60px 80px 80px 80px', padding: '10px 16px', backgroundColor: '#f9fafb', borderBottom: '1px solid #e5e7eb', fontSize: '11px', fontWeight: '700', color: '#9ca3af', letterSpacing: '0.05em' }}>
-              <div>TREND</div>
-              <div>AGEN</div>
-              <div>MITRA</div>
-              <div>PIC</div>
+              <div>TREND</div><div>AGEN</div><div>MITRA</div><div>PIC</div>
               <div style={{ textAlign: 'center' }}>HARI</div>
               <div style={{ textAlign: 'right' }}>TRX/HARI (14H)</div>
               <div style={{ textAlign: 'right' }}>TRX/HARI (BLN)</div>
@@ -399,14 +341,12 @@ useEffect(() => { init() }, [router.asPath])
               <div key={agent.serial_number} onClick={() => openDrawer(agent)}
                 style={{ display: 'grid', gridTemplateColumns: '100px 1fr 150px 150px 60px 80px 80px 80px', padding: '11px 16px', borderBottom: i < paginated.length - 1 ? '1px solid #f3f4f6' : 'none', alignItems: 'center', backgroundColor: '#fff', cursor: 'pointer' }}
                 onMouseEnter={e => e.currentTarget.style.backgroundColor = '#f9fafb'}
-                onMouseLeave={e => e.currentTarget.style.backgroundColor = '#fff'}
-              >
+                onMouseLeave={e => e.currentTarget.style.backgroundColor = '#fff'}>
                 <div><TrendChip trend={agent.trend} /></div>
                 <div>
                   <div style={{ fontSize: '13px', fontWeight: '600', color: '#111827' }}>{agent.merchant_name ?? agent.serial_number}</div>
                   <div style={{ fontSize: '10px', color: '#9ca3af', marginTop: '1px', display: 'flex', gap: '6px', alignItems: 'center' }}>
-                    <span>{agent.serial_number}</span>
-                    <BucketChip b={agent.bucket} />
+                    <span>{agent.serial_number}</span><BucketChip b={agent.bucket} />
                   </div>
                 </div>
                 <div style={{ fontSize: '12px', color: '#374151', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{agent.mitra ?? '—'}</div>
@@ -423,12 +363,9 @@ useEffect(() => { init() }, [router.asPath])
             ))}
           </div>
         ) : (
-          <div style={{ textAlign: 'center', padding: '60px', backgroundColor: '#f9fafb', borderRadius: '10px', border: '1px dashed #e5e7eb', color: '#9ca3af', fontSize: '13px' }}>
-            Tidak ada agen di kategori ini
-          </div>
+          <div style={{ textAlign: 'center', padding: '60px', backgroundColor: '#f9fafb', borderRadius: '10px', border: '1px dashed #e5e7eb', color: '#9ca3af', fontSize: '13px' }}>Tidak ada agen di kategori ini</div>
         )}
 
-        {/* Pagination */}
         {totalPages > 1 && (
           <div style={{ display: 'flex', justifyContent: 'center', gap: '8px', alignItems: 'center', marginTop: '16px' }}>
             <button onClick={() => setPage(p => Math.max(0, p - 1))} disabled={page === 0} style={{ padding: '7px 14px', borderRadius: '8px', border: '1px solid #e5e7eb', backgroundColor: '#fff', color: page === 0 ? '#d1d5db' : '#374151', fontSize: '13px', cursor: page === 0 ? 'not-allowed' : 'pointer' }}>← Prev</button>
@@ -438,21 +375,15 @@ useEffect(() => { init() }, [router.asPath])
         )}
       </div>
 
-      {/* Drawer */}
       {selectedAgent && (
         <div style={{ position: 'fixed', inset: 0, zIndex: 1000, display: 'flex', justifyContent: 'flex-end' }}>
           <div onClick={() => setSelectedAgent(null)} style={{ position: 'absolute', inset: 0, backgroundColor: 'rgba(0,0,0,0.3)' }} />
           <div style={{ position: 'relative', width: '480px', height: '100%', backgroundColor: '#fff', boxShadow: '-4px 0 24px rgba(0,0,0,0.12)', display: 'flex', flexDirection: 'column', overflowY: 'auto' }}>
-
-            {/* Drawer Header */}
             <div style={{ padding: '20px 24px', borderBottom: '1px solid #f3f4f6', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', position: 'sticky', top: 0, backgroundColor: '#fff', zIndex: 1 }}>
               <div>
                 <div style={{ fontSize: '18px', fontWeight: '800', color: '#111827', marginBottom: '4px' }}>{selectedAgent.merchant_name ?? selectedAgent.serial_number}</div>
                 <div style={{ fontSize: '11px', color: '#9ca3af', marginBottom: '6px' }}>{selectedAgent.serial_number}</div>
-                <div style={{ display: 'flex', gap: '6px' }}>
-                  <TrendChip trend={selectedAgent.trend} />
-                  <BucketChip b={selectedAgent.bucket} />
-                </div>
+                <div style={{ display: 'flex', gap: '6px' }}><TrendChip trend={selectedAgent.trend} /><BucketChip b={selectedAgent.bucket} /></div>
               </div>
               <button onClick={() => setSelectedAgent(null)} style={{ padding: '6px 10px', borderRadius: '8px', border: '1px solid #e5e7eb', backgroundColor: '#fff', color: '#6b7280', fontSize: '18px', cursor: 'pointer', lineHeight: 1 }}>✕</button>
             </div>
@@ -462,16 +393,15 @@ useEffect(() => { init() }, [router.asPath])
             ) : agentDetail.length > 0 ? (
               <div style={{ padding: '20px 24px' }}>
 
-                {/* Perbandingan */}
                 <div style={{ marginBottom: '24px' }}>
                   <div style={{ fontSize: '11px', fontWeight: '700', color: '#9ca3af', letterSpacing: '0.08em', marginBottom: '12px' }}>PERBANDINGAN PERFORMA</div>
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
                     {[
-                      { label: 'Avg TRX/hari (14 hari)',  value: String(selectedAgent.avg_trx_14) },
+                      { label: 'Avg TRX/hari (14 hari)',   value: String(selectedAgent.avg_trx_14) },
                       { label: 'Avg TRX/hari (bulan ini)', value: String(selectedAgent.avg_trx_month), highlight: true },
-                      { label: 'Hari aktif (14 hari)',     value: `${selectedAgent.active_days_14} hari` },
-                      { label: 'Hari aktif (bulan ini)',   value: `${selectedAgent.active_days_month} hari` },
-                      { label: 'Total TRX bulan ini',      value: Number(selectedAgent.total_trx_month).toLocaleString('id') },
+                      { label: 'Hari aktif (14 hari)',      value: `${selectedAgent.active_days_14} hari` },
+                      { label: 'Hari aktif (bulan ini)',    value: `${selectedAgent.active_days_month} hari` },
+                      { label: 'Total TRX bulan ini',       value: Number(selectedAgent.total_trx_month).toLocaleString('id') },
                       { label: 'Growth', value: `${selectedAgent.trx_change_pct > 0 ? '+' : ''}${selectedAgent.trx_change_pct}%`, highlight: true },
                     ].map(s => (
                       <div key={s.label} style={{ padding: '10px 12px', backgroundColor: s.highlight ? TREND_CONFIG[selectedAgent.trend].bg : '#f9fafb', borderRadius: '8px', textAlign: 'center', border: s.highlight ? `1px solid ${TREND_CONFIG[selectedAgent.trend].border}` : 'none' }}>
@@ -482,7 +412,6 @@ useEffect(() => { init() }, [router.asPath])
                   </div>
                 </div>
 
-                {/* Info Agen */}
                 {(() => {
                   const latest = agentDetail[agentDetail.length - 1]
                   return (
@@ -506,7 +435,6 @@ useEffect(() => { init() }, [router.asPath])
                   )
                 })()}
 
-                {/* Ringkasan 14 Hari */}
                 <div style={{ marginBottom: '24px' }}>
                   <div style={{ fontSize: '11px', fontWeight: '700', color: '#9ca3af', letterSpacing: '0.08em', marginBottom: '12px' }}>RINGKASAN 14 HARI</div>
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '10px' }}>
@@ -526,32 +454,21 @@ useEffect(() => { init() }, [router.asPath])
                   </div>
                 </div>
 
-                {/* Likuiditas Agen — 2 card tambahan */}
                 {liquiditySummary && (
                   <div style={{ marginBottom: '24px' }}>
                     <div style={{ fontSize: '11px', fontWeight: '700', color: '#9ca3af', letterSpacing: '0.08em', marginBottom: '12px' }}>LIKUIDITAS AGEN</div>
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
-                      {/* Card: Avg Amount/Hari 14H */}
                       <div style={{ padding: '10px 12px', backgroundColor: '#f9fafb', borderRadius: '8px', textAlign: 'center' }}>
-                        <div style={{ fontSize: '14px', fontWeight: '700', color: '#111827' }}>
-                          {formatAmount(liquiditySummary.avg_daily_amount_14d)}
-                        </div>
+                        <div style={{ fontSize: '14px', fontWeight: '700', color: '#111827' }}>{formatAmount(liquiditySummary.avg_daily_amount_14d)}</div>
                         <div style={{ fontSize: '10px', color: '#9ca3af', marginTop: '2px' }}>Avg Amount/Hari (14H)</div>
                       </div>
-                      {/* Card: Liquidity Ratio */}
                       {(() => {
                         const cfg = LIQUIDITY_CONFIG[liquiditySummary.liquidity_status] ?? LIQUIDITY_CONFIG.no_data
                         return (
                           <div style={{ padding: '10px 12px', backgroundColor: cfg.bg, borderRadius: '8px', textAlign: 'center', border: `1px solid ${cfg.border}` }}>
-                            <div style={{ fontSize: '14px', fontWeight: '700', color: cfg.color }}>
-                              {liquiditySummary.liquidity_ratio?.toFixed(2)}x
-                            </div>
-                            <div style={{ fontSize: '10px', color: cfg.color, marginTop: '2px', opacity: 0.8 }}>
-                              {cfg.sublabel}
-                            </div>
-                            <div style={{ marginTop: '4px' }}>
-                              <LiquidityChip status={liquiditySummary.liquidity_status} />
-                            </div>
+                            <div style={{ fontSize: '14px', fontWeight: '700', color: cfg.color }}>{liquiditySummary.liquidity_ratio?.toFixed(2)}x</div>
+                            <div style={{ fontSize: '10px', color: cfg.color, marginTop: '2px', opacity: 0.8 }}>{cfg.sublabel}</div>
+                            <div style={{ marginTop: '4px' }}><LiquidityChip status={liquiditySummary.liquidity_status} /></div>
                           </div>
                         )
                       })()}
@@ -559,7 +476,6 @@ useEffect(() => { init() }, [router.asPath])
                   </div>
                 )}
 
-                {/* Grafik TRX per hari */}
                 <div style={{ marginBottom: '24px' }}>
                   <div style={{ fontSize: '11px', fontWeight: '700', color: '#9ca3af', letterSpacing: '0.08em', marginBottom: '12px' }}>TRANSAKSI PER HARI</div>
                   <div style={{ display: 'flex', alignItems: 'flex-end', gap: '3px', height: '80px' }}>
@@ -568,8 +484,7 @@ useEffect(() => { init() }, [router.asPath])
                       const sd = new Date(sinceDate)
                       const monthStart = progress?.month_start ?? ''
                       return Array.from({ length: 14 }, (_, i) => {
-                        const d = new Date(sd)
-                        d.setDate(sd.getDate() + i)
+                        const d = new Date(sd); d.setDate(sd.getDate() + i)
                         const dateStr = d.toISOString().split('T')[0]
                         const found = agentDetail.find(a => a.transaction_date === dateStr)
                         const trx = found ? Number(found.total_trx) : 0
@@ -591,7 +506,6 @@ useEffect(() => { init() }, [router.asPath])
                   </div>
                 </div>
 
-                {/* Grafik Amount per hari — Likuiditas */}
                 {liquidityDetail.length > 0 && (
                   <div>
                     <div style={{ fontSize: '11px', fontWeight: '700', color: '#9ca3af', letterSpacing: '0.08em', marginBottom: '12px' }}>NOMINAL UANG BEREDAR (14H)</div>
@@ -601,15 +515,11 @@ useEffect(() => { init() }, [router.asPath])
                         const avgAmount = liquiditySummary?.avg_daily_amount_14d ?? 0
                         const sd = new Date(sinceDate)
                         return Array.from({ length: 14 }, (_, i) => {
-                          const d = new Date(sd)
-                          d.setDate(sd.getDate() + i)
+                          const d = new Date(sd); d.setDate(sd.getDate() + i)
                           const dateStr = d.toISOString().split('T')[0]
                           const found = liquidityDetail.find(a => a.transaction_date === dateStr)
                           const amount = found ? Number(found.daily_amount) : 0
-                          const barColor = amount === 0 ? '#f3f4f6'
-                            : amount < avgAmount * 0.5 ? '#ef4444'
-                            : amount < avgAmount * 0.8 ? '#eab308'
-                            : '#22c55e'
+                          const barColor = amount === 0 ? '#f3f4f6' : amount < avgAmount * 0.5 ? '#ef4444' : amount < avgAmount * 0.8 ? '#eab308' : '#22c55e'
                           return (
                             <div key={dateStr} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px' }} title={`${dateStr}: ${formatAmount(amount)}`}>
                               <div style={{ width: '100%', height: `${Math.max(4, (amount / maxAmount) * 64)}px`, backgroundColor: barColor, borderRadius: '3px 3px 0 0', transition: 'height 0.3s' }} />
@@ -621,15 +531,12 @@ useEffect(() => { init() }, [router.asPath])
                         })
                       })()}
                     </div>
-                    {/* Garis avg sebagai referensi visual */}
                     <div style={{ display: 'flex', gap: '16px', marginTop: '8px', fontSize: '10px', color: '#9ca3af' }}>
                       <span>▪ <span style={{ color: '#22c55e' }}>≥ avg</span></span>
                       <span>▪ <span style={{ color: '#eab308' }}>50–80% avg</span></span>
                       <span>▪ <span style={{ color: '#ef4444' }}>&lt; 50% avg</span></span>
                     </div>
-                    <div style={{ marginTop: '6px', fontSize: '10px', color: '#9ca3af' }}>
-                      Avg: {formatAmount(liquiditySummary?.avg_daily_amount_14d ?? 0)}/hari
-                    </div>
+                    <div style={{ marginTop: '6px', fontSize: '10px', color: '#9ca3af' }}>Avg: {formatAmount(liquiditySummary?.avg_daily_amount_14d ?? 0)}/hari</div>
                   </div>
                 )}
 
