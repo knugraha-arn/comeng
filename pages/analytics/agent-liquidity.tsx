@@ -119,9 +119,9 @@ export default function AgentLiquidityPage() {
     setLoading(true)
     try {
       const { data } = await supabase.rpc('get_hidden_gem_agents', {
-        p_min_active_days_month: 1,
-        p_min_trx_month: 1,
-        p_min_avg_trx_14: 1.0,
+        p_min_active_days_month: 2,
+        p_min_trx_month: 10,
+        p_min_avg_trx_14: 3,
       })
 
       // Sort by liquidity_ratio ascending (paling lemah di atas)
