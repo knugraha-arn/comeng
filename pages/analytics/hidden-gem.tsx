@@ -143,7 +143,11 @@ export default function HiddenGemPage() {
   const [liquidityDetail, setLiquidityDetail] = useState<AgentLiquidityDetail[]>([])
   const [loadingDetail, setLoadingDetail] = useState(false)
 
-  useEffect(() => { init() }, [])
+ import { useRouter } from 'next/router'
+
+const router = useRouter()
+
+useEffect(() => { init() }, [router.asPath])
 
   async function init() {
     setLoading(true)
