@@ -29,12 +29,14 @@ interface ReturningAgent {
   mitra: string | null
   pic: string | null
   first_return_date: string
-  last_seen_before: string | null
-  days_inactive: number | null
   days_since_return: number
   trx_count_14d: number
+  trx_count_w1: number
+  trx_count_w2: number
   avg_trx_since_return: number
   total_fee_14d: number
+  max_gap_days: number
+  gap_threshold: number
 }
 
 interface AgentDayDetail {
@@ -341,12 +343,14 @@ export default function ProductivityPage() {
         })
         const rows = (data ?? []).map((a: ReturningAgent) => [
           a.serial_number, a.merchant_name ?? '', a.mitra ?? '', a.pic ?? '',
-          a.first_return_date, a.last_seen_before ?? 'Agen baru',
-          a.days_inactive ?? '', a.days_since_return, a.trx_count_14d,
+          a.first_return_date, a.days_since_return,
+          a.trx_count_w1, a.trx_count_w2, a.trx_count_14d,
           a.avg_trx_since_return, a.total_fee_14d,
+          a.max_gap_days, a.gap_threshold,
+          a.max_gap_days > a.gap_threshold ? 'Absen Signifikan' : 'Normal',
         ])
         exportCSV(`produktifitas_kembali_aktif_${lastDate}.csv`,
-          ['Serial','Merchant','Mitra','PIC','Tgl Kembali','Terakhir Aktif','Hari Tidak Aktif','Hari Sejak Kembali','TRX 14H','Avg TRX/Hari','Total Fee'],
+          ['Serial','Merchant','Mitra','PIC','Tgl Kembali W2','Hari Sejak Kembali','TRX W1','TRX W2','TRX 14H','Avg TRX/Hari','Total Fee','Max Gap (hari)','Threshold','Status Absen'],
           rows)
       } else {
         // Fetch all trend agents
@@ -478,8 +482,8 @@ export default function ProductivityPage() {
             const isActive = activeTab === 'returning'
             return (
               <button onClick={() => handleTabChange(isActive ? '' : 'returning')}
-                onMouseEnter={e => setTooltip({ text: 'Agen yang muncul di 14H terakhir tapi tidak ada di 14H sebelumnya. Bisa agen baru atau agen yang sempat tidak aktif.', x: e.clientX, y: e.clientY })}
-                onMouseMove={e => setTooltip({ text: 'Agen yang muncul di 14H terakhir tapi tidak ada di 14H sebelumnya. Bisa agen baru atau agen yang sempat tidak aktif.', x: e.clientX, y: e.clientY })}
+                onMouseEnter={e => setTooltip({ text: 'Agen yang aktif di 7 hari kedua window (W2) tapi tidak ada di 7 hari pertama (W1). Indikasi agen yang baru mulai aktif minggu ini setelah absen minggu lalu.', x: e.clientX, y: e.clientY })}
+                onMouseMove={e => setTooltip({ text: 'Agen yang aktif di 7 hari kedua window (W2) tapi tidak ada di 7 hari pertama (W1). Indikasi agen yang baru mulai aktif minggu ini setelah absen minggu lalu.', x: e.clientX, y: e.clientY })}
                 onMouseLeave={() => setTooltip(null)}
                 style={{ padding: '9px 18px', borderRadius: '8px', cursor: 'pointer', border: `2px solid ${isActive ? '#7c3aed' : '#e5e7eb'}`, backgroundColor: isActive ? '#f5f3ff' : '#fff', color: isActive ? '#7c3aed' : '#6b7280', fontSize: '13px', fontWeight: '600', transition: 'all 0.15s', display: 'flex', alignItems: 'center', gap: '8px' }}>
                 <span>🔄</span><span>Kembali Aktif</span>
@@ -542,7 +546,7 @@ export default function ProductivityPage() {
                 <div>MITRA</div>
                 <div>PIC</div>
                 <div style={{ textAlign: 'center' }}>
-                  <span onMouseEnter={e => setTooltip({ text: 'Tanggal pertama agen aktif + rata-rata TRX/hari sejak kembali hingga hari terakhir data.', x: e.clientX, y: e.clientY })} onMouseMove={e => setTooltip({ text: 'Tanggal pertama agen aktif + rata-rata TRX/hari sejak kembali hingga hari terakhir data.', x: e.clientX, y: e.clientY })} onMouseLeave={() => setTooltip(null)}>
+                  <span onMouseEnter={e => setTooltip({ text: 'Tanggal pertama aktif di W2 (7 hari terakhir). TRX/hari dihitung sejak tanggal kembali hingga hari terakhir data.', x: e.clientX, y: e.clientY })} onMouseMove={e => setTooltip({ text: 'Tanggal pertama aktif di W2 (7 hari terakhir). TRX/hari dihitung sejak tanggal kembali hingga hari terakhir data.', x: e.clientX, y: e.clientY })} onMouseLeave={() => setTooltip(null)}>
                     KEMBALI AKTIF ⓘ
                   </span>
                 </div>
@@ -566,6 +570,11 @@ export default function ProductivityPage() {
                     <div style={{ fontSize: '10px', color: '#9ca3af', marginTop: '1px' }}>
                       {agent.avg_trx_since_return} TRX/hari ({agent.days_since_return}h)
                     </div>
+                    {agent.max_gap_days > agent.gap_threshold && (
+                      <div style={{ fontSize: '9px', color: '#dc2626', fontWeight: '600', marginTop: '1px' }}>
+                        🔴 absen {agent.max_gap_days}h
+                      </div>
+                    )}
                   </div>
                   <div style={{ fontSize: '12px', fontWeight: '600', color: '#374151', textAlign: 'right' }}>{agent.trx_count_14d.toLocaleString('id')}</div>
                 </div>
