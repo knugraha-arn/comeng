@@ -19,6 +19,7 @@ const analyticsNavItems = [
   { href: '/analytics/hidden-gem', label: 'Produktifitas',  icon: '◈' },
   { href: '/analytics/dashboard-3500', label: 'Lite & Plus',  icon: '◈' },
   { href: '/analytics/agent-liquidity', label: 'Likuiditas Agen',  icon: '◈' },
+    { href: '/analytics/agent-liquidity', label: 'Kekuatan Mitra',  icon: '◈' },
   { href: '/analytics',         label: 'Morning Brief',  icon: '◉' },
 ]
 
