@@ -67,6 +67,22 @@ interface PicPerformance {
   declining_pct: number
 }
 
+interface HourlySlot {
+  slot_name: string
+  slot_order: number
+  slot_emoji: string
+  total_trx: number
+  avg_per_day: number
+  pct: number
+}
+
+interface CardType {
+  card_type: string
+  total_trx: number
+  avg_per_day: number
+  pct: number
+}
+
 const MONTHS = ['Januari','Februari','Maret','April','Mei','Juni','Juli','Agustus','September','Oktober','November','Desember']
 const SKELETON_STYLE = `@keyframes shimmer { 0% { background-position: 200% 0 } 100% { background-position: -200% 0 } }`
 
@@ -97,6 +113,8 @@ export default function PulsePage() {
   const [velocity, setVelocity] = useState<NetworkVelocity[]>([])
   const [mitras, setMitras] = useState<MitraPerformance[]>([])
   const [pics, setPics] = useState<PicPerformance[]>([])
+  const [hourlySlots, setHourlySlots] = useState<HourlySlot[]>([])
+  const [cardTypes, setCardTypes] = useState<CardType[]>([])
   const [loading, setLoading] = useState(true)
   const [tooltip, setTooltip] = useState<{ text: string, x: number, y: number } | null>(null)
 
@@ -105,18 +123,22 @@ export default function PulsePage() {
   async function loadAll() {
     setLoading(true)
     try {
-      const [s, d, v, m, p] = await Promise.all([
+      const [s, d, v, m, p, h, c] = await Promise.all([
         supabase.rpc('get_pulse_summary'),
         supabase.rpc('get_pulse_daily_fee'),
         supabase.rpc('get_pulse_network_velocity'),
         supabase.rpc('get_pulse_mitra_performance'),
         supabase.rpc('get_pulse_pic_performance'),
+        supabase.rpc('get_pulse_hourly_slots'),
+        supabase.rpc('get_pulse_card_types'),
       ])
       setSummary(s.data?.[0] ?? null)
       setDailyFee(d.data ?? [])
       setVelocity(v.data ?? [])
       setMitras(m.data ?? [])
       setPics(p.data ?? [])
+      setHourlySlots(h.data ?? [])
+      setCardTypes(c.data ?? [])
     } finally {
       setLoading(false)
     }
@@ -372,6 +394,93 @@ export default function PulsePage() {
               </div>
             )}
           </div>
+        </div>
+
+        {/* Pie Charts Row: Slot Waktu + Swipe vs DIP */}
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '24px' }}>
+
+          {/* Slot Waktu */}
+          <div style={{ backgroundColor: '#fff', border: '1px solid #e5e7eb', borderRadius: '12px', padding: '20px 24px' }}>
+            <div style={{ fontSize: '13px', fontWeight: '700', color: '#111827', marginBottom: '4px' }}>
+              Pola Waktu Transaksi
+              <span {...tip('Distribusi TRX berdasarkan jam transaksi dalam 14 hari terakhir. Dini Hari 00–05, Pagi 06–11, Siang-Sore 12–17, Malam 18–23.')}
+                style={{ marginLeft: '6px', fontSize: '11px', color: '#9ca3af', cursor: 'default', fontWeight: '400' }}>ⓘ</span>
+            </div>
+            <div style={{ fontSize: '11px', color: '#9ca3af', marginBottom: '16px' }}>14 hari terakhir</div>
+            {loading ? <Skeleton width="100%" height={140} /> : (
+              <div>
+                {/* Donut-style: stacked horizontal bar */}
+                <div style={{ display: 'flex', height: '20px', borderRadius: '99px', overflow: 'hidden', marginBottom: '16px' }}>
+                  {hourlySlots.map((s, i) => {
+                    const colors = ['#6366f1', '#0344D8', '#f59e0b', '#1e40af']
+                    return <div key={i} style={{ width: `${s.pct}%`, backgroundColor: colors[i], transition: 'width 0.5s' }} title={`${s.slot_emoji} ${s.slot_name}: ${s.pct}%`} />
+                  })}
+                </div>
+                {/* Legend */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  {hourlySlots.map((s, i) => {
+                    const colors = ['#6366f1', '#0344D8', '#f59e0b', '#1e40af']
+                    return (
+                      <div key={i} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <div style={{ width: '10px', height: '10px', borderRadius: '2px', backgroundColor: colors[i], flexShrink: 0 }} />
+                          <span style={{ fontSize: '12px', color: '#374151' }}>{s.slot_emoji} {s.slot_name}</span>
+                        </div>
+                        <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+                          <span style={{ fontSize: '11px', color: '#9ca3af' }}>{s.avg_per_day.toLocaleString('id')}/hari</span>
+                          <span style={{ fontSize: '12px', fontWeight: '700', color: colors[i], minWidth: '36px', textAlign: 'right' }}>{s.pct}%</span>
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Swipe vs DIP */}
+          <div style={{ backgroundColor: '#fff', border: '1px solid #e5e7eb', borderRadius: '12px', padding: '20px 24px' }}>
+            <div style={{ fontSize: '13px', fontWeight: '700', color: '#111827', marginBottom: '4px' }}>
+              Metode Kartu: DIP vs SWIPE
+              <span {...tip('DIP = kartu chip dimasukkan ke mesin. SWIPE = kartu digesek. Rasio DIP tinggi menandakan mayoritas kartu chip (lebih aman).')}
+                style={{ marginLeft: '6px', fontSize: '11px', color: '#9ca3af', cursor: 'default', fontWeight: '400' }}>ⓘ</span>
+            </div>
+            <div style={{ fontSize: '11px', color: '#9ca3af', marginBottom: '16px' }}>14 hari terakhir</div>
+            {loading ? <Skeleton width="100%" height={140} /> : (
+              <div>
+                {/* Stacked bar */}
+                <div style={{ display: 'flex', height: '20px', borderRadius: '99px', overflow: 'hidden', marginBottom: '16px' }}>
+                  {cardTypes.map((c, i) => {
+                    const colors = ['#0344D8', '#7c3aed']
+                    return <div key={i} style={{ width: `${c.pct}%`, backgroundColor: colors[i], transition: 'width 0.5s' }} title={`${c.card_type}: ${c.pct}%`} />
+                  })}
+                </div>
+                {/* Legend */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  {cardTypes.map((c, i) => {
+                    const colors = ['#0344D8', '#7c3aed']
+                    return (
+                      <div key={i} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <div style={{ width: '10px', height: '10px', borderRadius: '2px', backgroundColor: colors[i], flexShrink: 0 }} />
+                          <span style={{ fontSize: '12px', color: '#374151' }}>{c.card_type}</span>
+                        </div>
+                        <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+                          <span style={{ fontSize: '11px', color: '#9ca3af' }}>{c.avg_per_day.toLocaleString('id')}/hari</span>
+                          <span style={{ fontSize: '12px', fontWeight: '700', color: colors[i], minWidth: '36px', textAlign: 'right' }}>{c.pct}%</span>
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+                {/* Total */}
+                <div style={{ marginTop: '12px', padding: '8px 12px', backgroundColor: '#f9fafb', borderRadius: '8px', fontSize: '11px', color: '#6b7280', textAlign: 'center' }}>
+                  Total {cardTypes.reduce((s, c) => s + c.total_trx, 0).toLocaleString('id')} TRX · {cardTypes.reduce((s, c) => s + c.avg_per_day, 0).toLocaleString('id')} avg/hari
+                </div>
+              </div>
+            )}
+          </div>
+
         </div>
 
         {/* Bucket Distribution */}
