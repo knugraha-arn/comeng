@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState } from 'react'
 import { useRouter } from 'next/router'
 import Head from 'next/head'
 import Layout from '../../components/Layout'
@@ -98,7 +98,7 @@ export default function Dashboard3500Page() {
   const [totalCount, setTotalCount] = useState(0)
   const [trendCounts, setTrendCounts] = useState({ growing: 0, declining: 0, consistent: 0 })
 
-  const [activeTab, setActiveTab] = useState<'growing' | 'declining' | 'consistent' | ''>('')
+  const [activeTab, setActiveTab] = useState<'growing' | 'declining' | 'consistent' | 'all' | ''>('')
   const [filterMitra, setFilterMitra] = useState('')
   const [filterPic, setFilterPic] = useState('')
   const [page, setPage] = useState(0)
@@ -129,12 +129,12 @@ export default function Dashboard3500Page() {
       if (progressRes.data) {
         const d = typeof progressRes.data === 'string' ? JSON.parse(progressRes.data) : progressRes.data
         setProgress({
-          total_fee: Number(d.total_fee ?? 0),
-          total_trx: Number(d.total_trx ?? 0),
-          days_elapsed: Number(d.days_elapsed ?? 0),
+          total_fee:     Number(d.total_fee ?? 0),
+          total_trx:     Number(d.total_trx ?? 0),
+          days_elapsed:  Number(d.days_elapsed ?? 0),
           days_in_month: Number(d.days_in_month ?? 0),
-          month_start: d.month_start,
-          end_date: d.end_date,
+          month_start:   d.month_start,
+          end_date:      d.end_date,
         })
         const endDate = new Date(d.end_date)
         setLastDate(d.end_date)
@@ -155,7 +155,6 @@ export default function Dashboard3500Page() {
         setPics(filterRes.data[0].pics ?? [])
       }
 
-      // Load trend counts (tanpa filter trend, untuk badge)
       await loadTrendCounts('', '')
       await loadAgents(0, '', '', '')
     } finally {
@@ -171,31 +170,38 @@ export default function Dashboard3500Page() {
       supabase.rpc('get_hidden_gem_agents_3500_count', { ...params, p_trend: 'consistent' }),
     ])
     setTrendCounts({
-      growing:    Number(g.data ?? 0),
-      declining:  Number(d.data ?? 0),
+      growing:   Number(g.data ?? 0),
+      declining: Number(d.data ?? 0),
       consistent: Number(c.data ?? 0),
     })
+  }
+
+  function getMinParams(tab: string) {
+    const isAll = tab === 'all'
+    return {
+      p_min_active_days_month: isAll ? 0 : 2,
+      p_min_trx_month:         isAll ? 0 : 5,
+      p_min_avg_trx_14:        isAll ? 0 : 1,
+    }
   }
 
   async function loadAgents(newPage: number, trend: string, mitra: string, pic: string) {
     setLoading(true)
     try {
+      const minParams = getMinParams(trend)
+      const trendParam = trend === 'all' ? '' : trend
       const [dataRes, countRes] = await Promise.all([
         supabase.rpc('get_hidden_gem_agents_3500', {
-          p_min_active_days_month: 2,
-          p_min_trx_month: 5,
-          p_min_avg_trx_14: 1,
-          p_trend: trend,
+          ...minParams,
+          p_trend: trendParam,
           p_mitra: mitra,
           p_pic: pic,
           p_limit: PAGE_SIZE,
           p_offset: newPage * PAGE_SIZE,
         }),
         supabase.rpc('get_hidden_gem_agents_3500_count', {
-          p_min_active_days_month: 2,
-          p_min_trx_month: 5,
-          p_min_avg_trx_14: 1,
-          p_trend: trend,
+          ...minParams,
+          p_trend: trendParam,
           p_mitra: mitra,
           p_pic: pic,
         }),
@@ -207,23 +213,20 @@ export default function Dashboard3500Page() {
     }
   }
 
-  async function handleTabChange(tab: 'growing' | 'declining' | 'consistent' | '') {
+  async function handleTabChange(tab: typeof activeTab) {
     setActiveTab(tab)
     setPage(0)
     await loadAgents(0, tab, filterMitra, filterPic)
   }
 
   async function handleMitraChange(mitra: string) {
-    setFilterMitra(mitra)
-    setFilterPic('')
-    setPage(0)
+    setFilterMitra(mitra); setFilterPic(''); setPage(0)
     await loadTrendCounts(mitra, '')
     await loadAgents(0, activeTab, mitra, '')
   }
 
   async function handlePicChange(pic: string) {
-    setFilterPic(pic)
-    setPage(0)
+    setFilterPic(pic); setPage(0)
     await loadAgents(0, activeTab, filterMitra, pic)
   }
 
@@ -232,10 +235,14 @@ export default function Dashboard3500Page() {
     await loadAgents(newPage, activeTab, filterMitra, filterPic)
   }
 
+  async function handleReset() {
+    setFilterMitra(''); setFilterPic(''); setActiveTab(''); setPage(0)
+    await loadTrendCounts('', '')
+    await loadAgents(0, '', '', '')
+  }
+
   async function openDrawer(agent: Agent3500) {
-    setSelectedAgent(agent)
-    setAgentDetail([])
-    setLoadingDetail(true)
+    setSelectedAgent(agent); setAgentDetail([]); setLoadingDetail(true)
     try {
       const { data } = await supabase.rpc('get_agent_detail_3500', {
         p_serial: agent.serial_number,
@@ -243,16 +250,15 @@ export default function Dashboard3500Page() {
         p_until: lastDate,
       })
       setAgentDetail(data ?? [])
-    } finally {
-      setLoadingDetail(false)
-    }
+    } finally { setLoadingDetail(false) }
   }
 
-  const totalPages = Math.ceil(totalCount / PAGE_SIZE)
+  const totalPages   = Math.ceil(totalCount / PAGE_SIZE)
   const feeProgress  = progress && monthlyTarget ? Math.min(100, Math.round(progress.total_fee / monthlyTarget * 100)) : null
   const projectedFee = progress && progress.days_elapsed > 0 ? Math.round(progress.total_fee / progress.days_elapsed * progress.days_in_month) : null
   const currentMonth = progress ? MONTHS[new Date(progress.end_date).getMonth()] : ''
   const currentYear  = progress ? new Date(progress.end_date).getFullYear() : ''
+  const filteredPics = filterMitra ? pics.filter(p => agents.some(a => a.mitra === filterMitra && a.pic === p)) : pics
 
   function TrendChip({ trend }: { trend: string }) {
     const cfg = TREND_CONFIG[trend as keyof typeof TREND_CONFIG] ?? TREND_CONFIG.consistent
@@ -272,19 +278,13 @@ export default function Dashboard3500Page() {
     return <span style={{ padding: '2px 8px', borderRadius: '99px', fontSize: '11px', fontWeight: '700', backgroundColor: cfg.bg, color: cfg.color, border: `1px solid ${cfg.border}`, whiteSpace: 'nowrap' }}>{cfg.label}</span>
   }
 
-  // Filter pics by mitra
-  const filteredPics = filterMitra
-    ? pics.filter(p => agents.some(a => a.mitra === filterMitra && a.pic === p))
-    : pics
-
   return (
     <Layout>
       <style>{SKELETON_STYLE}</style>
       <Head><title>Dashboard Lite dan Plus — AMARIS</title></Head>
 
-      {/* Tooltip */}
       {tooltip && (
-        <div style={{ position: 'fixed', left: tooltip.x + 12, top: tooltip.y - 8, zIndex: 9999, backgroundColor: '#1f2937', color: '#f9fafb', fontSize: '11px', padding: '8px 12px', borderRadius: '8px', maxWidth: '240px', lineHeight: '1.5', pointerEvents: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.3)' }}>
+        <div style={{ position: 'fixed', left: Math.min(tooltip.x + 12, window.innerWidth - 260), top: tooltip.y - 8, zIndex: 9999, backgroundColor: '#1f2937', color: '#f9fafb', fontSize: '11px', padding: '8px 12px', borderRadius: '8px', maxWidth: '240px', lineHeight: '1.5', pointerEvents: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.3)' }}>
           {tooltip.text}
         </div>
       )}
@@ -333,7 +333,7 @@ export default function Dashboard3500Page() {
         )}
 
         {/* Tabs */}
-        <div style={{ display: 'flex', gap: '8px', marginBottom: '20px' }}>
+        <div style={{ display: 'flex', gap: '8px', marginBottom: '20px', flexWrap: 'wrap' }}>
           {(['growing', 'declining', 'consistent'] as const).map(tab => {
             const cfg = TREND_CONFIG[tab]
             const count = trendCounts[tab]
@@ -350,6 +350,21 @@ export default function Dashboard3500Page() {
               </button>
             )
           })}
+
+          {/* Tab Semua */}
+          {(() => {
+            const isActive = activeTab === 'all'
+            return (
+              <button onClick={() => handleTabChange(isActive ? '' : 'all')}
+                onMouseEnter={e => setTooltip({ text: 'Tampilkan semua agen dengan sharing_fee Rp 3.500 tanpa filter minimum aktif/TRX bulan ini.', x: e.clientX, y: e.clientY })}
+                onMouseMove={e => setTooltip({ text: 'Tampilkan semua agen dengan sharing_fee Rp 3.500 tanpa filter minimum aktif/TRX bulan ini.', x: e.clientX, y: e.clientY })}
+                onMouseLeave={() => setTooltip(null)}
+                style={{ padding: '9px 18px', borderRadius: '8px', cursor: 'pointer', border: `2px solid ${isActive ? '#374151' : '#e5e7eb'}`, backgroundColor: isActive ? '#f9fafb' : '#fff', color: isActive ? '#374151' : '#6b7280', fontSize: '13px', fontWeight: '600', transition: 'all 0.15s', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <span>📋</span>
+                <span>Semua</span>
+              </button>
+            )
+          })()}
         </div>
 
         {/* Filters */}
@@ -365,7 +380,7 @@ export default function Dashboard3500Page() {
             {filteredPics.map(p => <option key={p} value={p}>{p}</option>)}
           </select>
           {(filterMitra || filterPic || activeTab) && (
-            <button onClick={() => { setFilterMitra(''); setFilterPic(''); setActiveTab(''); setPage(0); loadTrendCounts('', ''); loadAgents(0, '', '', '') }}
+            <button onClick={handleReset}
               style={{ padding: '7px 12px', borderRadius: '8px', border: '1px solid #e5e7eb', backgroundColor: '#fff', color: '#6b7280', fontSize: '12px', cursor: 'pointer' }}>✕ Reset</button>
           )}
           <span style={{ marginLeft: 'auto', fontSize: '13px', color: '#6b7280' }}>
@@ -387,10 +402,30 @@ export default function Dashboard3500Page() {
           <div style={{ border: '1px solid #e5e7eb', borderRadius: '10px', overflow: 'hidden' }}>
             <div style={{ display: 'grid', gridTemplateColumns: '100px 1fr 150px 150px 60px 80px 80px 80px', padding: '10px 16px', backgroundColor: '#f9fafb', borderBottom: '1px solid #e5e7eb', fontSize: '11px', fontWeight: '700', color: '#9ca3af', letterSpacing: '0.05em' }}>
               <div>TREND</div><div>AGEN</div><div>MITRA</div><div>PIC</div>
-              <div style={{ textAlign: 'center' }}>HARI</div>
-              <div style={{ textAlign: 'right' }}>TRX/HARI (14H)</div>
-              <div style={{ textAlign: 'right' }}>TRX/HARI (BLN)</div>
-              <div style={{ textAlign: 'right' }}>GROWTH</div>
+              <div style={{ textAlign: 'center' }}>
+                <span
+                  onMouseEnter={e => setTooltip({ text: 'Jumlah hari agen aktif dalam 14 hari terakhir.', x: e.clientX, y: e.clientY })}
+                  onMouseMove={e => setTooltip({ text: 'Jumlah hari agen aktif dalam 14 hari terakhir.', x: e.clientX, y: e.clientY })}
+                  onMouseLeave={() => setTooltip(null)}>HARI ⓘ</span>
+              </div>
+              <div style={{ textAlign: 'right' }}>
+                <span
+                  onMouseEnter={e => setTooltip({ text: 'Rata-rata TRX fee Rp 3.500 per hari dalam 14 hari terakhir.', x: e.clientX, y: e.clientY })}
+                  onMouseMove={e => setTooltip({ text: 'Rata-rata TRX fee Rp 3.500 per hari dalam 14 hari terakhir.', x: e.clientX, y: e.clientY })}
+                  onMouseLeave={() => setTooltip(null)}>TRX/HARI (14H) ⓘ</span>
+              </div>
+              <div style={{ textAlign: 'right' }}>
+                <span
+                  onMouseEnter={e => setTooltip({ text: 'Rata-rata TRX fee Rp 3.500 per hari bulan berjalan.', x: e.clientX, y: e.clientY })}
+                  onMouseMove={e => setTooltip({ text: 'Rata-rata TRX fee Rp 3.500 per hari bulan berjalan.', x: e.clientX, y: e.clientY })}
+                  onMouseLeave={() => setTooltip(null)}>TRX/HARI (BLN) ⓘ</span>
+              </div>
+              <div style={{ textAlign: 'right' }}>
+                <span
+                  onMouseEnter={e => setTooltip({ text: 'Perubahan avg TRX/hari bulan ini vs 14H. Hijau = naik, merah = turun.', x: e.clientX, y: e.clientY })}
+                  onMouseMove={e => setTooltip({ text: 'Perubahan avg TRX/hari bulan ini vs 14H. Hijau = naik, merah = turun.', x: e.clientX, y: e.clientY })}
+                  onMouseLeave={() => setTooltip(null)}>GROWTH ⓘ</span>
+              </div>
             </div>
             {agents.map((agent, i) => (
               <div key={agent.serial_number} onClick={() => openDrawer(agent)}
@@ -421,7 +456,6 @@ export default function Dashboard3500Page() {
           <div style={{ textAlign: 'center', padding: '60px', backgroundColor: '#f9fafb', borderRadius: '10px', border: '1px dashed #e5e7eb', color: '#9ca3af', fontSize: '13px' }}>Tidak ada agen di kategori ini</div>
         )}
 
-        {/* Pagination */}
         {totalPages > 1 && (
           <div style={{ display: 'flex', justifyContent: 'center', gap: '8px', alignItems: 'center', marginTop: '16px' }}>
             <button onClick={() => handlePageChange(Math.max(0, page - 1))} disabled={page === 0} style={{ padding: '7px 14px', borderRadius: '8px', border: '1px solid #e5e7eb', backgroundColor: '#fff', color: page === 0 ? '#d1d5db' : '#374151', fontSize: '13px', cursor: page === 0 ? 'not-allowed' : 'pointer' }}>← Prev</button>
@@ -449,12 +483,11 @@ export default function Dashboard3500Page() {
               <div style={{ padding: '40px', textAlign: 'center', color: '#9ca3af', fontSize: '13px' }}>Memuat data...</div>
             ) : agentDetail.length > 0 ? (
               <div style={{ padding: '20px 24px' }}>
-
                 <div style={{ marginBottom: '24px' }}>
                   <div style={{ fontSize: '11px', fontWeight: '700', color: '#9ca3af', letterSpacing: '0.08em', marginBottom: '12px' }}>PERBANDINGAN PERFORMA</div>
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
                     {[
-                      { label: 'Avg TRX/hari (14 hari)',   value: String(selectedAgent.avg_trx_14), highlight: true },
+                      { label: 'Avg TRX/hari (14 hari)',   value: String(selectedAgent.avg_trx_14),    highlight: true },
                       { label: 'Avg TRX/hari (bulan ini)', value: String(selectedAgent.avg_trx_month), highlight: true },
                       { label: 'Hari aktif (14 hari)',      value: `${selectedAgent.active_days_14} hari` },
                       { label: 'Hari aktif (bulan ini)',    value: `${selectedAgent.active_days_month} hari` },
@@ -514,7 +547,7 @@ export default function Dashboard3500Page() {
                 </div>
 
                 <div>
-                  <div style={{ fontSize: '11px', fontWeight: '700', color: '#9ca3af', letterSpacing: '0.08em', marginBottom: '12px' }}>TRANSAKSI PER HARI</div>
+                  <div style={{ fontSize: '11px', fontWeight: '700', color: '#9ca3af', letterSpacing: '0.08em', marginBottom: '12px' }}>TRANSAKSI PER HARI (fee Rp 3.500)</div>
                   <div style={{ display: 'flex', alignItems: 'flex-end', gap: '3px', height: '80px' }}>
                     {(() => {
                       const maxTrx = Math.max(...agentDetail.map(d => Number(d.total_trx)), 1)
@@ -542,7 +575,6 @@ export default function Dashboard3500Page() {
                     <span>▪ <span style={{ color: TREND_CONFIG[selectedAgent.trend].color }}>Bulan ini</span></span>
                   </div>
                 </div>
-
               </div>
             ) : (
               <div style={{ padding: '40px', textAlign: 'center', color: '#9ca3af', fontSize: '13px' }}>Tidak ada data</div>
