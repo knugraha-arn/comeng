@@ -48,9 +48,9 @@ interface MonthlyProgress {
 }
 
 const TREND_CONFIG = {
-  growing:    { label: 'Growing',   icon: '💎', color: '#166534', bg: '#dcfce7', border: '#bbf7d0' },
-  declining:  { label: 'Declining', icon: '⚠️', color: '#92400e', bg: '#fef9c3', border: '#fde68a' },
-  consistent: { label: 'Konsisten', icon: '✅', color: '#1e40af', bg: '#eff6ff', border: '#bfdbfe' },
+  growing:    { label: 'Growing',   icon: '💎', color: '#166534', bg: '#dcfce7', border: '#bbf7d0', tooltip: 'Avg TRX/hari bulan ini > 120% vs 14 hari terakhir. Agen sedang tumbuh.' },
+  declining:  { label: 'Declining', icon: '⚠️', color: '#92400e', bg: '#fef9c3', border: '#fde68a', tooltip: 'Avg TRX/hari bulan ini < 80% vs 14 hari terakhir. Agen sedang menurun, perlu perhatian.' },
+  consistent: { label: 'Konsisten', icon: '✅', color: '#1e40af', bg: '#eff6ff', border: '#bfdbfe', tooltip: 'Avg TRX/hari bulan ini antara 80–120% vs 14 hari terakhir. Agen stabil.' },
 }
 
 const BUCKET_CONFIG: Record<string, { label: string, color: string, bg: string, border: string }> = {
@@ -114,6 +114,7 @@ export default function Dashboard3500Page() {
   const [selectedAgent, setSelectedAgent] = useState<Agent3500 | null>(null)
   const [agentDetail, setAgentDetail] = useState<AgentDayDetail[]>([])
   const [loadingDetail, setLoadingDetail] = useState(false)
+  const [tooltip, setTooltip] = useState<{ text: string, x: number, y: number } | null>(null)
 
   useEffect(() => { initPage() }, [router.asPath])
 
@@ -255,7 +256,15 @@ export default function Dashboard3500Page() {
 
   function TrendChip({ trend }: { trend: string }) {
     const cfg = TREND_CONFIG[trend as keyof typeof TREND_CONFIG] ?? TREND_CONFIG.consistent
-    return <span style={{ padding: '2px 8px', borderRadius: '99px', fontSize: '11px', fontWeight: '700', backgroundColor: cfg.bg, color: cfg.color, border: `1px solid ${cfg.border}`, whiteSpace: 'nowrap' }}>{cfg.icon} {cfg.label}</span>
+    return (
+      <span
+        onMouseEnter={e => setTooltip({ text: cfg.tooltip, x: e.clientX, y: e.clientY })}
+        onMouseMove={e => setTooltip({ text: cfg.tooltip, x: e.clientX, y: e.clientY })}
+        onMouseLeave={() => setTooltip(null)}
+        style={{ padding: '2px 8px', borderRadius: '99px', fontSize: '11px', fontWeight: '700', backgroundColor: cfg.bg, color: cfg.color, border: `1px solid ${cfg.border}`, whiteSpace: 'nowrap', cursor: 'default' }}>
+        {cfg.icon} {cfg.label}
+      </span>
+    )
   }
 
   function BucketChip({ b }: { b: string }) {
@@ -272,6 +281,14 @@ export default function Dashboard3500Page() {
     <Layout>
       <style>{SKELETON_STYLE}</style>
       <Head><title>Dashboard Lite dan Plus — AMARIS</title></Head>
+
+      {/* Tooltip */}
+      {tooltip && (
+        <div style={{ position: 'fixed', left: tooltip.x + 12, top: tooltip.y - 8, zIndex: 9999, backgroundColor: '#1f2937', color: '#f9fafb', fontSize: '11px', padding: '8px 12px', borderRadius: '8px', maxWidth: '240px', lineHeight: '1.5', pointerEvents: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.3)' }}>
+          {tooltip.text}
+        </div>
+      )}
+
       <div style={{ maxWidth: '1200px', margin: '0 auto', padding: '32px 24px' }}>
 
         <div style={{ marginBottom: '24px' }}>
@@ -323,6 +340,9 @@ export default function Dashboard3500Page() {
             const isActive = activeTab === tab
             return (
               <button key={tab} onClick={() => handleTabChange(isActive ? '' : tab)}
+                onMouseEnter={e => setTooltip({ text: cfg.tooltip, x: e.clientX, y: e.clientY })}
+                onMouseMove={e => setTooltip({ text: cfg.tooltip, x: e.clientX, y: e.clientY })}
+                onMouseLeave={() => setTooltip(null)}
                 style={{ padding: '9px 18px', borderRadius: '8px', cursor: 'pointer', border: `2px solid ${isActive ? cfg.color : '#e5e7eb'}`, backgroundColor: isActive ? cfg.bg : '#fff', color: isActive ? cfg.color : '#6b7280', fontSize: '13px', fontWeight: '600', transition: 'all 0.15s', display: 'flex', alignItems: 'center', gap: '8px' }}>
                 <span>{cfg.icon}</span>
                 <span>{cfg.label}</span>
