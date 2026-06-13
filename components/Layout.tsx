@@ -3,18 +3,19 @@ import { useRouter } from 'next/router'
 import { supabase } from '@/lib/supabase'
 
 const navItems = [
-  { href: '/', label: 'Overview', icon: '▦' },
-  { href: '/ranger', label: 'Ranger', icon: '◉' },
-  { href: '/members', label: 'Member Alert', icon: '◎' },
-  { href: '/trends', label: 'Tren', icon: '↗' },
-  { href: '/rekomendasi', label: 'Rekomendasi', icon: '✦' },
+  { href: '/', label: 'Overview', icon: '◈' },
+  { href: '/ranger', label: 'Ranger', icon: '◈' },
+  { href: '/members', label: 'Member Alert', icon: '◈' },
+  { href: '/trends', label: 'Tren', icon: '◈' },
+  { href: '/rekomendasi', label: 'Rekomendasi', icon: '◈' },
   { href: '/ai-assistant', label: 'AI Assistant', icon: '◈' },
-  { href: '/upload', label: 'Upload WAG', icon: '↑' },
-  { href: '/config', label: 'Konfigurasi', icon: '⚙' },
+  { href: '/upload', label: 'Upload WAG', icon: '◈' },
+  { href: '/config', label: 'Konfigurasi', icon: '◈' },
 ]
 
 const analyticsNavItems = [
-  { href: '/analytics/agents',  label: 'Kinerja 14 Hari', icon: '▦' },
+  { href: '/analytics/pulse',  label: 'Business Pulse', icon: '◈' },
+  { href: '/analytics/agents',  label: 'Kinerja 14 Hari', icon: '◈' },
   { href: '/analytics/hidden-gem', label: 'Produktifitas',  icon: '◈' },
   { href: '/analytics/dashboard-3500', label: 'Lite & Plus',  icon: '◈' },
   { href: '/analytics/agent-liquidity', label: 'Likuiditas Agen',  icon: '◈' },
