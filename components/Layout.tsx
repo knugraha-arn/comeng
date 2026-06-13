@@ -25,8 +25,7 @@ const adminNavItems = [
   { href: '/analytics/upload',   label: 'Upload Data',    icon: '↑' },
   { href: '/analytics/history',  label: 'Upload History', icon: '◎' },
   { href: '/analytics/targets',  label: 'Target',         icon: '◎' },
-  { href: '/analytics/trigger',  label: 'Compute',        icon: '▦' },
-]
+ ]
 
 // Cache di module level — persist selama session browser, tidak reset saat ganti halaman
 let sessionChecked = false
