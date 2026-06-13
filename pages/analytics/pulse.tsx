@@ -427,7 +427,7 @@ export default function PulsePage() {
                           <span style={{ fontSize: '12px', color: '#374151' }}>{s.slot_emoji} {s.slot_name}</span>
                         </div>
                         <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
-                          <span style={{ fontSize: '11px', color: '#9ca3af' }}>{s.avg_per_day.toLocaleString('id')}/hari</span>
+                          <span style={{ fontSize: '11px', color: '#9ca3af' }}>{formatNum(Math.round(s.avg_per_day))} TRX/hari</span>
                           <span style={{ fontSize: '12px', fontWeight: '700', color: colors[i], minWidth: '36px', textAlign: 'right' }}>{s.pct}%</span>
                         </div>
                       </div>
@@ -466,7 +466,7 @@ export default function PulsePage() {
                           <span style={{ fontSize: '12px', color: '#374151' }}>{c.card_type}</span>
                         </div>
                         <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
-                          <span style={{ fontSize: '11px', color: '#9ca3af' }}>{c.avg_per_day.toLocaleString('id')}/hari</span>
+                          <span style={{ fontSize: '11px', color: '#9ca3af' }}>{formatNum(Math.round(c.avg_per_day))} TRX/hari</span>
                           <span style={{ fontSize: '12px', fontWeight: '700', color: colors[i], minWidth: '36px', textAlign: 'right' }}>{c.pct}%</span>
                         </div>
                       </div>
@@ -475,7 +475,7 @@ export default function PulsePage() {
                 </div>
                 {/* Total */}
                 <div style={{ marginTop: '12px', padding: '8px 12px', backgroundColor: '#f9fafb', borderRadius: '8px', fontSize: '11px', color: '#6b7280', textAlign: 'center' }}>
-                  Total {cardTypes.reduce((s, c) => s + c.total_trx, 0).toLocaleString('id')} TRX · {cardTypes.reduce((s, c) => s + c.avg_per_day, 0).toLocaleString('id')} avg/hari
+                  Total {formatNum(cardTypes.reduce((s, c) => s + c.total_trx, 0))} TRX · {formatNum(Math.round(cardTypes.reduce((s, c) => s + c.avg_per_day, 0)))} avg TRX/hari
                 </div>
               </div>
             )}
@@ -558,7 +558,7 @@ export default function PulsePage() {
                   <div style={{ fontSize: '12px', color: '#374151', textAlign: 'right' }}>{formatNum(m.total_agents)}</div>
                   <div style={{ fontSize: '12px', color: '#374151', textAlign: 'right' }}>{formatNum(m.total_trx_14d)}</div>
                   <div style={{ fontSize: '12px', color: '#374151', textAlign: 'right' }}>{formatFee(m.total_fee_14d)}</div>
-                  <div style={{ fontSize: '12px', color: '#374151', textAlign: 'right' }}>{m.avg_trx_per_agent}</div>
+                  <div style={{ fontSize: '12px', color: '#374151', textAlign: 'right' }}>{formatNum(Number(m.avg_trx_per_agent))}</div>
                   <div style={{ textAlign: 'right' }}>
                     <span style={{ fontSize: '12px', fontWeight: '600', color: '#166534' }}>{m.growing_pct}%</span>
                   </div>
@@ -599,7 +599,7 @@ export default function PulsePage() {
                   <div style={{ fontSize: '12px', fontWeight: '600', color: '#111827', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.pic}</div>
                   <div style={{ fontSize: '11px', color: '#9ca3af', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.mitra}</div>
                   <div style={{ fontSize: '12px', color: '#374151', textAlign: 'right' }}>{formatNum(p.total_agents)}</div>
-                  <div style={{ fontSize: '12px', color: '#374151', textAlign: 'right' }}>{p.avg_trx_per_agent}</div>
+                  <div style={{ fontSize: '12px', color: '#374151', textAlign: 'right' }}>{formatNum(Number(p.avg_trx_per_agent))}</div>
                   <div style={{ fontSize: '12px', color: '#374151', textAlign: 'right' }}>{formatFee(p.total_fee_14d)}</div>
                   <div style={{ textAlign: 'right' }}>
                     <span style={{ fontSize: '12px', fontWeight: '600', color: p.growing_pct > 10 ? '#166534' : '#374151' }}>{p.growing_pct}%</span>
