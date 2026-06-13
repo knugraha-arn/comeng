@@ -252,7 +252,7 @@ export default function MitraPage() {
                       const mom = MOMENTUM_CONFIG[m.momentum]
                       return (
                         <span style={{ padding: '1px 6px', borderRadius: '99px', fontSize: '10px', fontWeight: '700', backgroundColor: mom.bg, color: mom.color, border: `1px solid ${mom.border}` }}>
-                          {mom.icon} {mom.momentum_pct > 0 ? '+' : ''}{m.momentum_pct}%
+                          {mom.icon} {m.momentum_pct > 0 ? '+' : ''}{m.momentum_pct}%
                         </span>
                       )
                     })()}
