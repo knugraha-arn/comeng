@@ -309,7 +309,16 @@ export default function ProductivityPage() {
           <h1 style={{ fontSize: '24px', fontWeight: '800', color: '#111827', margin: 0, letterSpacing: '-0.02em' }}>📈 Produktifitas Agen</h1>
           <p style={{ fontSize: '13px', color: '#6b7280', marginTop: '4px' }}>
             Irisan history 14 hari vs bulan berjalan — siapa yang tumbuh, menurun, dan konsisten.
-            {!loading && <span style={{ marginLeft: '8px', color: '#9ca3af' }}>{totalCount.toLocaleString('id')} agen</span>}
+            {!loading && (
+  <span style={{ marginLeft: '8px', color: '#9ca3af', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+    {totalCount.toLocaleString('id')} agen
+    <span
+      onMouseEnter={e => setTooltip({ text: 'Hanya agen dengan aktif ≥2 hari bulan ini, total TRX ≥10, dan avg TRX/hari ≥3 dalam 14 hari terakhir yang ditampilkan.', x: e.clientX, y: e.clientY })}
+      onMouseMove={e => setTooltip({ text: 'Hanya agen dengan aktif ≥2 hari bulan ini, total TRX ≥10, dan avg TRX/hari ≥3 dalam 14 hari terakhir yang ditampilkan.', x: e.clientX, y: e.clientY })}
+      onMouseLeave={() => setTooltip(null)}
+      style={{ fontSize: '11px', color: '#9ca3af', cursor: 'default', opacity: 0.7 }}>ⓘ</span>
+  </span>
+)}
           </p>
         </div>
 
