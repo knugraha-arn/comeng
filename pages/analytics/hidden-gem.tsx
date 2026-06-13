@@ -4,7 +4,7 @@ import Head from 'next/head'
 import Layout from '../../components/Layout'
 import { createBrowserClient } from '@supabase/ssr'
 
-interface HiddenGemAgent {
+interface ProductivityAgent {
   serial_number: string
   merchant_name: string | null
   mitra: string | null
@@ -62,9 +62,9 @@ interface MonthlyProgress {
 }
 
 const TREND_CONFIG = {
-  growing:    { label: 'Growing',   icon: '💎', color: '#166534', bg: '#dcfce7', border: '#bbf7d0' },
-  declining:  { label: 'Declining', icon: '⚠️', color: '#92400e', bg: '#fef9c3', border: '#fde68a' },
-  consistent: { label: 'Konsisten', icon: '✅', color: '#1e40af', bg: '#eff6ff', border: '#bfdbfe' },
+  growing:    { label: 'Growing',   icon: '💎', color: '#166534', bg: '#dcfce7', border: '#bbf7d0', tooltip: 'Avg TRX/hari bulan ini > 120% vs 14 hari terakhir. Agen sedang tumbuh.' },
+  declining:  { label: 'Declining', icon: '⚠️', color: '#92400e', bg: '#fef9c3', border: '#fde68a', tooltip: 'Avg TRX/hari bulan ini < 80% vs 14 hari terakhir. Agen sedang menurun, perlu perhatian.' },
+  consistent: { label: 'Konsisten', icon: '✅', color: '#1e40af', bg: '#eff6ff', border: '#bfdbfe', tooltip: 'Avg TRX/hari bulan ini antara 80–120% vs 14 hari terakhir. Agen stabil.' },
 }
 
 const BUCKET_CONFIG: Record<string, { label: string, color: string, bg: string, border: string }> = {
@@ -81,6 +81,7 @@ const LIQUIDITY_CONFIG = {
 }
 
 const MONTHS = ['Januari','Februari','Maret','April','Mei','Juni','Juli','Agustus','September','Oktober','November','Desember']
+const PAGE_SIZE = 25
 
 function formatFee(val: number): string {
   if (val >= 1000000) return `Rp ${(val / 1000000).toFixed(1)}jt`
@@ -96,14 +97,7 @@ function formatAmount(val: number): string {
 }
 
 function Skeleton({ width, height = 14, radius = 6 }: { width: string | number, height?: number, radius?: number }) {
-  return (
-    <div style={{
-      width, height, borderRadius: radius,
-      background: 'linear-gradient(90deg, #e5e7eb 25%, #f3f4f6 50%, #e5e7eb 75%)',
-      backgroundSize: '200% 100%',
-      animation: 'shimmer 1.4s infinite',
-    }} />
-  )
+  return <div style={{ width, height, borderRadius: radius, background: 'linear-gradient(90deg, #e5e7eb 25%, #f3f4f6 50%, #e5e7eb 75%)', backgroundSize: '200% 100%', animation: 'shimmer 1.4s infinite' }} />
 }
 
 const SKELETON_STYLE = `@keyframes shimmer { 0% { background-position: 200% 0 } 100% { background-position: -200% 0 } }`
@@ -120,41 +114,47 @@ function ProgressBar({ value, max, color }: { value: number, max: number, color:
   )
 }
 
-export default function HiddenGemPage() {
+export default function ProductivityPage() {
   const router = useRouter()
   const supabase = createBrowserClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
   )
 
-  const [agents, setAgents] = useState<HiddenGemAgent[]>([])
+  const [agents, setAgents] = useState<ProductivityAgent[]>([])
   const [loading, setLoading] = useState(true)
-  const [activeTab, setActiveTab] = useState<'growing' | 'declining' | 'consistent' | null>(null)
-  const [progress, setProgress] = useState<MonthlyProgress | null>(null)
-  const [monthlyTarget, setMonthlyTarget] = useState<number | null>(null)
+  const [totalCount, setTotalCount] = useState(0)
+  const [trendCounts, setTrendCounts] = useState({ growing: 0, declining: 0, consistent: 0 })
+
+  const [activeTab, setActiveTab] = useState<'growing' | 'declining' | 'consistent' | ''>('')
   const [filterMitra, setFilterMitra] = useState('')
   const [filterPic, setFilterPic] = useState('')
   const [page, setPage] = useState(0)
-  const PAGE_SIZE = 20
+
+  const [mitras, setMitras] = useState<string[]>([])
+  const [pics, setPics] = useState<string[]>([])
+
+  const [progress, setProgress] = useState<MonthlyProgress | null>(null)
+  const [monthlyTarget, setMonthlyTarget] = useState<number | null>(null)
   const [lastDate, setLastDate] = useState('')
   const [sinceDate, setSinceDate] = useState('')
 
-  const [selectedAgent, setSelectedAgent] = useState<HiddenGemAgent | null>(null)
+  const [selectedAgent, setSelectedAgent] = useState<ProductivityAgent | null>(null)
   const [agentDetail, setAgentDetail] = useState<AgentDayDetail[]>([])
   const [liquidityDetail, setLiquidityDetail] = useState<AgentLiquidityDetail[]>([])
   const [loadingDetail, setLoadingDetail] = useState(false)
 
-  useEffect(() => { init() }, [router.asPath])
+  const [tooltip, setTooltip] = useState<{ text: string, x: number, y: number } | null>(null)
 
-  async function init() {
+  useEffect(() => { initPage() }, [router.asPath])
+
+  async function initPage() {
     setLoading(true)
     try {
-      const [agentsRes, progressRes] = await Promise.all([
-        supabase.rpc('get_hidden_gem_agents', { p_min_active_days_month: 2, p_min_trx_month: 10, p_min_avg_trx_14: 3 }),
+      const [progressRes, filterRes] = await Promise.all([
         supabase.rpc('get_monthly_progress'),
+        supabase.rpc('get_hidden_gem_filter_options'),
       ])
-
-      setAgents(agentsRes.data ?? [])
 
       if (progressRes.data) {
         const d = typeof progressRes.data === 'string' ? JSON.parse(progressRes.data) : progressRes.data
@@ -166,13 +166,11 @@ export default function HiddenGemPage() {
           month_start: d.month_start,
           end_date: d.end_date,
         })
-
         const endDate = new Date(d.end_date)
         setLastDate(d.end_date)
         const [y, m, dd] = d.end_date.split('-').map(Number)
         const sd = new Date(y, m - 1, dd - 13)
         setSinceDate(`${sd.getFullYear()}-${String(sd.getMonth() + 1).padStart(2, '0')}-${String(sd.getDate()).padStart(2, '0')}`)
-
         const { data: targetData } = await supabase
           .from('am_targets')
           .select('monthly_fee')
@@ -181,12 +179,72 @@ export default function HiddenGemPage() {
           .single()
         setMonthlyTarget(targetData?.monthly_fee ?? null)
       }
+
+      if (filterRes.data?.[0]) {
+        setMitras(filterRes.data[0].mitras ?? [])
+        setPics(filterRes.data[0].pics ?? [])
+      }
+
+      await loadTrendCounts('', '')
+      await loadAgents(0, '', '', '')
     } finally {
       setLoading(false)
     }
   }
 
-  async function openDrawer(agent: HiddenGemAgent) {
+  async function loadTrendCounts(mitra: string, pic: string) {
+    const base = { p_min_active_days_month: 2, p_min_trx_month: 10, p_min_avg_trx_14: 3, p_mitra: mitra, p_pic: pic }
+    const [g, d, c] = await Promise.all([
+      supabase.rpc('get_hidden_gem_agents_count', { ...base, p_trend: 'growing' }),
+      supabase.rpc('get_hidden_gem_agents_count', { ...base, p_trend: 'declining' }),
+      supabase.rpc('get_hidden_gem_agents_count', { ...base, p_trend: 'consistent' }),
+    ])
+    setTrendCounts({ growing: Number(g.data ?? 0), declining: Number(d.data ?? 0), consistent: Number(c.data ?? 0) })
+  }
+
+  async function loadAgents(newPage: number, trend: string, mitra: string, pic: string) {
+    setLoading(true)
+    try {
+      const params = { p_min_active_days_month: 2, p_min_trx_month: 10, p_min_avg_trx_14: 3, p_trend: trend, p_mitra: mitra, p_pic: pic }
+      const [dataRes, countRes] = await Promise.all([
+        supabase.rpc('get_hidden_gem_agents', { ...params, p_limit: PAGE_SIZE, p_offset: newPage * PAGE_SIZE }),
+        supabase.rpc('get_hidden_gem_agents_count', params),
+      ])
+      setAgents(dataRes.data ?? [])
+      setTotalCount(Number(countRes.data ?? 0))
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  async function handleTabChange(tab: 'growing' | 'declining' | 'consistent' | '') {
+    setActiveTab(tab); setPage(0)
+    await loadAgents(0, tab, filterMitra, filterPic)
+  }
+
+  async function handleMitraChange(mitra: string) {
+    setFilterMitra(mitra); setFilterPic(''); setPage(0)
+    await loadTrendCounts(mitra, '')
+    await loadAgents(0, activeTab, mitra, '')
+  }
+
+  async function handlePicChange(pic: string) {
+    setFilterPic(pic); setPage(0)
+    await loadAgents(0, activeTab, filterMitra, pic)
+  }
+
+  async function handlePageChange(newPage: number) {
+    setPage(newPage)
+    await loadAgents(newPage, activeTab, filterMitra, filterPic)
+  }
+
+  async function handleReset() {
+    setFilterMitra(''); setFilterPic(''); setActiveTab(''); setPage(0)
+    await loadTrendCounts('', '')
+    await loadAgents(0, '', '', '')
+  }
+
+  async function openDrawer(agent: ProductivityAgent) {
     setSelectedAgent(agent)
     setAgentDetail([])
     setLiquidityDetail([])
@@ -203,20 +261,7 @@ export default function HiddenGemPage() {
     }
   }
 
-  const filtered = agents
-    .filter(a => activeTab === null || a.trend === activeTab)
-    .filter(a => !filterMitra || a.mitra === filterMitra)
-    .filter(a => !filterPic || a.pic === filterPic)
-  const totalPages = Math.ceil(filtered.length / PAGE_SIZE)
-  const paginated = filtered.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE)
-
-  const growingCount    = agents.filter(a => a.trend === 'growing').length
-  const decliningCount  = agents.filter(a => a.trend === 'declining').length
-  const consistentCount = agents.filter(a => a.trend === 'consistent').length
-
-  const mitras = [...new Set(agents.map(a => a.mitra).filter(Boolean) as string[])].sort()
-  const pics   = [...new Set(agents.filter(a => !filterMitra || a.mitra === filterMitra).map(a => a.pic).filter(Boolean) as string[])].sort()
-
+  const totalPages = Math.ceil(totalCount / PAGE_SIZE)
   const feeProgress  = progress && monthlyTarget ? Math.min(100, Math.round(progress.total_fee / monthlyTarget * 100)) : null
   const projectedFee = progress && progress.days_elapsed > 0 ? Math.round(progress.total_fee / progress.days_elapsed * progress.days_in_month) : null
   const currentMonth = progress ? MONTHS[new Date(progress.end_date).getMonth()] : ''
@@ -225,7 +270,15 @@ export default function HiddenGemPage() {
 
   function TrendChip({ trend }: { trend: string }) {
     const cfg = TREND_CONFIG[trend as keyof typeof TREND_CONFIG] ?? TREND_CONFIG.consistent
-    return <span style={{ padding: '2px 8px', borderRadius: '99px', fontSize: '11px', fontWeight: '700', backgroundColor: cfg.bg, color: cfg.color, border: `1px solid ${cfg.border}`, whiteSpace: 'nowrap' }}>{cfg.icon} {cfg.label}</span>
+    return (
+      <span
+        onMouseEnter={e => setTooltip({ text: cfg.tooltip, x: e.clientX, y: e.clientY })}
+        onMouseMove={e => setTooltip({ text: cfg.tooltip, x: e.clientX, y: e.clientY })}
+        onMouseLeave={() => setTooltip(null)}
+        style={{ padding: '2px 8px', borderRadius: '99px', fontSize: '11px', fontWeight: '700', backgroundColor: cfg.bg, color: cfg.color, border: `1px solid ${cfg.border}`, whiteSpace: 'nowrap', cursor: 'default' }}>
+        {cfg.icon} {cfg.label}
+      </span>
+    )
   }
 
   function BucketChip({ b }: { b: string }) {
@@ -241,13 +294,23 @@ export default function HiddenGemPage() {
   return (
     <Layout>
       <style>{SKELETON_STYLE}</style>
-      <Head><title>Hidden Gem — AMARIS</title></Head>
+      <Head><title>Produktifitas Agen — AMARIS</title></Head>
+
+      {tooltip && (
+        <div style={{ position: 'fixed', left: tooltip.x + 12, top: tooltip.y - 8, zIndex: 9999, backgroundColor: '#1f2937', color: '#f9fafb', fontSize: '11px', padding: '8px 12px', borderRadius: '8px', maxWidth: '240px', lineHeight: '1.5', pointerEvents: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.3)' }}>
+          {tooltip.text}
+        </div>
+      )}
+
       <div style={{ maxWidth: '1200px', margin: '0 auto', padding: '32px 24px' }}>
 
         <div style={{ marginBottom: '24px' }}>
           <div style={{ fontSize: '11px', fontWeight: '600', color: '#9ca3af', letterSpacing: '0.1em', marginBottom: '4px' }}>ANALITIK AGEN</div>
-          <h1 style={{ fontSize: '24px', fontWeight: '800', color: '#111827', margin: 0, letterSpacing: '-0.02em' }}>💎 Hidden Gem</h1>
-          <p style={{ fontSize: '13px', color: '#6b7280', marginTop: '4px' }}>Irisan history 14 hari vs target bulan ini — siapa yang perlu di-push dan siapa yang perlu diselamatkan.</p>
+          <h1 style={{ fontSize: '24px', fontWeight: '800', color: '#111827', margin: 0, letterSpacing: '-0.02em' }}>📈 Produktifitas Agen</h1>
+          <p style={{ fontSize: '13px', color: '#6b7280', marginTop: '4px' }}>
+            Irisan history 14 hari vs bulan berjalan — siapa yang tumbuh, menurun, dan konsisten.
+            {!loading && <span style={{ marginLeft: '8px', color: '#9ca3af' }}>{totalCount.toLocaleString('id')} agen</span>}
+          </p>
         </div>
 
         {progress && (
@@ -285,13 +348,17 @@ export default function HiddenGemPage() {
           </div>
         )}
 
+        {/* Tabs */}
         <div style={{ display: 'flex', gap: '8px', marginBottom: '20px' }}>
           {(['growing', 'declining', 'consistent'] as const).map(tab => {
             const cfg = TREND_CONFIG[tab]
-            const count = tab === 'growing' ? growingCount : tab === 'declining' ? decliningCount : consistentCount
+            const count = trendCounts[tab]
             const isActive = activeTab === tab
             return (
-              <button key={tab} onClick={() => { setActiveTab(activeTab === tab ? null : tab); setPage(0) }}
+              <button key={tab} onClick={() => handleTabChange(isActive ? '' : tab)}
+                onMouseEnter={e => setTooltip({ text: cfg.tooltip, x: e.clientX, y: e.clientY })}
+                onMouseMove={e => setTooltip({ text: cfg.tooltip, x: e.clientX, y: e.clientY })}
+                onMouseLeave={() => setTooltip(null)}
                 style={{ padding: '9px 18px', borderRadius: '8px', cursor: 'pointer', border: `2px solid ${isActive ? cfg.color : '#e5e7eb'}`, backgroundColor: isActive ? cfg.bg : '#fff', color: isActive ? cfg.color : '#6b7280', fontSize: '13px', fontWeight: '600', transition: 'all 0.15s', display: 'flex', alignItems: 'center', gap: '8px' }}>
                 <span>{cfg.icon}</span>
                 <span>{cfg.label}</span>
@@ -301,24 +368,27 @@ export default function HiddenGemPage() {
           })}
         </div>
 
+        {/* Filters */}
         <div style={{ display: 'flex', gap: '10px', marginBottom: '16px', flexWrap: 'wrap', alignItems: 'center' }}>
-          <select value={filterMitra} onChange={e => { setFilterMitra(e.target.value); setFilterPic('') }}
+          <select value={filterMitra} onChange={e => handleMitraChange(e.target.value)}
             style={{ padding: '7px 12px', borderRadius: '8px', border: '1px solid #e5e7eb', fontSize: '12px', color: '#374151', backgroundColor: '#fff', cursor: 'pointer' }}>
             <option value="">Semua Mitra</option>
             {mitras.map(m => <option key={m} value={m}>{m}</option>)}
           </select>
-          <select value={filterPic} onChange={e => setFilterPic(e.target.value)}
+          <select value={filterPic} onChange={e => handlePicChange(e.target.value)}
             style={{ padding: '7px 12px', borderRadius: '8px', border: '1px solid #e5e7eb', fontSize: '12px', color: '#374151', backgroundColor: '#fff', cursor: 'pointer', maxWidth: '180px' }}>
             <option value="">Semua PIC</option>
             {pics.map(p => <option key={p} value={p}>{p}</option>)}
           </select>
-          {(filterMitra || filterPic) && (
-            <button onClick={() => { setFilterMitra(''); setFilterPic('') }}
-              style={{ padding: '7px 12px', borderRadius: '8px', border: '1px solid #e5e7eb', backgroundColor: '#fff', color: '#6b7280', fontSize: '12px', cursor: 'pointer' }}>✕ Reset</button>
+          {(filterMitra || filterPic || activeTab) && (
+            <button onClick={handleReset} style={{ padding: '7px 12px', borderRadius: '8px', border: '1px solid #e5e7eb', backgroundColor: '#fff', color: '#6b7280', fontSize: '12px', cursor: 'pointer' }}>✕ Reset</button>
           )}
-          <span style={{ marginLeft: 'auto', fontSize: '13px', color: '#6b7280' }}>{loading ? 'Memuat...' : `${filtered.length.toLocaleString('id')} agen`}</span>
+          <span style={{ marginLeft: 'auto', fontSize: '13px', color: '#6b7280' }}>
+            {loading ? 'Memuat...' : `${totalCount.toLocaleString('id')} agen`}
+          </span>
         </div>
 
+        {/* Table */}
         {loading ? (
           <div style={{ border: '1px solid #e5e7eb', borderRadius: '10px', overflow: 'hidden' }}>
             {[1,2,3,4,5].map(i => (
@@ -328,7 +398,7 @@ export default function HiddenGemPage() {
               </div>
             ))}
           </div>
-        ) : filtered.length > 0 ? (
+        ) : agents.length > 0 ? (
           <div style={{ border: '1px solid #e5e7eb', borderRadius: '10px', overflow: 'hidden' }}>
             <div style={{ display: 'grid', gridTemplateColumns: '100px 1fr 150px 150px 60px 80px 80px 80px', padding: '10px 16px', backgroundColor: '#f9fafb', borderBottom: '1px solid #e5e7eb', fontSize: '11px', fontWeight: '700', color: '#9ca3af', letterSpacing: '0.05em' }}>
               <div>TREND</div><div>AGEN</div><div>MITRA</div><div>PIC</div>
@@ -337,9 +407,9 @@ export default function HiddenGemPage() {
               <div style={{ textAlign: 'right' }}>TRX/HARI (BLN)</div>
               <div style={{ textAlign: 'right' }}>GROWTH</div>
             </div>
-            {paginated.map((agent, i) => (
+            {agents.map((agent, i) => (
               <div key={agent.serial_number} onClick={() => openDrawer(agent)}
-                style={{ display: 'grid', gridTemplateColumns: '100px 1fr 150px 150px 60px 80px 80px 80px', padding: '11px 16px', borderBottom: i < paginated.length - 1 ? '1px solid #f3f4f6' : 'none', alignItems: 'center', backgroundColor: '#fff', cursor: 'pointer' }}
+                style={{ display: 'grid', gridTemplateColumns: '100px 1fr 150px 150px 60px 80px 80px 80px', padding: '11px 16px', borderBottom: i < agents.length - 1 ? '1px solid #f3f4f6' : 'none', alignItems: 'center', backgroundColor: '#fff', cursor: 'pointer' }}
                 onMouseEnter={e => e.currentTarget.style.backgroundColor = '#f9fafb'}
                 onMouseLeave={e => e.currentTarget.style.backgroundColor = '#fff'}>
                 <div><TrendChip trend={agent.trend} /></div>
@@ -368,17 +438,19 @@ export default function HiddenGemPage() {
 
         {totalPages > 1 && (
           <div style={{ display: 'flex', justifyContent: 'center', gap: '8px', alignItems: 'center', marginTop: '16px' }}>
-            <button onClick={() => setPage(p => Math.max(0, p - 1))} disabled={page === 0} style={{ padding: '7px 14px', borderRadius: '8px', border: '1px solid #e5e7eb', backgroundColor: '#fff', color: page === 0 ? '#d1d5db' : '#374151', fontSize: '13px', cursor: page === 0 ? 'not-allowed' : 'pointer' }}>← Prev</button>
+            <button onClick={() => handlePageChange(Math.max(0, page - 1))} disabled={page === 0} style={{ padding: '7px 14px', borderRadius: '8px', border: '1px solid #e5e7eb', backgroundColor: '#fff', color: page === 0 ? '#d1d5db' : '#374151', fontSize: '13px', cursor: page === 0 ? 'not-allowed' : 'pointer' }}>← Prev</button>
             <span style={{ fontSize: '13px', color: '#6b7280' }}>{page + 1} / {totalPages}</span>
-            <button onClick={() => setPage(p => Math.min(totalPages - 1, p + 1))} disabled={page >= totalPages - 1} style={{ padding: '7px 14px', borderRadius: '8px', border: '1px solid #e5e7eb', backgroundColor: '#fff', color: page >= totalPages - 1 ? '#d1d5db' : '#374151', fontSize: '13px', cursor: page >= totalPages - 1 ? 'not-allowed' : 'pointer' }}>Next →</button>
+            <button onClick={() => handlePageChange(Math.min(totalPages - 1, page + 1))} disabled={page >= totalPages - 1} style={{ padding: '7px 14px', borderRadius: '8px', border: '1px solid #e5e7eb', backgroundColor: '#fff', color: page >= totalPages - 1 ? '#d1d5db' : '#374151', fontSize: '13px', cursor: page >= totalPages - 1 ? 'not-allowed' : 'pointer' }}>Next →</button>
           </div>
         )}
       </div>
 
+      {/* Drawer */}
       {selectedAgent && (
         <div style={{ position: 'fixed', inset: 0, zIndex: 1000, display: 'flex', justifyContent: 'flex-end' }}>
           <div onClick={() => setSelectedAgent(null)} style={{ position: 'absolute', inset: 0, backgroundColor: 'rgba(0,0,0,0.3)' }} />
           <div style={{ position: 'relative', width: '480px', height: '100%', backgroundColor: '#fff', boxShadow: '-4px 0 24px rgba(0,0,0,0.12)', display: 'flex', flexDirection: 'column', overflowY: 'auto' }}>
+
             <div style={{ padding: '20px 24px', borderBottom: '1px solid #f3f4f6', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', position: 'sticky', top: 0, backgroundColor: '#fff', zIndex: 1 }}>
               <div>
                 <div style={{ fontSize: '18px', fontWeight: '800', color: '#111827', marginBottom: '4px' }}>{selectedAgent.merchant_name ?? selectedAgent.serial_number}</div>
