@@ -289,14 +289,11 @@ export default function UploadCenter() {
       }
 
       setStage('computing')
-      setProgress(90)
-      setProgressLabel('Menghitung metrics...')
+setProgress(90)
+setProgressLabel('Membersihkan data lama...')
 
-      // Trigger compute_agent_metrics langsung via RPC
-      try { await supabase.rpc('compute_agent_metrics') } catch {}
-
-      // Purge data lama
-      try { await supabase.rpc('am_purge_old_data') } catch {}
+// Purge data lama
+try { await supabase.rpc('am_purge_old_data') } catch {}
 
       setProgress(100)
       setStage('success')
