@@ -23,6 +23,18 @@ interface ProductivityAgent {
   liquidity_status: 'kuat' | 'menurun' | 'lemah' | 'no_data'
 }
 
+interface ReturningAgent {
+  serial_number: string
+  merchant_name: string | null
+  mitra: string | null
+  pic: string | null
+  first_return_date: string
+  last_seen_before: string | null
+  days_inactive: number | null
+  trx_count_14d: number
+  total_fee_14d: number
+}
+
 interface AgentDayDetail {
   transaction_date: string
   total_trx: number
@@ -126,10 +138,16 @@ export default function ProductivityPage() {
   const [totalCount, setTotalCount] = useState(0)
   const [trendCounts, setTrendCounts] = useState({ growing: 0, declining: 0, consistent: 0 })
 
-  const [activeTab, setActiveTab] = useState<'growing' | 'declining' | 'consistent' | ''>('')
+  const [activeTab, setActiveTab] = useState<'growing' | 'declining' | 'consistent' | 'returning' | ''>('')
   const [filterMitra, setFilterMitra] = useState('')
   const [filterPic, setFilterPic] = useState('')
   const [page, setPage] = useState(0)
+
+  // Returning agents state
+  const [returningAgents, setReturningAgents] = useState<ReturningAgent[]>([])
+  const [returningCount, setReturningCount] = useState(0)
+  const [loadingReturning, setLoadingReturning] = useState(false)
+  const [returningPage, setReturningPage] = useState(0)
 
   const [mitras, setMitras] = useState<string[]>([])
   const [pics, setPics] = useState<string[]>([])
@@ -185,8 +203,12 @@ export default function ProductivityPage() {
         setPics(filterRes.data[0].pics ?? [])
       }
 
-      await loadTrendCounts('', '')
-      await loadAgents(0, '', '', '')
+      const [, , rc] = await Promise.all([
+        loadTrendCounts('', ''),
+        loadAgents(0, '', '', ''),
+        supabase.rpc('get_returning_agents_count', { p_mitra: '', p_pic: '' }),
+      ])
+      setReturningCount(Number(rc.data ?? 0))
     } finally {
       setLoading(false)
     }
@@ -217,31 +239,64 @@ export default function ProductivityPage() {
     }
   }
 
-  async function handleTabChange(tab: 'growing' | 'declining' | 'consistent' | '') {
-    setActiveTab(tab); setPage(0)
-    await loadAgents(0, tab, filterMitra, filterPic)
+  async function loadReturningAgents(newPage: number, mitra: string, pic: string) {
+    setLoadingReturning(true)
+    try {
+      const [dataRes, countRes] = await Promise.all([
+        supabase.rpc('get_returning_agents', { p_mitra: mitra, p_pic: pic, p_limit: PAGE_SIZE, p_offset: newPage * PAGE_SIZE }),
+        supabase.rpc('get_returning_agents_count', { p_mitra: mitra, p_pic: pic }),
+      ])
+      setReturningAgents(dataRes.data ?? [])
+      setReturningCount(Number(countRes.data ?? 0))
+    } finally {
+      setLoadingReturning(false)
+    }
+  }
+
+  async function handleTabChange(tab: typeof activeTab) {
+    setActiveTab(tab); setPage(0); setReturningPage(0)
+    if (tab === 'returning') {
+      await loadReturningAgents(0, filterMitra, filterPic)
+    } else {
+      await loadAgents(0, tab, filterMitra, filterPic)
+    }
   }
 
   async function handleMitraChange(mitra: string) {
-    setFilterMitra(mitra); setFilterPic(''); setPage(0)
+    setFilterMitra(mitra); setFilterPic(''); setPage(0); setReturningPage(0)
     await loadTrendCounts(mitra, '')
-    await loadAgents(0, activeTab, mitra, '')
+    if (activeTab === 'returning') {
+      await loadReturningAgents(0, mitra, '')
+    } else {
+      await loadAgents(0, activeTab, mitra, '')
+    }
   }
 
   async function handlePicChange(pic: string) {
-    setFilterPic(pic); setPage(0)
-    await loadAgents(0, activeTab, filterMitra, pic)
+    setFilterPic(pic); setPage(0); setReturningPage(0)
+    if (activeTab === 'returning') {
+      await loadReturningAgents(0, filterMitra, pic)
+    } else {
+      await loadAgents(0, activeTab, filterMitra, pic)
+    }
   }
 
   async function handlePageChange(newPage: number) {
-    setPage(newPage)
-    await loadAgents(newPage, activeTab, filterMitra, filterPic)
+    if (activeTab === 'returning') {
+      setReturningPage(newPage)
+      await loadReturningAgents(newPage, filterMitra, filterPic)
+    } else {
+      setPage(newPage)
+      await loadAgents(newPage, activeTab, filterMitra, filterPic)
+    }
   }
 
   async function handleReset() {
-    setFilterMitra(''); setFilterPic(''); setActiveTab(''); setPage(0)
+    setFilterMitra(''); setFilterPic(''); setActiveTab(''); setPage(0); setReturningPage(0)
     await loadTrendCounts('', '')
     await loadAgents(0, '', '', '')
+    const rc = await supabase.rpc('get_returning_agents_count', { p_mitra: '', p_pic: '' })
+    setReturningCount(Number(rc.data ?? 0))
   }
 
   async function openDrawer(agent: ProductivityAgent) {
@@ -261,12 +316,15 @@ export default function ProductivityPage() {
     }
   }
 
-  const totalPages = Math.ceil(totalCount / PAGE_SIZE)
-  const feeProgress  = progress && monthlyTarget ? Math.min(100, Math.round(progress.total_fee / monthlyTarget * 100)) : null
-  const projectedFee = progress && progress.days_elapsed > 0 ? Math.round(progress.total_fee / progress.days_elapsed * progress.days_in_month) : null
-  const currentMonth = progress ? MONTHS[new Date(progress.end_date).getMonth()] : ''
-  const currentYear  = progress ? new Date(progress.end_date).getFullYear() : ''
+  const currentPage    = activeTab === 'returning' ? returningPage : page
+  const currentTotal   = activeTab === 'returning' ? returningCount : totalCount
+  const totalPages     = Math.ceil(currentTotal / PAGE_SIZE)
+  const feeProgress    = progress && monthlyTarget ? Math.min(100, Math.round(progress.total_fee / monthlyTarget * 100)) : null
+  const projectedFee   = progress && progress.days_elapsed > 0 ? Math.round(progress.total_fee / progress.days_elapsed * progress.days_in_month) : null
+  const currentMonth   = progress ? MONTHS[new Date(progress.end_date).getMonth()] : ''
+  const currentYear    = progress ? new Date(progress.end_date).getFullYear() : ''
   const liquiditySummary = liquidityDetail[0] ?? null
+  const isLoadingTable = activeTab === 'returning' ? loadingReturning : loading
 
   function TrendChip({ trend }: { trend: string }) {
     const cfg = TREND_CONFIG[trend as keyof typeof TREND_CONFIG] ?? TREND_CONFIG.consistent
@@ -348,7 +406,7 @@ export default function ProductivityPage() {
         )}
 
         {/* Tabs */}
-        <div style={{ display: 'flex', gap: '8px', marginBottom: '20px' }}>
+        <div style={{ display: 'flex', gap: '8px', marginBottom: '20px', flexWrap: 'wrap' }}>
           {(['growing', 'declining', 'consistent'] as const).map(tab => {
             const cfg = TREND_CONFIG[tab]
             const count = trendCounts[tab]
@@ -365,6 +423,22 @@ export default function ProductivityPage() {
               </button>
             )
           })}
+
+          {/* Tab Kembali Aktif */}
+          {(() => {
+            const isActive = activeTab === 'returning'
+            return (
+              <button onClick={() => handleTabChange(isActive ? '' : 'returning')}
+                onMouseEnter={e => setTooltip({ text: 'Agen yang muncul di 14H terakhir tapi tidak ada di 14H sebelumnya. Bisa agen baru atau agen yang sempat tidak aktif.', x: e.clientX, y: e.clientY })}
+                onMouseMove={e => setTooltip({ text: 'Agen yang muncul di 14H terakhir tapi tidak ada di 14H sebelumnya. Bisa agen baru atau agen yang sempat tidak aktif.', x: e.clientX, y: e.clientY })}
+                onMouseLeave={() => setTooltip(null)}
+                style={{ padding: '9px 18px', borderRadius: '8px', cursor: 'pointer', border: `2px solid ${isActive ? '#7c3aed' : '#e5e7eb'}`, backgroundColor: isActive ? '#f5f3ff' : '#fff', color: isActive ? '#7c3aed' : '#6b7280', fontSize: '13px', fontWeight: '600', transition: 'all 0.15s', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <span>🔄</span>
+                <span>Kembali Aktif</span>
+                <span style={{ padding: '1px 8px', borderRadius: '99px', fontSize: '11px', backgroundColor: isActive ? '#fff' : '#f3f4f6', color: isActive ? '#7c3aed' : '#9ca3af', fontWeight: '700' }}>{returningCount}</span>
+              </button>
+            )
+          })()}
         </div>
 
         {/* Filters */}
@@ -383,72 +457,149 @@ export default function ProductivityPage() {
             <button onClick={handleReset} style={{ padding: '7px 12px', borderRadius: '8px', border: '1px solid #e5e7eb', backgroundColor: '#fff', color: '#6b7280', fontSize: '12px', cursor: 'pointer' }}>✕ Reset</button>
           )}
           <span style={{ marginLeft: 'auto', fontSize: '13px', color: '#6b7280' }}>
-            {loading ? 'Memuat...' : (
+            {isLoadingTable ? 'Memuat...' : (
               <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
-                {totalCount.toLocaleString('id')} agen
-                <span
-                  onMouseEnter={e => setTooltip({ text: 'Hanya agen dengan aktif ≥2 hari bulan ini, total TRX ≥10, dan avg TRX/hari ≥3 dalam 14 hari terakhir yang ditampilkan.', x: e.clientX, y: e.clientY })}
-                  onMouseMove={e => setTooltip({ text: 'Hanya agen dengan aktif ≥2 hari bulan ini, total TRX ≥10, dan avg TRX/hari ≥3 dalam 14 hari terakhir yang ditampilkan.', x: e.clientX, y: e.clientY })}
-                  onMouseLeave={() => setTooltip(null)}
-                  style={{ fontSize: '11px', color: '#9ca3af', cursor: 'default', opacity: 0.7 }}>ⓘ</span>
+                {currentTotal.toLocaleString('id')} agen
+                {activeTab !== 'returning' && (
+                  <span
+                    onMouseEnter={e => setTooltip({ text: 'Hanya agen dengan aktif ≥2 hari bulan ini, total TRX ≥10, dan avg TRX/hari ≥3 dalam 14 hari terakhir yang ditampilkan.', x: e.clientX, y: e.clientY })}
+                    onMouseMove={e => setTooltip({ text: 'Hanya agen dengan aktif ≥2 hari bulan ini, total TRX ≥10, dan avg TRX/hari ≥3 dalam 14 hari terakhir yang ditampilkan.', x: e.clientX, y: e.clientY })}
+                    onMouseLeave={() => setTooltip(null)}
+                    style={{ fontSize: '11px', color: '#9ca3af', cursor: 'default', opacity: 0.7 }}>ⓘ</span>
+                )}
               </span>
             )}
           </span>
         </div>
 
-        {/* Table */}
-        {loading ? (
-          <div style={{ border: '1px solid #e5e7eb', borderRadius: '10px', overflow: 'hidden' }}>
-            {[1,2,3,4,5].map(i => (
-              <div key={i} style={{ display: 'grid', gridTemplateColumns: '100px 1fr 150px 150px 60px 80px 80px 80px', padding: '13px 16px', borderBottom: '1px solid #f3f4f6', gap: '16px', alignItems: 'center' }}>
-                <Skeleton width={70} height={20} /><div><Skeleton width={120} height={13} /><div style={{marginTop:4}}><Skeleton width={80} height={10} /></div></div>
-                <Skeleton width={100} height={12} /><Skeleton width={100} height={12} /><Skeleton width={30} height={12} /><Skeleton width={50} height={12} /><Skeleton width={50} height={12} /><Skeleton width={60} height={20} />
-              </div>
-            ))}
-          </div>
-        ) : agents.length > 0 ? (
-          <div style={{ border: '1px solid #e5e7eb', borderRadius: '10px', overflow: 'hidden' }}>
-            <div style={{ display: 'grid', gridTemplateColumns: '100px 1fr 150px 150px 60px 80px 80px 80px', padding: '10px 16px', backgroundColor: '#f9fafb', borderBottom: '1px solid #e5e7eb', fontSize: '11px', fontWeight: '700', color: '#9ca3af', letterSpacing: '0.05em' }}>
-              <div>TREND</div><div>AGEN</div><div>MITRA</div><div>PIC</div>
-              <div style={{ textAlign: 'center' }}>HARI</div>
-              <div style={{ textAlign: 'right' }}>TRX/HARI (14H)</div>
-              <div style={{ textAlign: 'right' }}>TRX/HARI (BLN)</div>
-              <div style={{ textAlign: 'right' }}>GROWTH</div>
-            </div>
-            {agents.map((agent, i) => (
-              <div key={agent.serial_number} onClick={() => openDrawer(agent)}
-                style={{ display: 'grid', gridTemplateColumns: '100px 1fr 150px 150px 60px 80px 80px 80px', padding: '11px 16px', borderBottom: i < agents.length - 1 ? '1px solid #f3f4f6' : 'none', alignItems: 'center', backgroundColor: '#fff', cursor: 'pointer' }}
-                onMouseEnter={e => e.currentTarget.style.backgroundColor = '#f9fafb'}
-                onMouseLeave={e => e.currentTarget.style.backgroundColor = '#fff'}>
-                <div><TrendChip trend={agent.trend} /></div>
-                <div>
-                  <div style={{ fontSize: '13px', fontWeight: '600', color: '#111827' }}>{agent.merchant_name ?? agent.serial_number}</div>
-                  <div style={{ fontSize: '10px', color: '#9ca3af', marginTop: '1px', display: 'flex', gap: '6px', alignItems: 'center' }}>
-                    <span>{agent.serial_number}</span><BucketChip b={agent.bucket} />
-                  </div>
+        {/* Table — Kembali Aktif */}
+        {activeTab === 'returning' ? (
+          loadingReturning ? (
+            <div style={{ border: '1px solid #e5e7eb', borderRadius: '10px', overflow: 'hidden' }}>
+              {[1,2,3,4,5].map(i => (
+                <div key={i} style={{ display: 'grid', gridTemplateColumns: '1fr 150px 150px 80px 90px 80px', padding: '13px 16px', borderBottom: '1px solid #f3f4f6', gap: '16px', alignItems: 'center' }}>
+                  <div><Skeleton width={120} height={13} /><div style={{marginTop:4}}><Skeleton width={80} height={10} /></div></div>
+                  <Skeleton width={100} height={12} /><Skeleton width={100} height={12} /><Skeleton width={60} height={12} /><Skeleton width={70} height={12} /><Skeleton width={60} height={12} />
                 </div>
-                <div style={{ fontSize: '12px', color: '#374151', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{agent.mitra ?? '—'}</div>
-                <div style={{ fontSize: '12px', color: '#374151', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{agent.pic ?? '—'}</div>
-                <div style={{ fontSize: '13px', fontWeight: '700', textAlign: 'center', color: agent.active_days_14 >= 8 ? '#166534' : agent.active_days_14 >= 5 ? '#ca8a04' : '#dc2626' }}>{agent.active_days_14}</div>
-                <div style={{ fontSize: '12px', color: '#374151', textAlign: 'right' }}>{Number(agent.avg_trx_14).toLocaleString('id')}</div>
-                <div style={{ fontSize: '12px', color: '#374151', textAlign: 'right' }}>{Number(agent.avg_trx_month).toLocaleString('id')}</div>
-                <div style={{ textAlign: 'right' }}>
-                  <span style={{ padding: '2px 8px', borderRadius: '99px', fontSize: '11px', fontWeight: '700', backgroundColor: agent.trx_change_pct > 0 ? '#dcfce7' : '#fee2e2', color: agent.trx_change_pct > 0 ? '#166534' : '#dc2626' }}>
-                    {agent.trx_change_pct > 0 ? '↑' : '↓'} {Math.abs(agent.trx_change_pct)}%
+              ))}
+            </div>
+          ) : returningAgents.length > 0 ? (
+            <div style={{ border: '1px solid #e5e7eb', borderRadius: '10px', overflow: 'hidden' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 150px 150px 80px 90px 80px', padding: '10px 16px', backgroundColor: '#f9fafb', borderBottom: '1px solid #e5e7eb', fontSize: '11px', fontWeight: '700', color: '#9ca3af', letterSpacing: '0.05em' }}>
+                <div>AGEN</div>
+                <div>MITRA</div>
+                <div>PIC</div>
+                <div style={{ textAlign: 'center' }}>
+                  <span
+                    onMouseEnter={e => setTooltip({ text: 'Tanggal pertama agen bertransaksi di 14H terakhir setelah sebelumnya tidak aktif.', x: e.clientX, y: e.clientY })}
+                    onMouseMove={e => setTooltip({ text: 'Tanggal pertama agen bertransaksi di 14H terakhir setelah sebelumnya tidak aktif.', x: e.clientX, y: e.clientY })}
+                    onMouseLeave={() => setTooltip(null)}>
+                    KEMBALI ⓘ
                   </span>
                 </div>
+                <div style={{ textAlign: 'right' }}>
+                  <span
+                    onMouseEnter={e => setTooltip({ text: 'Terakhir aktif sebelum window 14H ini. Null = tidak ada data historis (kemungkinan agen baru).', x: e.clientX, y: e.clientY })}
+                    onMouseMove={e => setTooltip({ text: 'Terakhir aktif sebelum window 14H ini. Null = tidak ada data historis (kemungkinan agen baru).', x: e.clientX, y: e.clientY })}
+                    onMouseLeave={() => setTooltip(null)}>
+                    TERAKHIR AKTIF ⓘ
+                  </span>
+                </div>
+                <div style={{ textAlign: 'right' }}>TRX 14H</div>
               </div>
-            ))}
-          </div>
+              {returningAgents.map((agent, i) => (
+                <div key={agent.serial_number}
+                  style={{ display: 'grid', gridTemplateColumns: '1fr 150px 150px 80px 90px 80px', padding: '11px 16px', borderBottom: i < returningAgents.length - 1 ? '1px solid #f3f4f6' : 'none', alignItems: 'center', backgroundColor: '#fff' }}>
+                  <div>
+                    <div style={{ fontSize: '13px', fontWeight: '600', color: '#111827' }}>{agent.merchant_name ?? agent.serial_number}</div>
+                    <div style={{ fontSize: '10px', color: '#9ca3af', marginTop: '1px' }}>{agent.serial_number}</div>
+                  </div>
+                  <div style={{ fontSize: '12px', color: '#374151', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{agent.mitra ?? '—'}</div>
+                  <div style={{ fontSize: '12px', color: '#374151', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{agent.pic ?? '—'}</div>
+                  <div style={{ textAlign: 'center' }}>
+                    <div style={{ fontSize: '11px', color: '#7c3aed', fontWeight: '600' }}>
+                      {new Date(agent.first_return_date).toLocaleDateString('id-ID', { day: 'numeric', month: 'short' })}
+                    </div>
+                  </div>
+                  <div style={{ textAlign: 'right' }}>
+                    {agent.last_seen_before ? (
+                      <div>
+                        <div style={{ fontSize: '11px', color: '#374151' }}>
+                          {new Date(agent.last_seen_before).toLocaleDateString('id-ID', { day: 'numeric', month: 'short' })}
+                        </div>
+                        {agent.days_inactive !== null && (
+                          <div style={{ fontSize: '10px', color: agent.days_inactive > 14 ? '#dc2626' : '#9ca3af' }}>
+                            {agent.days_inactive} hari lalu
+                          </div>
+                        )}
+                      </div>
+                    ) : (
+                      <span style={{ fontSize: '11px', color: '#9ca3af' }}>Agen baru</span>
+                    )}
+                  </div>
+                  <div style={{ fontSize: '12px', fontWeight: '600', color: '#374151', textAlign: 'right' }}>{agent.trx_count_14d.toLocaleString('id')}</div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div style={{ textAlign: 'center', padding: '60px', backgroundColor: '#f9fafb', borderRadius: '10px', border: '1px dashed #e5e7eb', color: '#9ca3af', fontSize: '13px' }}>Tidak ada agen kembali aktif</div>
+          )
+
         ) : (
-          <div style={{ textAlign: 'center', padding: '60px', backgroundColor: '#f9fafb', borderRadius: '10px', border: '1px dashed #e5e7eb', color: '#9ca3af', fontSize: '13px' }}>Tidak ada agen di kategori ini</div>
+          /* Table — Trend */
+          loading ? (
+            <div style={{ border: '1px solid #e5e7eb', borderRadius: '10px', overflow: 'hidden' }}>
+              {[1,2,3,4,5].map(i => (
+                <div key={i} style={{ display: 'grid', gridTemplateColumns: '100px 1fr 150px 150px 60px 80px 80px 80px', padding: '13px 16px', borderBottom: '1px solid #f3f4f6', gap: '16px', alignItems: 'center' }}>
+                  <Skeleton width={70} height={20} /><div><Skeleton width={120} height={13} /><div style={{marginTop:4}}><Skeleton width={80} height={10} /></div></div>
+                  <Skeleton width={100} height={12} /><Skeleton width={100} height={12} /><Skeleton width={30} height={12} /><Skeleton width={50} height={12} /><Skeleton width={50} height={12} /><Skeleton width={60} height={20} />
+                </div>
+              ))}
+            </div>
+          ) : agents.length > 0 ? (
+            <div style={{ border: '1px solid #e5e7eb', borderRadius: '10px', overflow: 'hidden' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '100px 1fr 150px 150px 60px 80px 80px 80px', padding: '10px 16px', backgroundColor: '#f9fafb', borderBottom: '1px solid #e5e7eb', fontSize: '11px', fontWeight: '700', color: '#9ca3af', letterSpacing: '0.05em' }}>
+                <div>TREND</div><div>AGEN</div><div>MITRA</div><div>PIC</div>
+                <div style={{ textAlign: 'center' }}>HARI</div>
+                <div style={{ textAlign: 'right' }}>TRX/HARI (14H)</div>
+                <div style={{ textAlign: 'right' }}>TRX/HARI (BLN)</div>
+                <div style={{ textAlign: 'right' }}>GROWTH</div>
+              </div>
+              {agents.map((agent, i) => (
+                <div key={agent.serial_number} onClick={() => openDrawer(agent)}
+                  style={{ display: 'grid', gridTemplateColumns: '100px 1fr 150px 150px 60px 80px 80px 80px', padding: '11px 16px', borderBottom: i < agents.length - 1 ? '1px solid #f3f4f6' : 'none', alignItems: 'center', backgroundColor: '#fff', cursor: 'pointer' }}
+                  onMouseEnter={e => e.currentTarget.style.backgroundColor = '#f9fafb'}
+                  onMouseLeave={e => e.currentTarget.style.backgroundColor = '#fff'}>
+                  <div><TrendChip trend={agent.trend} /></div>
+                  <div>
+                    <div style={{ fontSize: '13px', fontWeight: '600', color: '#111827' }}>{agent.merchant_name ?? agent.serial_number}</div>
+                    <div style={{ fontSize: '10px', color: '#9ca3af', marginTop: '1px', display: 'flex', gap: '6px', alignItems: 'center' }}>
+                      <span>{agent.serial_number}</span><BucketChip b={agent.bucket} />
+                    </div>
+                  </div>
+                  <div style={{ fontSize: '12px', color: '#374151', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{agent.mitra ?? '—'}</div>
+                  <div style={{ fontSize: '12px', color: '#374151', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{agent.pic ?? '—'}</div>
+                  <div style={{ fontSize: '13px', fontWeight: '700', textAlign: 'center', color: agent.active_days_14 >= 8 ? '#166534' : agent.active_days_14 >= 5 ? '#ca8a04' : '#dc2626' }}>{agent.active_days_14}</div>
+                  <div style={{ fontSize: '12px', color: '#374151', textAlign: 'right' }}>{Number(agent.avg_trx_14).toLocaleString('id')}</div>
+                  <div style={{ fontSize: '12px', color: '#374151', textAlign: 'right' }}>{Number(agent.avg_trx_month).toLocaleString('id')}</div>
+                  <div style={{ textAlign: 'right' }}>
+                    <span style={{ padding: '2px 8px', borderRadius: '99px', fontSize: '11px', fontWeight: '700', backgroundColor: agent.trx_change_pct > 0 ? '#dcfce7' : '#fee2e2', color: agent.trx_change_pct > 0 ? '#166534' : '#dc2626' }}>
+                      {agent.trx_change_pct > 0 ? '↑' : '↓'} {Math.abs(agent.trx_change_pct)}%
+                    </span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div style={{ textAlign: 'center', padding: '60px', backgroundColor: '#f9fafb', borderRadius: '10px', border: '1px dashed #e5e7eb', color: '#9ca3af', fontSize: '13px' }}>Tidak ada agen di kategori ini</div>
+          )
         )}
 
         {totalPages > 1 && (
           <div style={{ display: 'flex', justifyContent: 'center', gap: '8px', alignItems: 'center', marginTop: '16px' }}>
-            <button onClick={() => handlePageChange(Math.max(0, page - 1))} disabled={page === 0} style={{ padding: '7px 14px', borderRadius: '8px', border: '1px solid #e5e7eb', backgroundColor: '#fff', color: page === 0 ? '#d1d5db' : '#374151', fontSize: '13px', cursor: page === 0 ? 'not-allowed' : 'pointer' }}>← Prev</button>
-            <span style={{ fontSize: '13px', color: '#6b7280' }}>{page + 1} / {totalPages}</span>
-            <button onClick={() => handlePageChange(Math.min(totalPages - 1, page + 1))} disabled={page >= totalPages - 1} style={{ padding: '7px 14px', borderRadius: '8px', border: '1px solid #e5e7eb', backgroundColor: '#fff', color: page >= totalPages - 1 ? '#d1d5db' : '#374151', fontSize: '13px', cursor: page >= totalPages - 1 ? 'not-allowed' : 'pointer' }}>Next →</button>
+            <button onClick={() => handlePageChange(Math.max(0, currentPage - 1))} disabled={currentPage === 0} style={{ padding: '7px 14px', borderRadius: '8px', border: '1px solid #e5e7eb', backgroundColor: '#fff', color: currentPage === 0 ? '#d1d5db' : '#374151', fontSize: '13px', cursor: currentPage === 0 ? 'not-allowed' : 'pointer' }}>← Prev</button>
+            <span style={{ fontSize: '13px', color: '#6b7280' }}>{currentPage + 1} / {totalPages}</span>
+            <button onClick={() => handlePageChange(Math.min(totalPages - 1, currentPage + 1))} disabled={currentPage >= totalPages - 1} style={{ padding: '7px 14px', borderRadius: '8px', border: '1px solid #e5e7eb', backgroundColor: '#fff', color: currentPage >= totalPages - 1 ? '#d1d5db' : '#374151', fontSize: '13px', cursor: currentPage >= totalPages - 1 ? 'not-allowed' : 'pointer' }}>Next →</button>
           </div>
         )}
       </div>
