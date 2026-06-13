@@ -53,6 +53,7 @@ const LIQUIDITY_CONFIG = {
   no_data: { label: '—',       color: '#9ca3af', bg: '#f9fafb', border: '#e5e7eb', sublabel: 'Tidak ada data MTD',       tooltip: 'Tidak ada transaksi di bulan berjalan.' },
 }
 
+const PAGE_SIZE = 25
 const SKELETON_STYLE = `@keyframes shimmer { 0% { background-position: 200% 0 } 100% { background-position: -200% 0 } }`
 
 function Skeleton({ width, height = 14, radius = 6 }: { width: string | number, height?: number, radius?: number }) {
@@ -81,11 +82,17 @@ export default function AgentLiquidityPage() {
 
   const [agents, setAgents] = useState<AgentLiquidityRow[]>([])
   const [loading, setLoading] = useState(true)
+  const [totalCount, setTotalCount] = useState(0)
+  const [statusCounts, setStatusCounts] = useState({ lemah: 0, menurun: 0, kuat: 0 })
+
   const [filterMitra, setFilterMitra] = useState('')
   const [filterPic, setFilterPic] = useState('')
   const [filterStatus, setFilterStatus] = useState('')
   const [page, setPage] = useState(0)
-  const PAGE_SIZE = 25
+
+  const [mitras, setMitras] = useState<string[]>([])
+  const [pics, setPics] = useState<string[]>([])
+
   const [sinceDate, setSinceDate] = useState('')
   const [lastDate, setLastDate] = useState('')
 
@@ -96,17 +103,15 @@ export default function AgentLiquidityPage() {
 
   const [tooltip, setTooltip] = useState<{ text: string, x: number, y: number } | null>(null)
 
-  useEffect(() => { init() }, [router.asPath])
+  useEffect(() => { initPage() }, [router.asPath])
 
-  async function init() {
+  async function initPage() {
     setLoading(true)
     try {
-      const [agentsRes, progressRes] = await Promise.all([
-        supabase.rpc('get_agent_liquidity_list'),
+      const [progressRes, filterRes] = await Promise.all([
         supabase.rpc('get_monthly_progress'),
+        supabase.rpc('get_agent_liquidity_filter_options'),
       ])
-
-      setAgents(agentsRes.data ?? [])
 
       if (progressRes.data) {
         const d = typeof progressRes.data === 'string' ? JSON.parse(progressRes.data) : progressRes.data
@@ -115,9 +120,71 @@ export default function AgentLiquidityPage() {
         const sd = new Date(y, m - 1, dd - 13)
         setSinceDate(`${sd.getFullYear()}-${String(sd.getMonth() + 1).padStart(2, '0')}-${String(sd.getDate()).padStart(2, '0')}`)
       }
+
+      if (filterRes.data?.[0]) {
+        setMitras(filterRes.data[0].mitras ?? [])
+        setPics(filterRes.data[0].pics ?? [])
+      }
+
+      await loadStatusCounts('', '')
+      await loadAgents(0, '', '', '')
     } finally {
       setLoading(false)
     }
+  }
+
+  async function loadStatusCounts(mitra: string, pic: string) {
+    const [l, m, k] = await Promise.all([
+      supabase.rpc('get_agent_liquidity_list_count', { p_mitra: mitra, p_pic: pic, p_status: 'lemah' }),
+      supabase.rpc('get_agent_liquidity_list_count', { p_mitra: mitra, p_pic: pic, p_status: 'menurun' }),
+      supabase.rpc('get_agent_liquidity_list_count', { p_mitra: mitra, p_pic: pic, p_status: 'kuat' }),
+    ])
+    setStatusCounts({ lemah: Number(l.data ?? 0), menurun: Number(m.data ?? 0), kuat: Number(k.data ?? 0) })
+  }
+
+  async function loadAgents(newPage: number, mitra: string, pic: string, status: string) {
+    setLoading(true)
+    try {
+      const [dataRes, countRes] = await Promise.all([
+        supabase.rpc('get_agent_liquidity_list', {
+          p_mitra: mitra, p_pic: pic, p_status: status,
+          p_limit: PAGE_SIZE, p_offset: newPage * PAGE_SIZE,
+        }),
+        supabase.rpc('get_agent_liquidity_list_count', { p_mitra: mitra, p_pic: pic, p_status: status }),
+      ])
+      setAgents(dataRes.data ?? [])
+      setTotalCount(Number(countRes.data ?? 0))
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  async function handleMitraChange(mitra: string) {
+    setFilterMitra(mitra); setFilterPic(''); setPage(0)
+    await loadStatusCounts(mitra, '')
+    await loadAgents(0, mitra, '', filterStatus)
+  }
+
+  async function handlePicChange(pic: string) {
+    setFilterPic(pic); setPage(0)
+    await loadAgents(0, filterMitra, pic, filterStatus)
+  }
+
+  async function handleStatusChange(status: string) {
+    const newStatus = filterStatus === status ? '' : status
+    setFilterStatus(newStatus); setPage(0)
+    await loadAgents(0, filterMitra, filterPic, newStatus)
+  }
+
+  async function handlePageChange(newPage: number) {
+    setPage(newPage)
+    await loadAgents(newPage, filterMitra, filterPic, filterStatus)
+  }
+
+  async function handleReset() {
+    setFilterMitra(''); setFilterPic(''); setFilterStatus(''); setPage(0)
+    await loadStatusCounts('', '')
+    await loadAgents(0, '', '', '')
   }
 
   async function openDrawer(agent: AgentLiquidityRow) {
@@ -137,26 +204,20 @@ export default function AgentLiquidityPage() {
     }
   }
 
-  const mitras = [...new Set(agents.map(a => a.mitra).filter(Boolean) as string[])].sort()
-  const pics   = [...new Set(agents.filter(a => !filterMitra || a.mitra === filterMitra).map(a => a.pic).filter(Boolean) as string[])].sort()
-
-  const filtered = agents
-    .filter(a => !filterMitra || a.mitra === filterMitra)
-    .filter(a => !filterPic || a.pic === filterPic)
-    .filter(a => !filterStatus || a.liquidity_status === filterStatus)
-
-  const totalPages = Math.ceil(filtered.length / PAGE_SIZE)
-  const paginated  = filtered.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE)
-
-  const lemahCount   = agents.filter(a => a.liquidity_status === 'lemah').length
-  const menurunCount = agents.filter(a => a.liquidity_status === 'menurun').length
-  const kuatCount    = agents.filter(a => a.liquidity_status === 'kuat').length
-
+  const totalPages = Math.ceil(totalCount / PAGE_SIZE)
   const liquiditySummary = liquidityDetail[0] ?? null
 
   function LiquidityChip({ status }: { status: string }) {
     const cfg = LIQUIDITY_CONFIG[status as keyof typeof LIQUIDITY_CONFIG] ?? LIQUIDITY_CONFIG.no_data
-    return <span style={{ padding: '2px 8px', borderRadius: '99px', fontSize: '11px', fontWeight: '700', backgroundColor: cfg.bg, color: cfg.color, border: `1px solid ${cfg.border}`, whiteSpace: 'nowrap' }}>{cfg.label}</span>
+    return (
+      <span
+        onMouseEnter={e => setTooltip({ text: cfg.tooltip, x: e.clientX, y: e.clientY })}
+        onMouseMove={e => setTooltip({ text: cfg.tooltip, x: e.clientX, y: e.clientY })}
+        onMouseLeave={() => setTooltip(null)}
+        style={{ padding: '2px 8px', borderRadius: '99px', fontSize: '11px', fontWeight: '700', backgroundColor: cfg.bg, color: cfg.color, border: `1px solid ${cfg.border}`, whiteSpace: 'nowrap', cursor: 'default' }}>
+        {cfg.label}
+      </span>
+    )
   }
 
   return (
@@ -164,7 +225,6 @@ export default function AgentLiquidityPage() {
       <style>{SKELETON_STYLE}</style>
       <Head><title>Agent Liquidity — AMARIS</title></Head>
 
-      {/* Tooltip */}
       {tooltip && (
         <div style={{ position: 'fixed', left: tooltip.x + 12, top: tooltip.y - 8, zIndex: 9999, backgroundColor: '#1f2937', color: '#f9fafb', fontSize: '11px', padding: '8px 12px', borderRadius: '8px', maxWidth: '240px', lineHeight: '1.5', pointerEvents: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.3)' }}>
           {tooltip.text}
@@ -173,25 +233,24 @@ export default function AgentLiquidityPage() {
 
       <div style={{ maxWidth: '1200px', margin: '0 auto', padding: '32px 24px' }}>
 
-        {/* Header */}
         <div style={{ marginBottom: '24px' }}>
           <div style={{ fontSize: '11px', fontWeight: '600', color: '#9ca3af', letterSpacing: '0.1em', marginBottom: '4px' }}>ANALITIK AGEN</div>
           <h1 style={{ fontSize: '24px', fontWeight: '800', color: '#111827', margin: 0, letterSpacing: '-0.02em' }}>💧 Agent Liquidity</h1>
           <p style={{ fontSize: '13px', color: '#6b7280', marginTop: '4px' }}>
             Estimasi kekuatan float agen — perbandingan avg nominal transaksi harian bulan ini vs 14 hari terakhir.
-            {!loading && <span style={{ marginLeft: '8px', color: '#9ca3af' }}>{agents.length.toLocaleString('id')} agen terdaftar</span>}
+            {!loading && <span style={{ marginLeft: '8px', color: '#9ca3af' }}>{totalCount.toLocaleString('id')} agen</span>}
           </p>
         </div>
 
         {/* Summary Cards */}
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '12px', marginBottom: '24px' }}>
           {([
-            { status: 'lemah',   count: lemahCount,   cfg: LIQUIDITY_CONFIG.lemah },
-            { status: 'menurun', count: menurunCount, cfg: LIQUIDITY_CONFIG.menurun },
-            { status: 'kuat',    count: kuatCount,    cfg: LIQUIDITY_CONFIG.kuat },
+            { status: 'lemah',   count: statusCounts.lemah,   cfg: LIQUIDITY_CONFIG.lemah },
+            { status: 'menurun', count: statusCounts.menurun, cfg: LIQUIDITY_CONFIG.menurun },
+            { status: 'kuat',    count: statusCounts.kuat,    cfg: LIQUIDITY_CONFIG.kuat },
           ] as const).map(({ status, count, cfg }) => (
             <button key={status}
-              onClick={() => { setFilterStatus(filterStatus === status ? '' : status); setPage(0) }}
+              onClick={() => handleStatusChange(status)}
               onMouseEnter={e => setTooltip({ text: cfg.tooltip, x: e.clientX, y: e.clientY })}
               onMouseMove={e => setTooltip({ text: cfg.tooltip, x: e.clientX, y: e.clientY })}
               onMouseLeave={() => setTooltip(null)}
@@ -205,22 +264,21 @@ export default function AgentLiquidityPage() {
 
         {/* Filters */}
         <div style={{ display: 'flex', gap: '10px', marginBottom: '16px', flexWrap: 'wrap', alignItems: 'center' }}>
-          <select value={filterMitra} onChange={e => { setFilterMitra(e.target.value); setFilterPic(''); setPage(0) }}
+          <select value={filterMitra} onChange={e => handleMitraChange(e.target.value)}
             style={{ padding: '7px 12px', borderRadius: '8px', border: '1px solid #e5e7eb', fontSize: '12px', color: '#374151', backgroundColor: '#fff', cursor: 'pointer' }}>
             <option value="">Semua Mitra</option>
             {mitras.map(m => <option key={m} value={m}>{m}</option>)}
           </select>
-          <select value={filterPic} onChange={e => { setFilterPic(e.target.value); setPage(0) }}
+          <select value={filterPic} onChange={e => handlePicChange(e.target.value)}
             style={{ padding: '7px 12px', borderRadius: '8px', border: '1px solid #e5e7eb', fontSize: '12px', color: '#374151', backgroundColor: '#fff', cursor: 'pointer', maxWidth: '180px' }}>
             <option value="">Semua PIC</option>
             {pics.map(p => <option key={p} value={p}>{p}</option>)}
           </select>
           {(filterMitra || filterPic || filterStatus) && (
-            <button onClick={() => { setFilterMitra(''); setFilterPic(''); setFilterStatus(''); setPage(0) }}
-              style={{ padding: '7px 12px', borderRadius: '8px', border: '1px solid #e5e7eb', backgroundColor: '#fff', color: '#6b7280', fontSize: '12px', cursor: 'pointer' }}>✕ Reset</button>
+            <button onClick={handleReset} style={{ padding: '7px 12px', borderRadius: '8px', border: '1px solid #e5e7eb', backgroundColor: '#fff', color: '#6b7280', fontSize: '12px', cursor: 'pointer' }}>✕ Reset</button>
           )}
           <span style={{ marginLeft: 'auto', fontSize: '13px', color: '#6b7280' }}>
-            {loading ? 'Memuat...' : `${filtered.length.toLocaleString('id')} agen`}
+            {loading ? 'Memuat...' : `${totalCount.toLocaleString('id')} agen`}
           </span>
         </div>
 
@@ -229,14 +287,12 @@ export default function AgentLiquidityPage() {
           <div style={{ border: '1px solid #e5e7eb', borderRadius: '10px', overflow: 'hidden' }}>
             {[1,2,3,4,5].map(i => (
               <div key={i} style={{ display: 'grid', gridTemplateColumns: '90px 1fr 150px 150px 130px 130px 70px', padding: '13px 16px', borderBottom: '1px solid #f3f4f6', gap: '16px', alignItems: 'center' }}>
-                <Skeleton width={60} height={20} />
-                <div><Skeleton width={140} height={13} /><div style={{marginTop:4}}><Skeleton width={90} height={10} /></div></div>
-                <Skeleton width={100} height={12} /><Skeleton width={100} height={12} />
-                <Skeleton width={80} height={12} /><Skeleton width={80} height={12} /><Skeleton width={40} height={12} />
+                <Skeleton width={60} height={20} /><div><Skeleton width={140} height={13} /><div style={{marginTop:4}}><Skeleton width={90} height={10} /></div></div>
+                <Skeleton width={100} height={12} /><Skeleton width={100} height={12} /><Skeleton width={80} height={12} /><Skeleton width={80} height={12} /><Skeleton width={40} height={12} />
               </div>
             ))}
           </div>
-        ) : filtered.length > 0 ? (
+        ) : agents.length > 0 ? (
           <div style={{ border: '1px solid #e5e7eb', borderRadius: '10px', overflow: 'hidden' }}>
             <div style={{ display: 'grid', gridTemplateColumns: '90px 1fr 150px 150px 130px 130px 70px', padding: '10px 16px', backgroundColor: '#f9fafb', borderBottom: '1px solid #e5e7eb', fontSize: '11px', fontWeight: '700', color: '#9ca3af', letterSpacing: '0.05em' }}>
               <div>STATUS</div><div>AGEN</div><div>MITRA</div><div>PIC</div>
@@ -244,11 +300,11 @@ export default function AgentLiquidityPage() {
               <div style={{ textAlign: 'right' }}>AVG AMOUNT/HARI (MTD)</div>
               <div style={{ textAlign: 'right' }}>RATIO</div>
             </div>
-            {paginated.map((agent, i) => {
+            {agents.map((agent, i) => {
               const cfg = LIQUIDITY_CONFIG[agent.liquidity_status] ?? LIQUIDITY_CONFIG.no_data
               return (
                 <div key={agent.serial_number} onClick={() => openDrawer(agent)}
-                  style={{ display: 'grid', gridTemplateColumns: '90px 1fr 150px 150px 130px 130px 70px', padding: '11px 16px', borderBottom: i < paginated.length - 1 ? '1px solid #f3f4f6' : 'none', alignItems: 'center', backgroundColor: '#fff', cursor: 'pointer' }}
+                  style={{ display: 'grid', gridTemplateColumns: '90px 1fr 150px 150px 130px 130px 70px', padding: '11px 16px', borderBottom: i < agents.length - 1 ? '1px solid #f3f4f6' : 'none', alignItems: 'center', backgroundColor: '#fff', cursor: 'pointer' }}
                   onMouseEnter={e => e.currentTarget.style.backgroundColor = '#f9fafb'}
                   onMouseLeave={e => e.currentTarget.style.backgroundColor = '#fff'}>
                   <div><LiquidityChip status={agent.liquidity_status} /></div>
@@ -269,12 +325,11 @@ export default function AgentLiquidityPage() {
           <div style={{ textAlign: 'center', padding: '60px', backgroundColor: '#f9fafb', borderRadius: '10px', border: '1px dashed #e5e7eb', color: '#9ca3af', fontSize: '13px' }}>Tidak ada agen ditemukan</div>
         )}
 
-        {/* Pagination */}
         {totalPages > 1 && (
           <div style={{ display: 'flex', justifyContent: 'center', gap: '8px', alignItems: 'center', marginTop: '16px' }}>
-            <button onClick={() => setPage(p => Math.max(0, p - 1))} disabled={page === 0} style={{ padding: '7px 14px', borderRadius: '8px', border: '1px solid #e5e7eb', backgroundColor: '#fff', color: page === 0 ? '#d1d5db' : '#374151', fontSize: '13px', cursor: page === 0 ? 'not-allowed' : 'pointer' }}>← Prev</button>
+            <button onClick={() => handlePageChange(Math.max(0, page - 1))} disabled={page === 0} style={{ padding: '7px 14px', borderRadius: '8px', border: '1px solid #e5e7eb', backgroundColor: '#fff', color: page === 0 ? '#d1d5db' : '#374151', fontSize: '13px', cursor: page === 0 ? 'not-allowed' : 'pointer' }}>← Prev</button>
             <span style={{ fontSize: '13px', color: '#6b7280' }}>{page + 1} / {totalPages}</span>
-            <button onClick={() => setPage(p => Math.min(totalPages - 1, p + 1))} disabled={page >= totalPages - 1} style={{ padding: '7px 14px', borderRadius: '8px', border: '1px solid #e5e7eb', backgroundColor: '#fff', color: page >= totalPages - 1 ? '#d1d5db' : '#374151', fontSize: '13px', cursor: page >= totalPages - 1 ? 'not-allowed' : 'pointer' }}>Next →</button>
+            <button onClick={() => handlePageChange(Math.min(totalPages - 1, page + 1))} disabled={page >= totalPages - 1} style={{ padding: '7px 14px', borderRadius: '8px', border: '1px solid #e5e7eb', backgroundColor: '#fff', color: page >= totalPages - 1 ? '#d1d5db' : '#374151', fontSize: '13px', cursor: page >= totalPages - 1 ? 'not-allowed' : 'pointer' }}>Next →</button>
           </div>
         )}
       </div>
@@ -285,7 +340,6 @@ export default function AgentLiquidityPage() {
           <div onClick={() => setSelectedAgent(null)} style={{ position: 'absolute', inset: 0, backgroundColor: 'rgba(0,0,0,0.3)' }} />
           <div style={{ position: 'relative', width: '480px', height: '100%', backgroundColor: '#fff', boxShadow: '-4px 0 24px rgba(0,0,0,0.12)', display: 'flex', flexDirection: 'column', overflowY: 'auto' }}>
 
-            {/* Header */}
             <div style={{ padding: '20px 24px', borderBottom: '1px solid #f3f4f6', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', position: 'sticky', top: 0, backgroundColor: '#fff', zIndex: 1 }}>
               <div>
                 <div style={{ fontSize: '18px', fontWeight: '800', color: '#111827', marginBottom: '4px' }}>{selectedAgent.merchant_name ?? selectedAgent.serial_number}</div>
@@ -300,7 +354,6 @@ export default function AgentLiquidityPage() {
             ) : (
               <div style={{ padding: '20px 24px' }}>
 
-                {/* Info Agen */}
                 {agentDetail.length > 0 && (() => {
                   const latest = agentDetail[agentDetail.length - 1]
                   return (
@@ -324,7 +377,6 @@ export default function AgentLiquidityPage() {
                   )
                 })()}
 
-                {/* Likuiditas cards */}
                 <div style={{ marginBottom: '24px' }}>
                   <div style={{ fontSize: '11px', fontWeight: '700', color: '#9ca3af', letterSpacing: '0.08em', marginBottom: '12px' }}>LIKUIDITAS</div>
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
@@ -349,7 +401,6 @@ export default function AgentLiquidityPage() {
                   </div>
                 </div>
 
-                {/* Ringkasan 14 Hari */}
                 {agentDetail.length > 0 && (
                   <div style={{ marginBottom: '24px' }}>
                     <div style={{ fontSize: '11px', fontWeight: '700', color: '#9ca3af', letterSpacing: '0.08em', marginBottom: '12px' }}>RINGKASAN 14 HARI</div>
@@ -368,7 +419,6 @@ export default function AgentLiquidityPage() {
                   </div>
                 )}
 
-                {/* Grafik TRX per hari */}
                 {agentDetail.length > 0 && (
                   <div style={{ marginBottom: '24px' }}>
                     <div style={{ fontSize: '11px', fontWeight: '700', color: '#9ca3af', letterSpacing: '0.08em', marginBottom: '12px' }}>TRANSAKSI PER HARI (14H)</div>
@@ -395,7 +445,6 @@ export default function AgentLiquidityPage() {
                   </div>
                 )}
 
-                {/* Grafik Amount per hari */}
                 {liquidityDetail.length > 0 && (
                   <div>
                     <div style={{ fontSize: '11px', fontWeight: '700', color: '#9ca3af', letterSpacing: '0.08em', marginBottom: '12px' }}>NOMINAL UANG BEREDAR (14H)</div>
