@@ -39,9 +39,9 @@ interface MitraChurn {
 }
 
 const MOMENTUM_CONFIG = {
-  accelerating: { label: 'Akselerasi', icon: '↑', color: '#166534', bg: '#dcfce7', border: '#bbf7d0', tooltip: 'TRX minggu kedua > 110% dari minggu pertama dalam 14 hari terakhir.' },
-  stable:       { label: 'Stabil',     icon: '→', color: '#1e40af', bg: '#eff6ff', border: '#bfdbfe', tooltip: 'TRX minggu kedua antara 90–110% dari minggu pertama.' },
-  decelerating: { label: 'Melambat',   icon: '↓', color: '#dc2626', bg: '#fee2e2', border: '#fecaca', tooltip: 'TRX minggu kedua < 90% dari minggu pertama. Perlu investigasi.' },
+  accelerating: { label: 'Akselerasi', icon: '↑', color: '#166534', bg: '#dcfce7', border: '#bbf7d0', tooltip: 'TRX W2 (7 hari terakhir) > 110% dari W1 (7 hari pertama). Jaringan mitra sedang tumbuh.' },
+  stable:       { label: 'Stabil',     icon: '→', color: '#1e40af', bg: '#eff6ff', border: '#bfdbfe', tooltip: 'TRX W2 antara 90–110% dari W1. Volume konsisten.' },
+  decelerating: { label: 'Melambat',   icon: '↓', color: '#dc2626', bg: '#fee2e2', border: '#fecaca', tooltip: 'TRX W2 < 90% dari W1. Volume menurun di minggu terakhir — perlu investigasi.' },
 }
 
 const SKELETON_STYLE = `@keyframes shimmer { 0% { background-position: 200% 0 } 100% { background-position: -200% 0 } }`
@@ -73,6 +73,15 @@ function HealthBar({ score }: { score: number }) {
   )
 }
 
+function exportCSV(filename: string, headers: string[], rows: (string | number)[][]) {
+  const csv = [headers, ...rows].map(r => r.map(v => `"${v}"`).join(',')).join('\n')
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
+  const url  = URL.createObjectURL(blob)
+  const a    = document.createElement('a')
+  a.href = url; a.download = filename; a.click()
+  URL.revokeObjectURL(url)
+}
+
 export default function MitraPage() {
   const router = useRouter()
   const supabase = createBrowserClient(
@@ -80,9 +89,11 @@ export default function MitraPage() {
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
   )
 
-  const [mitras, setMitras]   = useState<MitraRow[]>([])
-  const [loading, setLoading] = useState(true)
-  const [tooltip, setTooltip] = useState<{ text: string, x: number, y: number } | null>(null)
+  const [mitras, setMitras]     = useState<MitraRow[]>([])
+  const [loading, setLoading]   = useState(true)
+  const [activeTab, setActiveTab] = useState<'accelerating' | 'stable' | 'decelerating' | ''>('')
+  const [tooltip, setTooltip]   = useState<{ text: string, x: number, y: number } | null>(null)
+  const [exporting, setExporting] = useState(false)
 
   const [selected, setSelected]           = useState<MitraRow | null>(null)
   const [detail, setDetail]               = useState<MitraDetail[]>([])
@@ -102,9 +113,7 @@ export default function MitraPage() {
   }
 
   async function openDrawer(m: MitraRow) {
-    setSelected(m)
-    setDetail([]); setChurn(null)
-    setLoadingDrawer(true)
+    setSelected(m); setDetail([]); setChurn(null); setLoadingDrawer(true)
     try {
       const [d, c] = await Promise.all([
         supabase.rpc('get_mitra_detail',      { p_mitra: m.mitra }),
@@ -112,9 +121,24 @@ export default function MitraPage() {
       ])
       setDetail(d.data ?? [])
       setChurn(c.data?.[0] ?? null)
-    } finally {
-      setLoadingDrawer(false)
-    }
+    } finally { setLoadingDrawer(false) }
+  }
+
+  function handleExport() {
+    setExporting(true)
+    try {
+      const rows = filtered.map(m => [
+        m.mitra, m.total_agents, m.total_fee_14d, m.fee_per_agent,
+        m.momentum, m.momentum_pct,
+        m.growing_count, m.growing_pct,
+        m.declining_count, m.declining_pct,
+        m.liquidity_lemah_count, m.liquidity_lemah_pct,
+        m.health_score, m.total_trx_14d,
+      ])
+      exportCSV(`kekuatan_mitra_${new Date().toISOString().split('T')[0]}.csv`,
+        ['Mitra','Agen','Fee 14H','Fee/Agen','Momentum','Momentum %','Growing','Growing %','Declining','Declining %','Liq Lemah','Liq Lemah %','Health Score','TRX 14H'],
+        rows)
+    } finally { setExporting(false) }
   }
 
   const tip = (text: string) => ({
@@ -122,6 +146,13 @@ export default function MitraPage() {
     onMouseMove:  (e: React.MouseEvent) => setTooltip({ text, x: e.clientX, y: e.clientY }),
     onMouseLeave: () => setTooltip(null),
   })
+
+  const filtered = activeTab ? mitras.filter(m => m.momentum === activeTab) : mitras
+  const counts = {
+    accelerating: mitras.filter(m => m.momentum === 'accelerating').length,
+    stable:       mitras.filter(m => m.momentum === 'stable').length,
+    decelerating: mitras.filter(m => m.momentum === 'decelerating').length,
+  }
 
   const maxTrx = detail.length > 0 ? Math.max(...detail.map(d => d.daily_trx)) : 1
   const maxFee = detail.length > 0 ? Math.max(...detail.map(d => d.fee_per_active_agent)) : 1
@@ -133,7 +164,7 @@ export default function MitraPage() {
     if (m.declining_pct > 15)          s.push({ type: 'red',    text: `${m.declining_pct}% agen declining — butuh perhatian segera` })
     if (m.liquidity_lemah_pct > 10)    s.push({ type: 'yellow', text: `${m.liquidity_lemah_pct}% agen liquidity lemah — risiko penurunan volume` })
     if (ch && ch.lost_agents > 10)     s.push({ type: 'red',    text: `${ch.lost_agents} agen hilang vs 14H sebelumnya` })
-    if (ch && ch.new_agents > 20)      s.push({ type: 'green',  text: `${ch.new_agents} agen baru aktif vs 14H sebelumnya` })
+    if (ch && ch.new_agents > 20)      s.push({ type: 'green',  text: `${ch.new_agents} agen baru/kembali aktif vs 14H sebelumnya` })
     return s
   }
 
@@ -158,23 +189,47 @@ export default function MitraPage() {
           </p>
         </div>
 
+        {/* Momentum Tabs */}
+        <div style={{ display: 'flex', gap: '8px', marginBottom: '16px', flexWrap: 'wrap', alignItems: 'center' }}>
+          {(['accelerating', 'stable', 'decelerating'] as const).map(tab => {
+            const cfg = MOMENTUM_CONFIG[tab]
+            const isActive = activeTab === tab
+            return (
+              <button key={tab} onClick={() => setActiveTab(isActive ? '' : tab)}
+                onMouseEnter={e => setTooltip({ text: cfg.tooltip, x: e.clientX, y: e.clientY })}
+                onMouseMove={e => setTooltip({ text: cfg.tooltip, x: e.clientX, y: e.clientY })}
+                onMouseLeave={() => setTooltip(null)}
+                style={{ padding: '9px 18px', borderRadius: '8px', cursor: 'pointer', border: `2px solid ${isActive ? cfg.color : '#e5e7eb'}`, backgroundColor: isActive ? cfg.bg : '#fff', color: isActive ? cfg.color : '#6b7280', fontSize: '13px', fontWeight: '600', transition: 'all 0.15s', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <span>{cfg.icon}</span>
+                <span>{cfg.label}</span>
+                <span style={{ padding: '1px 8px', borderRadius: '99px', fontSize: '11px', backgroundColor: isActive ? '#fff' : '#f3f4f6', color: isActive ? cfg.color : '#9ca3af', fontWeight: '700' }}>{counts[tab]}</span>
+              </button>
+            )
+          })}
+          <span style={{ marginLeft: 'auto', fontSize: '13px', color: '#6b7280' }}>{filtered.length} mitra</span>
+          <button onClick={handleExport} disabled={exporting || loading}
+            style={{ padding: '7px 14px', borderRadius: '8px', border: '1px solid #e5e7eb', backgroundColor: '#fff', color: exporting ? '#9ca3af' : '#374151', fontSize: '12px', cursor: exporting ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}>
+            {exporting ? '⏳' : '⬇'} Export CSV
+          </button>
+        </div>
+
+        {/* Table */}
         {loading ? (
           <div style={{ border: '1px solid #e5e7eb', borderRadius: '10px', overflow: 'hidden' }}>
             {[1,2,3,4,5].map(i => (
-              <div key={i} style={{ display: 'grid', gridTemplateColumns: '1fr 70px 90px 110px 100px 90px 70px 70px 80px 70px', padding: '14px 16px', borderBottom: '1px solid #f3f4f6', gap: '12px', alignItems: 'center' }}>
+              <div key={i} style={{ display: 'grid', gridTemplateColumns: '1fr 70px 100px 110px 90px 70px 70px 80px 70px', padding: '14px 16px', borderBottom: '1px solid #f3f4f6', gap: '12px', alignItems: 'center' }}>
                 <Skeleton width={160} height={14} />
-                {[70,80,90,80,80,60,60,60,50].map((w, j) => <Skeleton key={j} width={w} height={12} />)}
+                {[70,80,90,80,60,60,60,50].map((w, j) => <Skeleton key={j} width={w} height={12} />)}
               </div>
             ))}
           </div>
         ) : (
           <div style={{ border: '1px solid #e5e7eb', borderRadius: '10px', overflow: 'hidden' }}>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 70px 90px 110px 100px 90px 70px 70px 80px 70px', padding: '10px 16px', backgroundColor: '#f9fafb', borderBottom: '1px solid #e5e7eb', fontSize: '10px', fontWeight: '700', color: '#9ca3af', letterSpacing: '0.05em', gap: '12px' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 70px 100px 110px 90px 70px 70px 80px 70px', padding: '10px 16px', backgroundColor: '#f9fafb', borderBottom: '1px solid #e5e7eb', fontSize: '10px', fontWeight: '700', color: '#9ca3af', letterSpacing: '0.05em', gap: '12px' }}>
               <div>MITRA</div>
               <div style={{ textAlign: 'right' }}>AGEN</div>
               <div style={{ textAlign: 'right' }}>FEE (14H)</div>
               <div style={{ textAlign: 'right' }}><span {...tip('Fee dibagi jumlah agen aktif 14H — ukuran efisiensi mitra.')}>FEE/AGEN ⓘ</span></div>
-              <div style={{ textAlign: 'center' }}><span {...tip('Perbandingan TRX minggu kedua vs minggu pertama dalam 14H.')}>MOMENTUM ⓘ</span></div>
               <div style={{ textAlign: 'right' }}><span {...tip('% agen yang avg TRX/hari bulan ini > 120% vs 14H.')}>GROWING ⓘ</span></div>
               <div style={{ textAlign: 'right' }}><span {...tip('% agen yang avg TRX/hari bulan ini < 80% vs 14H.')}>DECLINING ⓘ</span></div>
               <div style={{ textAlign: 'right' }}><span {...tip('% agen yang avg amount/hari MTD < 50% dari avg 14H. Indikasi float menipis.')}>LIQ. LEMAH ⓘ</span></div>
@@ -182,43 +237,47 @@ export default function MitraPage() {
               <div style={{ textAlign: 'right' }}>TRX 14H</div>
             </div>
 
-            {mitras.map((m, i) => {
-              const mom = MOMENTUM_CONFIG[m.momentum]
-              return (
-                <div key={m.mitra} onClick={() => openDrawer(m)}
-                  style={{ display: 'grid', gridTemplateColumns: '1fr 70px 90px 110px 100px 90px 70px 70px 80px 70px', padding: '12px 16px', borderBottom: i < mitras.length - 1 ? '1px solid #f3f4f6' : 'none', alignItems: 'center', backgroundColor: '#fff', cursor: 'pointer', gap: '12px' }}
-                  onMouseEnter={e => e.currentTarget.style.backgroundColor = '#f9fafb'}
-                  onMouseLeave={e => e.currentTarget.style.backgroundColor = '#fff'}>
-                  <div>
-                    <div style={{ fontSize: '13px', fontWeight: '600', color: '#111827' }}>{m.mitra}</div>
-                    <div style={{ fontSize: '10px', color: '#9ca3af', marginTop: '1px' }}>{formatNum(m.total_agents)} agen aktif</div>
+            {filtered.length === 0 ? (
+              <div style={{ textAlign: 'center', padding: '48px', color: '#9ca3af', fontSize: '13px' }}>Tidak ada mitra di kategori ini</div>
+            ) : filtered.map((m, i) => (
+              <div key={m.mitra} onClick={() => openDrawer(m)}
+                style={{ display: 'grid', gridTemplateColumns: '1fr 70px 100px 110px 90px 70px 70px 80px 70px', padding: '12px 16px', borderBottom: i < filtered.length - 1 ? '1px solid #f3f4f6' : 'none', alignItems: 'center', backgroundColor: '#fff', cursor: 'pointer', gap: '12px' }}
+                onMouseEnter={e => e.currentTarget.style.backgroundColor = '#f9fafb'}
+                onMouseLeave={e => e.currentTarget.style.backgroundColor = '#fff'}>
+                <div>
+                  <div style={{ fontSize: '13px', fontWeight: '600', color: '#111827', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    {m.mitra}
+                    {/* Inline momentum chip kecil */}
+                    {(() => {
+                      const mom = MOMENTUM_CONFIG[m.momentum]
+                      return (
+                        <span style={{ padding: '1px 6px', borderRadius: '99px', fontSize: '10px', fontWeight: '700', backgroundColor: mom.bg, color: mom.color, border: `1px solid ${mom.border}` }}>
+                          {mom.icon} {mom.momentum_pct > 0 ? '+' : ''}{m.momentum_pct}%
+                        </span>
+                      )
+                    })()}
                   </div>
-                  <div style={{ fontSize: '12px', color: '#374151', textAlign: 'right' }}>{formatNum(m.total_agents)}</div>
-                  <div style={{ fontSize: '12px', fontWeight: '600', color: '#111827', textAlign: 'right' }}>{formatFee(m.total_fee_14d)}</div>
-                  <div style={{ fontSize: '12px', color: '#374151', textAlign: 'right' }}>{formatFee(m.fee_per_agent)}</div>
-                  <div style={{ display: 'flex', justifyContent: 'center' }}>
-                    <span {...tip(mom.tooltip)} style={{ padding: '2px 8px', borderRadius: '99px', fontSize: '11px', fontWeight: '700', backgroundColor: mom.bg, color: mom.color, border: `1px solid ${mom.border}`, whiteSpace: 'nowrap', cursor: 'default' }}>
-                      {mom.icon} {mom.label}
-                      {m.momentum_pct !== 0 && <span style={{ marginLeft: '4px', opacity: 0.7 }}>{m.momentum_pct > 0 ? '+' : ''}{m.momentum_pct}%</span>}
-                    </span>
-                  </div>
-                  <div style={{ textAlign: 'right' }}>
-                    <span style={{ fontSize: '12px', fontWeight: '600', color: m.growing_pct >= 8 ? '#166534' : '#374151' }}>{m.growing_pct}%</span>
-                    <div style={{ fontSize: '10px', color: '#9ca3af' }}>{formatNum(m.growing_count)} agen</div>
-                  </div>
-                  <div style={{ textAlign: 'right' }}>
-                    <span style={{ fontSize: '12px', fontWeight: '600', color: m.declining_pct > 15 ? '#dc2626' : m.declining_pct > 8 ? '#ca8a04' : '#374151' }}>{m.declining_pct}%</span>
-                    <div style={{ fontSize: '10px', color: '#9ca3af' }}>{formatNum(m.declining_count)} agen</div>
-                  </div>
-                  <div style={{ textAlign: 'right' }}>
-                    <span style={{ fontSize: '12px', fontWeight: '600', color: m.liquidity_lemah_pct > 10 ? '#dc2626' : m.liquidity_lemah_pct > 5 ? '#ca8a04' : '#374151' }}>{m.liquidity_lemah_pct}%</span>
-                    <div style={{ fontSize: '10px', color: '#9ca3af' }}>{formatNum(m.liquidity_lemah_count)} agen</div>
-                  </div>
-                  <div><HealthBar score={m.health_score} /></div>
-                  <div style={{ fontSize: '12px', color: '#374151', textAlign: 'right' }}>{formatNum(m.total_trx_14d)}</div>
+                  <div style={{ fontSize: '10px', color: '#9ca3af', marginTop: '1px' }}>{formatNum(m.total_agents)} agen aktif</div>
                 </div>
-              )
-            })}
+                <div style={{ fontSize: '12px', color: '#374151', textAlign: 'right' }}>{formatNum(m.total_agents)}</div>
+                <div style={{ fontSize: '12px', fontWeight: '600', color: '#111827', textAlign: 'right' }}>{formatFee(m.total_fee_14d)}</div>
+                <div style={{ fontSize: '12px', color: '#374151', textAlign: 'right' }}>{formatFee(m.fee_per_agent)}</div>
+                <div style={{ textAlign: 'right' }}>
+                  <span style={{ fontSize: '12px', fontWeight: '600', color: m.growing_pct >= 8 ? '#166534' : '#374151' }}>{m.growing_pct}%</span>
+                  <div style={{ fontSize: '10px', color: '#9ca3af' }}>{formatNum(m.growing_count)} agen</div>
+                </div>
+                <div style={{ textAlign: 'right' }}>
+                  <span style={{ fontSize: '12px', fontWeight: '600', color: m.declining_pct > 15 ? '#dc2626' : m.declining_pct > 8 ? '#ca8a04' : '#374151' }}>{m.declining_pct}%</span>
+                  <div style={{ fontSize: '10px', color: '#9ca3af' }}>{formatNum(m.declining_count)} agen</div>
+                </div>
+                <div style={{ textAlign: 'right' }}>
+                  <span style={{ fontSize: '12px', fontWeight: '600', color: m.liquidity_lemah_pct > 10 ? '#dc2626' : m.liquidity_lemah_pct > 5 ? '#ca8a04' : '#374151' }}>{m.liquidity_lemah_pct}%</span>
+                  <div style={{ fontSize: '10px', color: '#9ca3af' }}>{formatNum(m.liquidity_lemah_count)} agen</div>
+                </div>
+                <div><HealthBar score={m.health_score} /></div>
+                <div style={{ fontSize: '12px', color: '#374151', textAlign: 'right' }}>{formatNum(m.total_trx_14d)}</div>
+              </div>
+            ))}
           </div>
         )}
       </div>
@@ -236,7 +295,7 @@ export default function MitraPage() {
                   {(() => {
                     const mom = MOMENTUM_CONFIG[selected.momentum]
                     return (
-                      <span style={{ padding: '2px 8px', borderRadius: '99px', fontSize: '11px', fontWeight: '700', backgroundColor: mom.bg, color: mom.color, border: `1px solid ${mom.border}` }}>
+                      <span style={{ padding: '2px 10px', borderRadius: '99px', fontSize: '11px', fontWeight: '700', backgroundColor: mom.bg, color: mom.color, border: `1px solid ${mom.border}` }}>
                         {mom.icon} {mom.label} {selected.momentum_pct > 0 ? '+' : ''}{selected.momentum_pct}%
                       </span>
                     )
@@ -252,7 +311,6 @@ export default function MitraPage() {
             ) : (
               <div style={{ padding: '20px 24px' }}>
 
-                {/* Signals */}
                 {(() => {
                   const signals = getSignals(selected, churn)
                   if (signals.length === 0) return null
@@ -267,15 +325,14 @@ export default function MitraPage() {
                   )
                 })()}
 
-                {/* Summary Cards */}
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '10px', marginBottom: '24px' }}>
                   {[
                     { label: 'Fee 14H',    value: formatFee(selected.total_fee_14d) },
                     { label: 'Fee/Agen',   value: formatFee(selected.fee_per_agent) },
                     { label: 'TRX 14H',    value: formatNum(selected.total_trx_14d) },
-                    { label: 'Growing',    value: `${selected.growing_pct}%`,          color: '#166534' },
-                    { label: 'Declining',  value: `${selected.declining_pct}%`,        color: selected.declining_pct > 15 ? '#dc2626' : '#374151' },
-                    { label: 'Liq. Lemah', value: `${selected.liquidity_lemah_pct}%`,  color: selected.liquidity_lemah_pct > 10 ? '#dc2626' : '#374151' },
+                    { label: 'Growing',    value: `${selected.growing_pct}%`,         color: '#166534' },
+                    { label: 'Declining',  value: `${selected.declining_pct}%`,       color: selected.declining_pct > 15 ? '#dc2626' : '#374151' },
+                    { label: 'Liq. Lemah', value: `${selected.liquidity_lemah_pct}%`, color: selected.liquidity_lemah_pct > 10 ? '#dc2626' : '#374151' },
                   ].map(s => (
                     <div key={s.label} style={{ padding: '10px 12px', backgroundColor: '#f9fafb', borderRadius: '8px', textAlign: 'center' }}>
                       <div style={{ fontSize: '14px', fontWeight: '700', color: s.color ?? '#111827' }}>{s.value}</div>
@@ -284,12 +341,11 @@ export default function MitraPage() {
                   ))}
                 </div>
 
-                {/* Retensi Agen */}
                 {churn && (
                   <div style={{ marginBottom: '24px' }}>
                     <div style={{ fontSize: '11px', fontWeight: '700', color: '#9ca3af', letterSpacing: '0.08em', marginBottom: '12px' }}>
                       RETENSI AGEN
-                      <span {...tip('Perbandingan agen aktif 14H ini vs 14H sebelumnya. Baru = muncul di W2 tapi tidak di W1. Hilang = ada di W1 tapi tidak di W2.')} style={{ marginLeft: '6px', cursor: 'default', fontWeight: '400' }}>ⓘ</span>
+                      <span {...tip('Perbandingan W1 vs W2 dalam 14H. Baru/Kembali = ada di W2 tapi tidak di W1. Hilang = ada di W1 tapi tidak di W2.')} style={{ marginLeft: '6px', cursor: 'default', fontWeight: '400' }}>ⓘ</span>
                     </div>
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '10px' }}>
                       {[
@@ -306,7 +362,6 @@ export default function MitraPage() {
                   </div>
                 )}
 
-                {/* Chart TRX Harian */}
                 {detail.length > 0 && (
                   <div style={{ marginBottom: '24px' }}>
                     <div style={{ fontSize: '11px', fontWeight: '700', color: '#9ca3af', letterSpacing: '0.08em', marginBottom: '12px' }}>TRX PER HARI (14H)</div>
@@ -331,7 +386,6 @@ export default function MitraPage() {
                   </div>
                 )}
 
-                {/* Chart Fee/Agen Harian */}
                 {detail.length > 0 && (
                   <div>
                     <div style={{ fontSize: '11px', fontWeight: '700', color: '#9ca3af', letterSpacing: '0.08em', marginBottom: '12px' }}>
