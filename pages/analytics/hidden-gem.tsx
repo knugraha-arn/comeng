@@ -825,24 +825,7 @@ export default function ProductivityPage() {
               <div style={{ padding: '20px 24px' }}>
 
                 {/* Return summary cards */}
-                <div style={{ marginBottom: '24px' }}>
-                  <div style={{ fontSize: '11px', fontWeight: '700', color: '#9ca3af', letterSpacing: '0.08em', marginBottom: '12px' }}>RINGKASAN KEMBALI AKTIF</div>
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '10px' }}>
-                    {[
-                      { label: 'TRX 14H', value: selectedReturning.trx_count_14d.toLocaleString('id') },
-                      { label: 'Avg TRX/Hari', value: String(selectedReturning.avg_trx_since_return), highlight: true },
-                      { label: 'Hari Sejak Kembali', value: `${selectedReturning.days_since_return} hari` },
-                      { label: 'Total Fee 14H', value: formatFee(selectedReturning.total_fee_14d) },
-                      { label: 'Terakhir Aktif', value: selectedReturning.last_seen_before ? new Date(selectedReturning.last_seen_before).toLocaleDateString('id-ID', { day: 'numeric', month: 'short' }) : 'Agen baru' },
-                      { label: 'Tidak Aktif', value: selectedReturning.days_inactive ? `${selectedReturning.days_inactive} hari` : '—' },
-                    ].map(s => (
-                      <div key={s.label} style={{ padding: '10px 12px', backgroundColor: s.highlight ? '#f5f3ff' : '#f9fafb', borderRadius: '8px', textAlign: 'center', border: s.highlight ? '1px solid #e9d5ff' : 'none' }}>
-                        <div style={{ fontSize: '14px', fontWeight: '700', color: s.highlight ? '#7c3aed' : '#111827' }}>{s.value}</div>
-                        <div style={{ fontSize: '10px', color: '#9ca3af', marginTop: '2px' }}>{s.label}</div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
+
 
                 {/* Info Agen */}
                 {returningDetail.length > 0 && (() => {
