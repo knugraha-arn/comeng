@@ -243,7 +243,7 @@ export default function PulsePage() {
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: '12px', marginBottom: '24px' }}>
 
           {/* Fee MTD */}
-          <div {...tip('Total fee yang terkumpul sejak awal bulan hingga hari terakhir data.')}
+          <div {...tip('Total fee sharing yang terkumpul sejak awal bulan hingga hari terakhir data. MTD = Month to Date.')}
             style={{ backgroundColor: '#fff', border: '1px solid #e5e7eb', borderRadius: '12px', padding: '16px 20px', cursor: 'default' }}>
             {loading ? <Skeleton width="80%" height={28} /> : (
               <>
@@ -258,7 +258,7 @@ export default function PulsePage() {
           </div>
 
           {/* Proyeksi */}
-          <div {...tip('Estimasi total fee akhir bulan berdasarkan rata-rata harian bulan berjalan.')}
+          <div {...tip('Estimasi total fee akhir bulan dihitung dari: fee MTD ÷ hari berjalan × total hari dalam bulan. Berbasis data MTD, bukan 14H.')}
             style={{ backgroundColor: isOnTrack ? '#f0fdf4' : '#fef2f2', border: `1px solid ${isOnTrack ? '#bbf7d0' : '#fecaca'}`, borderRadius: '12px', padding: '16px 20px', cursor: 'default' }}>
             {loading ? <Skeleton width="80%" height={28} /> : (
               <>
@@ -267,13 +267,13 @@ export default function PulsePage() {
                 <div style={{ fontSize: '11px', color: isOnTrack ? '#166534' : '#dc2626', marginTop: '8px' }}>
                   {isOnTrack ? '✓ On track' : `↓ Gap ${formatFee((summary?.fee_target ?? 0) - (summary?.fee_projected ?? 0))}`}
                 </div>
-                <div style={{ fontSize: '10px', color: '#9ca3af', marginTop: '2px' }}>Perlu {formatFee(summary?.fee_needed_per_day ?? 0)}/hari</div>
+                <div style={{ fontSize: '10px', color: '#9ca3af', marginTop: '2px' }}>Perlu {formatFee(summary?.fee_needed_per_day ?? 0)}/hari (MTD)</div>
               </>
             )}
           </div>
 
           {/* TRX Harian */}
-          <div {...tip('Rata-rata transaksi per hari bulan ini dibandingkan rata-rata 14 hari terakhir.')}
+          <div {...tip('Rata-rata TRX per hari bulan berjalan (MTD) dibandingkan rata-rata 14 hari terakhir. Panah menunjukkan apakah MTD lebih tinggi atau lebih rendah dari 14H.')}
             style={{ backgroundColor: '#fff', border: '1px solid #e5e7eb', borderRadius: '12px', padding: '16px 20px', cursor: 'default' }}>
             {loading ? <Skeleton width="80%" height={28} /> : (
               <>
@@ -285,13 +285,13 @@ export default function PulsePage() {
                     {(summary?.trx_avg_daily_mtd ?? 0) >= (summary?.trx_avg_daily_14d ?? 0) ? '↑' : '↓'}
                   </span>
                 </div>
-                <div style={{ fontSize: '10px', color: '#9ca3af', marginTop: '2px' }}>Total {formatNum(summary?.trx_mtd ?? 0)} TRX bulan ini</div>
+                <div style={{ fontSize: '10px', color: '#9ca3af', marginTop: '2px' }}>Total {formatNum(summary?.trx_mtd ?? 0)} TRX bulan ini (MTD)</div>
               </>
             )}
           </div>
 
           {/* Agen Aktif */}
-          <div {...tip('Jumlah agen yang bertransaksi hari ini dibandingkan rata-rata 14 hari terakhir.')}
+          <div {...tip('Jumlah agen yang bertransaksi pada hari terakhir data, dibandingkan rata-rata harian 14 hari terakhir. Bucket Productive/Moderate/Sporadic dihitung dari window 14H.')}
             style={{ backgroundColor: '#fff', border: '1px solid #e5e7eb', borderRadius: '12px', padding: '16px 20px', cursor: 'default' }}>
             {loading ? <Skeleton width="80%" height={28} /> : (
               <>
@@ -304,7 +304,12 @@ export default function PulsePage() {
                   </span>
                 </div>
                 <div style={{ fontSize: '10px', color: '#9ca3af', marginTop: '2px' }}>
-                  {formatNum(summary?.productive_count ?? 0)} Productive · {formatNum(summary?.moderate_count ?? 0)} Moderate · {formatNum(summary?.sporadic_count ?? 0)} Sporadic
+                  <span title="Aktif ≥8 hari dalam 14H terakhir">{formatNum(summary?.productive_count ?? 0)} Productive</span>
+                  {' · '}
+                  <span title="Aktif 1–7 hari + TRX ≥20 dalam 14H">{formatNum(summary?.moderate_count ?? 0)} Moderate</span>
+                  {' · '}
+                  <span title="Aktif 1–7 hari + TRX <20 dalam 14H">{formatNum(summary?.sporadic_count ?? 0)} Sporadic</span>
+                  <span style={{ marginLeft: '4px', opacity: 0.6 }}>(14H)</span>
                 </div>
               </>
             )}
