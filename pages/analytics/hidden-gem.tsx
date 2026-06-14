@@ -658,24 +658,6 @@ export default function ProductivityPage() {
               <div style={{ padding: '40px', textAlign: 'center', color: '#9ca3af', fontSize: '13px' }}>Memuat data...</div>
             ) : agentDetail.length > 0 ? (
               <div style={{ padding: '20px 24px' }}>
-                <div style={{ marginBottom: '24px' }}>
-                  <div style={{ fontSize: '11px', fontWeight: '700', color: '#9ca3af', letterSpacing: '0.08em', marginBottom: '12px' }}>PERBANDINGAN PERFORMA</div>
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
-                    {[
-                      { label: 'Avg TRX/hari (14 hari)',   value: String(selectedAgent.avg_trx_14) },
-                      { label: 'Avg TRX/hari (bulan ini)', value: String(selectedAgent.avg_trx_month), highlight: true },
-                      { label: 'Hari aktif (14 hari)',      value: `${selectedAgent.active_days_14} hari` },
-                      { label: 'Hari aktif (bulan ini)',    value: `${selectedAgent.active_days_month} hari` },
-                      { label: 'Total TRX bulan ini',       value: Number(selectedAgent.total_trx_month).toLocaleString('id') },
-                      { label: 'Growth', value: `${selectedAgent.trx_change_pct > 0 ? '+' : ''}${selectedAgent.trx_change_pct}%`, highlight: true },
-                    ].map(s => (
-                      <div key={s.label} style={{ padding: '10px 12px', backgroundColor: s.highlight ? TREND_CONFIG[selectedAgent.trend].bg : '#f9fafb', borderRadius: '8px', textAlign: 'center', border: s.highlight ? `1px solid ${TREND_CONFIG[selectedAgent.trend].border}` : 'none' }}>
-                        <div style={{ fontSize: '14px', fontWeight: '700', color: s.highlight ? TREND_CONFIG[selectedAgent.trend].color : '#111827' }}>{s.value}</div>
-                        <div style={{ fontSize: '10px', color: '#9ca3af', marginTop: '2px' }}>{s.label}</div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
                 {(() => {
                   const latest = agentDetail[agentDetail.length - 1]
                   return (
@@ -695,6 +677,24 @@ export default function ProductivityPage() {
                     </div>
                   )
                 })()}
+                <div style={{ marginBottom: '24px' }}>
+                  <div style={{ fontSize: '11px', fontWeight: '700', color: '#9ca3af', letterSpacing: '0.08em', marginBottom: '12px' }}>PERBANDINGAN PERFORMA</div>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                    {[
+                      { label: 'Avg TRX/hari (14 hari)',   value: String(selectedAgent.avg_trx_14) },
+                      { label: 'Avg TRX/hari (bulan ini)', value: String(selectedAgent.avg_trx_month), highlight: true },
+                      { label: 'Hari aktif (14 hari)',      value: `${selectedAgent.active_days_14} hari` },
+                      { label: 'Hari aktif (bulan ini)',    value: `${selectedAgent.active_days_month} hari` },
+                      { label: 'Total TRX bulan ini',       value: Number(selectedAgent.total_trx_month).toLocaleString('id') },
+                      { label: 'Growth', value: `${selectedAgent.trx_change_pct > 0 ? '+' : ''}${selectedAgent.trx_change_pct}%`, highlight: true },
+                    ].map(s => (
+                      <div key={s.label} style={{ padding: '10px 12px', backgroundColor: s.highlight ? TREND_CONFIG[selectedAgent.trend].bg : '#f9fafb', borderRadius: '8px', textAlign: 'center', border: s.highlight ? `1px solid ${TREND_CONFIG[selectedAgent.trend].border}` : 'none' }}>
+                        <div style={{ fontSize: '14px', fontWeight: '700', color: s.highlight ? TREND_CONFIG[selectedAgent.trend].color : '#111827' }}>{s.value}</div>
+                        <div style={{ fontSize: '10px', color: '#9ca3af', marginTop: '2px' }}>{s.label}</div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
                 <div style={{ marginBottom: '24px' }}>
                   <div style={{ fontSize: '11px', fontWeight: '700', color: '#9ca3af', letterSpacing: '0.08em', marginBottom: '12px' }}>RINGKASAN 14 HARI</div>
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '10px' }}>
@@ -824,10 +824,7 @@ export default function ProductivityPage() {
             ) : (
               <div style={{ padding: '20px 24px' }}>
 
-                {/* Return summary cards */}
-
-
-                {/* Info Agen */}
+                {/* 1. Info Agen */}
                 {returningDetail.length > 0 && (() => {
                   const latest = returningDetail[returningDetail.length - 1]
                   return (
@@ -848,7 +845,39 @@ export default function ProductivityPage() {
                   )
                 })()}
 
-                {/* Grafik TRX */}
+                {/* 2. Ringkasan Kembali Aktif */}
+                <div style={{ marginBottom: '24px' }}>
+                  <div style={{ fontSize: '11px', fontWeight: '700', color: '#9ca3af', letterSpacing: '0.08em', marginBottom: '12px' }}>RINGKASAN KEMBALI AKTIF</div>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '10px' }}>
+                    {[
+                      { label: 'TRX W1 (tidak aktif)', value: selectedReturning.trx_count_w1.toLocaleString('id'), dim: true },
+                      { label: 'TRX W2 (aktif kembali)', value: selectedReturning.trx_count_w2.toLocaleString('id'), highlight: true },
+                      { label: 'Avg TRX/Hari', value: String(selectedReturning.avg_trx_since_return) },
+                      { label: 'Hari Sejak Kembali', value: `${selectedReturning.days_since_return} hari` },
+                      { label: 'Total Fee 14H', value: formatFee(selectedReturning.total_fee_14d) },
+                      { label: 'Total TRX 14H', value: selectedReturning.trx_count_14d.toLocaleString('id') },
+                    ].map(s => (
+                      <div key={s.label} style={{ padding: '10px 12px', backgroundColor: (s as any).highlight ? '#f5f3ff' : '#f9fafb', borderRadius: '8px', textAlign: 'center', border: (s as any).highlight ? '1px solid #e9d5ff' : 'none', opacity: (s as any).dim ? 0.6 : 1 }}>
+                        <div style={{ fontSize: '14px', fontWeight: '700', color: (s as any).highlight ? '#7c3aed' : '#111827' }}>{s.value}</div>
+                        <div style={{ fontSize: '10px', color: '#9ca3af', marginTop: '2px' }}>{s.label}</div>
+                      </div>
+                    ))}
+                  </div>
+                  {/* Gap indicator */}
+                  <div style={{ marginTop: '10px', padding: '10px 14px', borderRadius: '8px', backgroundColor: selectedReturning.max_gap_days > selectedReturning.gap_threshold ? '#fef2f2' : '#f0fdf4', border: `1px solid ${selectedReturning.max_gap_days > selectedReturning.gap_threshold ? '#fecaca' : '#bbf7d0'}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <div>
+                      <div style={{ fontSize: '12px', fontWeight: '600', color: selectedReturning.max_gap_days > selectedReturning.gap_threshold ? '#dc2626' : '#166534' }}>
+                        {selectedReturning.max_gap_days > selectedReturning.gap_threshold ? '🔴' : '🟢'} Gap terpanjang di W1: {selectedReturning.max_gap_days} hari berturut-turut
+                      </div>
+                      <div style={{ fontSize: '10px', color: '#9ca3af', marginTop: '2px' }}>Threshold absen: &gt;{selectedReturning.gap_threshold} hari</div>
+                    </div>
+                    <div style={{ fontSize: '11px', fontWeight: '700', color: selectedReturning.max_gap_days > selectedReturning.gap_threshold ? '#dc2626' : '#166534' }}>
+                      {selectedReturning.max_gap_days > selectedReturning.gap_threshold ? 'Absen Signifikan' : 'Normal'}
+                    </div>
+                  </div>
+                </div>
+
+                {/* 3. Grafik TRX */}
                 {returningDetail.length > 0 && (
                   <div style={{ marginBottom: '24px' }}>
                     <div style={{ fontSize: '11px', fontWeight: '700', color: '#9ca3af', letterSpacing: '0.08em', marginBottom: '12px' }}>TRANSAKSI PER HARI (14H)</div>
@@ -881,7 +910,7 @@ export default function ProductivityPage() {
                   </div>
                 )}
 
-                {/* Grafik Likuiditas */}
+                {/* 4. Grafik Likuiditas */}
                 {returningLiqDetail.length > 0 && (() => {
                   const liqSummary = returningLiqDetail[0]
                   return (
