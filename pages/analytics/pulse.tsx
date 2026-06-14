@@ -83,6 +83,14 @@ interface CardType {
   pct: number
 }
 
+interface AppDistribution {
+  app_name: string
+  total_agents: number
+  total_trx: number
+  total_fee: number
+  pct_trx: number
+}
+
 const MONTHS = ['Januari','Februari','Maret','April','Mei','Juni','Juli','Agustus','September','Oktober','November','Desember']
 const SKELETON_STYLE = `@keyframes shimmer { 0% { background-position: 200% 0 } 100% { background-position: -200% 0 } }`
 
@@ -115,6 +123,7 @@ export default function PulsePage() {
   const [pics, setPics] = useState<PicPerformance[]>([])
   const [hourlySlots, setHourlySlots] = useState<HourlySlot[]>([])
   const [cardTypes, setCardTypes] = useState<CardType[]>([])
+  const [appDist, setAppDist] = useState<AppDistribution[]>([])
   const [loading, setLoading] = useState(true)
   const [tooltip, setTooltip] = useState<{ text: string, x: number, y: number } | null>(null)
 
@@ -123,7 +132,7 @@ export default function PulsePage() {
   async function loadAll() {
     setLoading(true)
     try {
-      const [s, d, v, m, p, h, c] = await Promise.all([
+      const [s, d, v, m, p, h, c, a] = await Promise.all([
         supabase.rpc('get_pulse_summary'),
         supabase.rpc('get_pulse_daily_fee'),
         supabase.rpc('get_pulse_network_velocity'),
@@ -131,6 +140,7 @@ export default function PulsePage() {
         supabase.rpc('get_pulse_pic_performance'),
         supabase.rpc('get_pulse_hourly_slots'),
         supabase.rpc('get_pulse_card_types'),
+        supabase.rpc('get_pulse_app_distribution'),
       ])
       setSummary(s.data?.[0] ?? null)
       setDailyFee(d.data ?? [])
@@ -139,6 +149,7 @@ export default function PulsePage() {
       setPics(p.data ?? [])
       setHourlySlots(h.data ?? [])
       setCardTypes(c.data ?? [])
+      setAppDist(a.data ?? [])
     } finally {
       setLoading(false)
     }
@@ -482,6 +493,55 @@ export default function PulsePage() {
           </div>
 
         </div>
+
+        {/* App Distribution */}
+        {appDist.length > 0 && (
+          <div style={{ backgroundColor: '#fff', border: '1px solid #e5e7eb', borderRadius: '12px', padding: '20px 24px', marginBottom: '24px' }}>
+            <div style={{ fontSize: '13px', fontWeight: '700', color: '#111827', marginBottom: '4px' }}>
+              Distribusi Aplikasi
+              <span {...tip('Distribusi transaksi berdasarkan aplikasi yang digunakan agen dalam 14 hari terakhir. MiniATM-Swing adalah aplikasi native KB Bank.')}
+                style={{ marginLeft: '6px', fontSize: '11px', color: '#9ca3af', cursor: 'default', fontWeight: '400' }}>ⓘ</span>
+            </div>
+            <div style={{ fontSize: '11px', color: '#9ca3af', marginBottom: '16px' }}>14 hari terakhir</div>
+            {/* Stacked bar */}
+            <div style={{ display: 'flex', height: '16px', borderRadius: '99px', overflow: 'hidden', marginBottom: '16px' }}>
+              {appDist.map((a, i) => {
+                const colors = ['#0344D8', '#7c3aed']
+                return <div key={i} style={{ width: `${a.pct_trx}%`, backgroundColor: colors[i], transition: 'width 0.5s' }} title={`${a.app_name}: ${a.pct_trx}%`} />
+              })}
+            </div>
+            {/* Table */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 80px 90px 110px 60px', gap: '8px', padding: '6px 8px', fontSize: '10px', fontWeight: '700', color: '#9ca3af', letterSpacing: '0.05em', borderBottom: '1px solid #f3f4f6' }}>
+              <div>APLIKASI</div>
+              <div style={{ textAlign: 'right' }}>AGEN</div>
+              <div style={{ textAlign: 'right' }}>TRX (14H)</div>
+              <div style={{ textAlign: 'right' }}>FEE (14H)</div>
+              <div style={{ textAlign: 'right' }}>% TRX</div>
+            </div>
+            {appDist.map((a, i) => {
+              const colors = ['#0344D8', '#7c3aed']
+              const tooltips: Record<string, string> = {
+                'MiniATM': 'Aplikasi utama MiniATM termasuk BayarBayarPlus.',
+                'MiniATM-Swing': 'Aplikasi native KB Bank — versi lama yang masih digunakan sebagian agen.',
+              }
+              return (
+                <div key={a.app_name} style={{ display: 'grid', gridTemplateColumns: '1fr 80px 90px 110px 60px', gap: '8px', padding: '10px 8px', borderBottom: i < appDist.length - 1 ? '1px solid #f9fafb' : 'none', alignItems: 'center' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <div style={{ width: '8px', height: '8px', borderRadius: '2px', backgroundColor: colors[i], flexShrink: 0 }} />
+                    <span style={{ fontSize: '13px', fontWeight: '600', color: '#111827' }}>{a.app_name}</span>
+                    {tooltips[a.app_name] && (
+                      <span {...tip(tooltips[a.app_name])} style={{ fontSize: '11px', color: '#9ca3af', cursor: 'default' }}>ⓘ</span>
+                    )}
+                  </div>
+                  <div style={{ fontSize: '12px', color: '#374151', textAlign: 'right' }}>{formatNum(a.total_agents)}</div>
+                  <div style={{ fontSize: '12px', color: '#374151', textAlign: 'right' }}>{formatNum(a.total_trx)}</div>
+                  <div style={{ fontSize: '12px', color: '#374151', textAlign: 'right' }}>{formatFee(a.total_fee)}</div>
+                  <div style={{ fontSize: '12px', fontWeight: '700', color: colors[i], textAlign: 'right' }}>{a.pct_trx}%</div>
+                </div>
+              )
+            })}
+          </div>
+        )}
 
         {/* Bucket Distribution */}
         {summary && (
