@@ -115,6 +115,10 @@ export default function AgentProfilePage() {
   const [searchResults, setSearchResults] = useState<AgentSearch[]>([])
   const [showDropdown, setShowDropdown] = useState(false)
   const [searching, setSearching] = useState(false)
+  const [filterMitra, setFilterMitra] = useState('')
+  const [filterPic, setFilterPic] = useState('')
+  const [mitras, setMitras] = useState<string[]>([])
+  const [pics, setPics] = useState<string[]>([])
 
   const [profile, setProfile] = useState<AgentProfile | null>(null)
   const [chart, setChart] = useState<DailyChart[]>([])
@@ -128,7 +132,16 @@ export default function AgentProfilePage() {
   useEffect(() => {
     const sn = router.query.sn as string
     if (sn) loadProfile(sn)
+    loadFilters()
   }, [router.query.sn])
+
+  async function loadFilters() {
+    const { data } = await supabase.rpc('get_agent_search_filters')
+    if (data?.[0]) {
+      setMitras(data[0].mitras ?? [])
+      setPics(data[0].pics ?? [])
+    }
+  }
 
   // Click outside to close dropdown
   useEffect(() => {
@@ -148,7 +161,7 @@ export default function AgentProfilePage() {
     debounceRef.current = setTimeout(async () => {
       setSearching(true)
       try {
-        const { data } = await supabase.rpc('search_agents', { p_query: val })
+        const { data } = await supabase.rpc('search_agents', { p_query: val, p_mitra: filterMitra, p_pic: filterPic })
         setSearchResults(data ?? [])
         setShowDropdown(true)
       } finally { setSearching(false) }
@@ -202,6 +215,24 @@ export default function AgentProfilePage() {
           <div style={{ fontSize: '11px', fontWeight: '600', color: '#9ca3af', letterSpacing: '0.1em', marginBottom: '4px' }}>ANALITIK AGEN</div>
           <h1 style={{ fontSize: '24px', fontWeight: '800', color: '#111827', margin: 0, letterSpacing: '-0.02em' }}>🔍 Profil Agen</h1>
           <p style={{ fontSize: '13px', color: '#6b7280', marginTop: '4px' }}>Cari agen berdasarkan nama atau serial number</p>
+        </div>
+
+        {/* Filters */}
+        <div style={{ display: 'flex', gap: '10px', marginBottom: '12px', flexWrap: 'wrap' }}>
+          <select value={filterMitra} onChange={e => { setFilterMitra(e.target.value); setFilterPic('') }}
+            style={{ padding: '7px 12px', borderRadius: '8px', border: '1px solid #e5e7eb', fontSize: '12px', color: '#374151', backgroundColor: '#fff', cursor: 'pointer' }}>
+            <option value="">Semua Mitra</option>
+            {mitras.map(m => <option key={m} value={m}>{m}</option>)}
+          </select>
+          <select value={filterPic} onChange={e => setFilterPic(e.target.value)}
+            style={{ padding: '7px 12px', borderRadius: '8px', border: '1px solid #e5e7eb', fontSize: '12px', color: '#374151', backgroundColor: '#fff', cursor: 'pointer', maxWidth: '200px' }}>
+            <option value="">Semua PIC</option>
+            {pics.map(p => <option key={p} value={p}>{p}</option>)}
+          </select>
+          {(filterMitra || filterPic) && (
+            <button onClick={() => { setFilterMitra(''); setFilterPic('') }}
+              style={{ padding: '7px 12px', borderRadius: '8px', border: '1px solid #e5e7eb', backgroundColor: '#fff', color: '#6b7280', fontSize: '12px', cursor: 'pointer' }}>✕ Reset</button>
+          )}
         </div>
 
         {/* Search */}
