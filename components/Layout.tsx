@@ -14,19 +14,20 @@ const navItems = [
 ]
 
 const analyticsNavItems = [
-  { href: '/analytics/pulse',  label: 'Business Pulse', icon: '◈' },
-  { href: '/analytics/agents',  label: 'Kinerja 14 Hari', icon: '◈' },
-  { href: '/analytics/hidden-gem', label: 'Produktifitas',  icon: '◈' },
-  { href: '/analytics/dashboard-3500', label: 'Lite & Plus',  icon: '◈' },
-  { href: '/analytics/agent-liquidity', label: 'Likuiditas Agen',  icon: '◈' },
-  { href: '/analytics/mitra', label: 'Kekuatan Mitra',  icon: '◈' },
-  ]
+  { href: '/analytics/pulse',           label: 'Business Pulse',  icon: '◈' },
+  { href: '/analytics/agents',          label: 'Kinerja 14 Hari', icon: '◈' },
+  { href: '/analytics/hidden-gem',      label: 'Produktifitas',   icon: '◈' },
+  { href: '/analytics/dashboard-3500',  label: 'Lite & Plus',     icon: '◈' },
+  { href: '/analytics/agent-liquidity', label: 'Likuiditas Agen', icon: '◈' },
+  { href: '/analytics/mitra',           label: 'Kekuatan Mitra',  icon: '◈' },
+  { href: '/analytics/agent-profile',   label: 'Profil Agen',     icon: '🔍' },
+]
 
 const adminNavItems = [
-  { href: '/analytics/upload',   label: 'Upload Data',    icon: '↑' },
-  { href: '/analytics/history',  label: 'Upload History', icon: '◎' },
-  { href: '/analytics/targets',  label: 'Target',         icon: '◎' },
- ]
+  { href: '/analytics/upload',         label: 'Upload Data',    icon: '↑' },
+  { href: '/analytics/history',        label: 'Upload History', icon: '◎' },
+  { href: '/analytics/target-simple',  label: 'Target',         icon: '◎' },
+]
 
 // Cache di module level — persist selama session browser, tidak reset saat ganti halaman
 let sessionChecked = false
