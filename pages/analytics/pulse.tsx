@@ -40,33 +40,6 @@ interface NetworkVelocity {
   avg_trx_per_agent: number
 }
 
-interface MitraPerformance {
-  mitra: string
-  total_agents: number
-  active_agents_14d: number
-  total_trx_14d: number
-  total_fee_14d: number
-  avg_trx_per_agent: number
-  growing_count: number
-  declining_count: number
-  consistent_count: number
-  growing_pct: number
-  declining_pct: number
-}
-
-interface PicPerformance {
-  pic: string
-  mitra: string
-  total_agents: number
-  total_trx_14d: number
-  total_fee_14d: number
-  avg_trx_per_agent: number
-  growing_count: number
-  declining_count: number
-  growing_pct: number
-  declining_pct: number
-}
-
 interface HourlySlot {
   slot_name: string
   slot_order: number
@@ -81,6 +54,14 @@ interface CardType {
   total_trx: number
   avg_per_day: number
   pct: number
+}
+
+interface FeeBreakdown {
+  category:    string
+  total_trx:   number
+  total_fee:   number
+  avg_per_day: number
+  pct:         number
 }
 
 interface AppDistribution {
@@ -119,11 +100,10 @@ export default function PulsePage() {
   const [summary, setSummary] = useState<PulseSummary | null>(null)
   const [dailyFee, setDailyFee] = useState<DailyFee[]>([])
   const [velocity, setVelocity] = useState<NetworkVelocity[]>([])
-  const [mitras, setMitras] = useState<MitraPerformance[]>([])
-  const [pics, setPics] = useState<PicPerformance[]>([])
   const [hourlySlots, setHourlySlots] = useState<HourlySlot[]>([])
   const [cardTypes, setCardTypes] = useState<CardType[]>([])
   const [appDist, setAppDist] = useState<AppDistribution[]>([])
+  const [feeBreakdown, setFeeBreakdown] = useState<FeeBreakdown[]>([])
   const [loading, setLoading] = useState(true)
   const [tooltip, setTooltip] = useState<{ text: string, x: number, y: number } | null>(null)
 
@@ -132,24 +112,22 @@ export default function PulsePage() {
   async function loadAll() {
     setLoading(true)
     try {
-      const [s, d, v, m, p, h, c, a] = await Promise.all([
+      const [s, d, v, h, c, a, fb] = await Promise.all([
         supabase.rpc('get_pulse_summary'),
         supabase.rpc('get_pulse_daily_fee'),
         supabase.rpc('get_pulse_network_velocity'),
-        supabase.rpc('get_pulse_mitra_performance'),
-        supabase.rpc('get_pulse_pic_performance'),
         supabase.rpc('get_pulse_hourly_slots'),
         supabase.rpc('get_pulse_card_types'),
         supabase.rpc('get_pulse_app_distribution'),
+        supabase.rpc('get_pulse_fee_breakdown'),
       ])
       setSummary(s.data?.[0] ?? null)
       setDailyFee(d.data ?? [])
       setVelocity(v.data ?? [])
-      setMitras(m.data ?? [])
-      setPics(p.data ?? [])
       setHourlySlots(h.data ?? [])
       setCardTypes(c.data ?? [])
       setAppDist(a.data ?? [])
+      setFeeBreakdown(fb.data ?? [])
     } finally {
       setLoading(false)
     }
@@ -174,14 +152,6 @@ export default function PulsePage() {
     if (summary.active_agents_today < summary.active_agents_avg_14d * 0.85)
       signals.push({ type: 'yellow', text: `Agen aktif hari ini (${formatNum(summary.active_agents_today)}) di bawah rata-rata 14H (${formatNum(Math.round(summary.active_agents_avg_14d))})` })
 
-    const worstMitra = mitras.find(m => m.declining_pct > 15)
-    if (worstMitra) signals.push({ type: 'red', text: `${worstMitra.mitra} — ${worstMitra.declining_pct}% agen declining, tertinggi di jaringan` })
-
-    const bestPic = pics.find(p => p.growing_pct > 10)
-    if (bestPic) signals.push({ type: 'green', text: `${bestPic.pic} — ${bestPic.growing_pct}% agen growing, coaching terbaik bulan ini` })
-
-    const worstPic = pics.find(p => p.declining_pct > 20)
-    if (worstPic) signals.push({ type: 'red', text: `${worstPic.pic} — ${worstPic.declining_pct}% agen declining, perlu perhatian segera` })
   }
 
   const currentMonth = summary ? MONTHS[new Date(summary.end_date).getMonth()] : ''
@@ -192,7 +162,6 @@ export default function PulsePage() {
   // Chart helpers
   const maxCumFee    = dailyFee.length > 0 ? Math.max(...dailyFee.map(d => Math.max(d.cumulative_fee, d.cumulative_target))) : 1
   const maxTrx       = velocity.length > 0 ? Math.max(...velocity.map(v => v.total_trx)) : 1
-  const maxMitraFee  = mitras.length > 0 ? mitras[0].total_fee_14d : 1
 
   return (
     <Layout>
@@ -419,7 +388,7 @@ export default function PulsePage() {
           <div style={{ backgroundColor: '#fff', border: '1px solid #e5e7eb', borderRadius: '12px', padding: '20px 24px' }}>
             <div style={{ fontSize: '13px', fontWeight: '700', color: '#111827', marginBottom: '4px' }}>
               Pola Waktu Transaksi
-              <span {...tip('Distribusi TRX berdasarkan jam transaksi dalam 14 hari terakhir. Dini Hari 00–05, Pagi 06–11, Siang-Sore 12–17, Malam 18–23.')}
+              <span {...tip('Distribusi TRX berdasarkan slot waktu dalam 14 hari terakhir. Dini Hari (tengah malam–subuh), Pagi, Siang-Sore, Malam.')}
                 style={{ marginLeft: '6px', fontSize: '11px', color: '#9ca3af', cursor: 'default', fontWeight: '400' }}>ⓘ</span>
             </div>
             <div style={{ fontSize: '11px', color: '#9ca3af', marginBottom: '16px' }}>14 hari terakhir</div>
@@ -499,9 +468,12 @@ export default function PulsePage() {
 
         </div>
 
+        {/* App Distribution + Fee 3500 Row */}
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '24px' }}>
+
         {/* App Distribution */}
         {appDist.length > 0 && (
-          <div style={{ backgroundColor: '#fff', border: '1px solid #e5e7eb', borderRadius: '12px', padding: '20px 24px', marginBottom: '24px' }}>
+          <div style={{ backgroundColor: '#fff', border: '1px solid #e5e7eb', borderRadius: '12px', padding: '20px 24px' }}>
             <div style={{ fontSize: '13px', fontWeight: '700', color: '#111827', marginBottom: '4px' }}>
               Distribusi Aplikasi
               <span {...tip('Distribusi transaksi berdasarkan aplikasi yang digunakan agen dalam 14 hari terakhir. MiniATM-Swing adalah aplikasi native KB Bank.')}
@@ -548,6 +520,48 @@ export default function PulsePage() {
           </div>
         )}
 
+        {/* Fee 3500 vs Lainnya */}
+        <div style={{ backgroundColor: '#fff', border: '1px solid #e5e7eb', borderRadius: '12px', padding: '20px 24px' }}>
+          <div style={{ fontSize: '13px', fontWeight: '700', color: '#111827', marginBottom: '4px' }}>
+            Fee Rp 3.500 vs Lainnya
+            <span onMouseEnter={e => setTooltip({ text: 'Distribusi TRX berdasarkan fee sharing dalam 14 hari terakhir. Fee Rp 3.500 = transaksi via rekening Arranet (Lite/Plus).', x: e.clientX, y: e.clientY })} onMouseMove={e => setTooltip({ text: 'Distribusi TRX berdasarkan fee sharing dalam 14 hari terakhir. Fee Rp 3.500 = transaksi via rekening Arranet (Lite/Plus).', x: e.clientX, y: e.clientY })} onMouseLeave={() => setTooltip(null)}
+              style={{ marginLeft: '6px', fontSize: '11px', color: '#9ca3af', cursor: 'default', fontWeight: '400' }}>ⓘ</span>
+          </div>
+          <div style={{ fontSize: '11px', color: '#9ca3af', marginBottom: '16px' }}>14 hari terakhir</div>
+          {loading ? <Skeleton width="100%" height={120} /> : (
+            <div>
+              <div style={{ display: 'flex', height: '16px', borderRadius: '99px', overflow: 'hidden', marginBottom: '16px' }}>
+                {feeBreakdown.map((f, i) => {
+                  const colors = ['#0344D8', '#7c3aed']
+                  return <div key={i} style={{ width: `${f.pct}%`, backgroundColor: colors[i] }} title={`${f.category}: ${f.pct}%`} />
+                })}
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 80px 110px 60px', gap: '8px', padding: '6px 8px', fontSize: '10px', fontWeight: '700', color: '#9ca3af', letterSpacing: '0.05em', borderBottom: '1px solid #f3f4f6' }}>
+                <div>KATEGORI</div>
+                <div style={{ textAlign: 'right' }}>TRX (14H)</div>
+                <div style={{ textAlign: 'right' }}>FEE (14H)</div>
+                <div style={{ textAlign: 'right' }}>%</div>
+              </div>
+              {feeBreakdown.map((f, i) => {
+                const colors = ['#0344D8', '#7c3aed']
+                return (
+                  <div key={f.category} style={{ display: 'grid', gridTemplateColumns: '1fr 80px 110px 60px', gap: '8px', padding: '10px 8px', borderBottom: i < feeBreakdown.length - 1 ? '1px solid #f9fafb' : 'none', alignItems: 'center' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <div style={{ width: '8px', height: '8px', borderRadius: '2px', backgroundColor: colors[i], flexShrink: 0 }} />
+                      <span style={{ fontSize: '13px', fontWeight: '600', color: '#111827' }}>{f.category}</span>
+                    </div>
+                    <div style={{ fontSize: '12px', color: '#374151', textAlign: 'right' }}>{formatNum(f.total_trx)}</div>
+                    <div style={{ fontSize: '12px', color: '#374151', textAlign: 'right' }}>{formatFee(f.total_fee)}</div>
+                    <div style={{ fontSize: '12px', fontWeight: '700', color: colors[i], textAlign: 'right' }}>{f.pct}%</div>
+                  </div>
+                )
+              })}
+            </div>
+          )}
+        </div>
+
+        </div>{/* end App Distribution + Fee 3500 Row */}
+
         {/* Bucket Distribution */}
         {summary && (
           <div style={{ backgroundColor: '#fff', border: '1px solid #e5e7eb', borderRadius: '12px', padding: '20px 24px', marginBottom: '24px' }}>
@@ -588,95 +602,6 @@ export default function PulsePage() {
           </div>
         )}
 
-        {/* Mitra Performance */}
-        <div style={{ backgroundColor: '#fff', border: '1px solid #e5e7eb', borderRadius: '12px', padding: '20px 24px', marginBottom: '24px' }}>
-          <div style={{ fontSize: '13px', fontWeight: '700', color: '#111827', marginBottom: '16px' }}>
-            Kekuatan Mitra
-            <span {...tip('Berdasarkan data 14 hari terakhir. % Growing/Declining = persentase agen yang tren TRX-nya naik/turun vs rata-rata 14H.')}
-              style={{ marginLeft: '6px', fontSize: '11px', color: '#9ca3af', cursor: 'default', fontWeight: '400' }}>ⓘ</span>
-          </div>
-          {loading ? <Skeleton width="100%" height={200} /> : (
-            <div>
-              {/* Header */}
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 80px 80px 100px 100px 80px 80px', gap: '8px', padding: '8px 12px', fontSize: '10px', fontWeight: '700', color: '#9ca3af', letterSpacing: '0.05em', borderBottom: '1px solid #f3f4f6' }}>
-                <div>MITRA</div>
-                <div style={{ textAlign: 'right' }}>AGEN</div>
-                <div style={{ textAlign: 'right' }}>TRX (14H)</div>
-                <div style={{ textAlign: 'right' }}>FEE (14H)</div>
-                <div style={{ textAlign: 'right' }}>TRX/AGEN</div>
-                <div style={{ textAlign: 'right' }}>
-                  <span {...tip('% agen yang avg TRX/hari bulan ini > 120% vs 14H')}>GROWING ⓘ</span>
-                </div>
-                <div style={{ textAlign: 'right' }}>
-                  <span {...tip('% agen yang avg TRX/hari bulan ini < 80% vs 14H')}>DECLINING ⓘ</span>
-                </div>
-              </div>
-              {mitras.map((m, i) => (
-                <div key={m.mitra} style={{ display: 'grid', gridTemplateColumns: '1fr 80px 80px 100px 100px 80px 80px', gap: '8px', padding: '10px 12px', borderBottom: i < mitras.length - 1 ? '1px solid #f9fafb' : 'none', alignItems: 'center' }}>
-                  <div>
-                    <div style={{ fontSize: '13px', fontWeight: '600', color: '#111827' }}>{m.mitra}</div>
-                    {/* Mini bar fee */}
-                    <div style={{ marginTop: '4px', height: '3px', backgroundColor: '#f3f4f6', borderRadius: '99px', overflow: 'hidden', width: '80%' }}>
-                      <div style={{ width: `${(m.total_fee_14d / maxMitraFee) * 100}%`, height: '100%', backgroundColor: '#0344D8', borderRadius: '99px' }} />
-                    </div>
-                  </div>
-                  <div style={{ fontSize: '12px', color: '#374151', textAlign: 'right' }}>{formatNum(m.total_agents)}</div>
-                  <div style={{ fontSize: '12px', color: '#374151', textAlign: 'right' }}>{formatNum(m.total_trx_14d)}</div>
-                  <div style={{ fontSize: '12px', color: '#374151', textAlign: 'right' }}>{formatFee(m.total_fee_14d)}</div>
-                  <div style={{ fontSize: '12px', color: '#374151', textAlign: 'right' }}>{formatNum(Number(m.avg_trx_per_agent))}</div>
-                  <div style={{ textAlign: 'right' }}>
-                    <span style={{ fontSize: '12px', fontWeight: '600', color: '#166534' }}>{m.growing_pct}%</span>
-                  </div>
-                  <div style={{ textAlign: 'right' }}>
-                    <span style={{ fontSize: '12px', fontWeight: '600', color: m.declining_pct > 15 ? '#dc2626' : '#374151' }}>{m.declining_pct}%</span>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-
-        {/* PIC Performance */}
-        <div style={{ backgroundColor: '#fff', border: '1px solid #e5e7eb', borderRadius: '12px', padding: '20px 24px' }}>
-          <div style={{ fontSize: '13px', fontWeight: '700', color: '#111827', marginBottom: '16px' }}>
-            Kekuatan PIC
-            <span style={{ fontSize: '11px', color: '#9ca3af', fontWeight: '400', marginLeft: '8px' }}>Top 30 by fee 14H</span>
-            <span {...tip('TRX/Agen = rata-rata TRX per agen yang dikelola PIC ini dalam 14 hari. Indikator kualitas coaching.')}
-              style={{ marginLeft: '6px', fontSize: '11px', color: '#9ca3af', cursor: 'default', fontWeight: '400' }}>ⓘ</span>
-          </div>
-          {loading ? <Skeleton width="100%" height={300} /> : (
-            <div>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 120px 60px 80px 100px 80px 80px', gap: '8px', padding: '8px 12px', fontSize: '10px', fontWeight: '700', color: '#9ca3af', letterSpacing: '0.05em', borderBottom: '1px solid #f3f4f6' }}>
-                <div>PIC</div>
-                <div>MITRA</div>
-                <div style={{ textAlign: 'right' }}>AGEN</div>
-                <div style={{ textAlign: 'right' }}>TRX/AGEN</div>
-                <div style={{ textAlign: 'right' }}>FEE (14H)</div>
-                <div style={{ textAlign: 'right' }}>
-                  <span {...tip('% agen growing bulan ini')}>GROWING ⓘ</span>
-                </div>
-                <div style={{ textAlign: 'right' }}>
-                  <span {...tip('% agen declining bulan ini')}>DECLINING ⓘ</span>
-                </div>
-              </div>
-              {pics.map((p, i) => (
-                <div key={p.pic} style={{ display: 'grid', gridTemplateColumns: '1fr 120px 60px 80px 100px 80px 80px', gap: '8px', padding: '9px 12px', borderBottom: i < pics.length - 1 ? '1px solid #f9fafb' : 'none', alignItems: 'center' }}>
-                  <div style={{ fontSize: '12px', fontWeight: '600', color: '#111827', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.pic}</div>
-                  <div style={{ fontSize: '11px', color: '#9ca3af', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.mitra}</div>
-                  <div style={{ fontSize: '12px', color: '#374151', textAlign: 'right' }}>{formatNum(p.total_agents)}</div>
-                  <div style={{ fontSize: '12px', color: '#374151', textAlign: 'right' }}>{formatNum(Number(p.avg_trx_per_agent))}</div>
-                  <div style={{ fontSize: '12px', color: '#374151', textAlign: 'right' }}>{formatFee(p.total_fee_14d)}</div>
-                  <div style={{ textAlign: 'right' }}>
-                    <span style={{ fontSize: '12px', fontWeight: '600', color: p.growing_pct > 10 ? '#166534' : '#374151' }}>{p.growing_pct}%</span>
-                  </div>
-                  <div style={{ textAlign: 'right' }}>
-                    <span style={{ fontSize: '12px', fontWeight: '600', color: p.declining_pct > 20 ? '#dc2626' : p.declining_pct > 10 ? '#ca8a04' : '#374151' }}>{p.declining_pct}%</span>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
 
       </div>
     </Layout>
