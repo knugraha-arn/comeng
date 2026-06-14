@@ -388,7 +388,7 @@ export default function PulsePage() {
           <div style={{ backgroundColor: '#fff', border: '1px solid #e5e7eb', borderRadius: '12px', padding: '20px 24px' }}>
             <div style={{ fontSize: '13px', fontWeight: '700', color: '#111827', marginBottom: '4px' }}>
               Pola Waktu Transaksi
-              <span {...tip('Distribusi TRX berdasarkan slot waktu dalam 14 hari terakhir. Dini Hari (tengah malam–subuh), Pagi, Siang-Sore, Malam.')}
+              <span {...tip('Distribusi TRX per slot waktu dalam 14H. Dini Hari 00–06, Pagi 06–12, Siang-Sore 12–18, Malam 18–00.')}
                 style={{ marginLeft: '6px', fontSize: '11px', color: '#9ca3af', cursor: 'default', fontWeight: '400' }}>ⓘ</span>
             </div>
             <div style={{ fontSize: '11px', color: '#9ca3af', marginBottom: '16px' }}>14 hari terakhir</div>
