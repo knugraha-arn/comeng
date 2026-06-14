@@ -411,12 +411,18 @@ export default function AgentProfilePage() {
                     return days.map((d, i) => {
                       const isWeekend = [0, 6].includes(new Date(d.date).getDay())
                       const isThisMonth = d.date >= profile.month_start
-                      const barColor = d.trx === 0 ? '#f3f4f6' : isThisMonth ? (trendCfg?.color ?? '#0344D8') : '#94a3b8'
+                      const baseColor = trendCfg?.color ?? '#0344D8'
+                      const weekendColor = isThisMonth
+                        ? (baseColor === '#166534' ? '#4ade80' : baseColor === '#92400e' ? '#fbbf24' : '#93c5fd')
+                        : '#e2e8f0'
+                      const barColor = d.trx === 0 ? '#f3f4f6'
+                        : isThisMonth ? (isWeekend ? weekendColor : baseColor)
+                        : (isWeekend ? '#e2e8f0' : '#94a3b8')
                       return (
                         <div key={i} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px' }}
                           title={`${new Date(d.date).toLocaleDateString('id-ID', { day: 'numeric', month: 'short' })}: ${formatNum(d.trx)} TRX · ${formatFee(d.fee)}`}>
-                          <div style={{ width: '100%', height: `${Math.max(d.trx > 0 ? 8 : 4, (d.trx / maxTrx) * 80)}px`, backgroundColor: barColor, borderRadius: '3px 3px 0 0', opacity: isWeekend ? 0.7 : 1, transition: 'height 0.3s' }} />
-                          <div style={{ fontSize: '8px', color: '#d1d5db', writingMode: 'vertical-rl', transform: 'rotate(180deg)' }}>
+                          <div style={{ width: '100%', height: `${Math.max(d.trx > 0 ? 8 : 4, (d.trx / maxTrx) * 80)}px`, backgroundColor: barColor, borderRadius: '3px 3px 0 0', transition: 'height 0.3s' }} />
+                          <div style={{ fontSize: '8px', color: '#6b7280', writingMode: 'vertical-rl', transform: 'rotate(180deg)' }}>
                             {new Date(d.date).toLocaleDateString('id-ID', { day: 'numeric', month: 'short' })}
                           </div>
                         </div>
@@ -425,8 +431,10 @@ export default function AgentProfilePage() {
                   })()}
                 </div>
                 <div style={{ display: 'flex', gap: '16px', marginTop: '8px', fontSize: '10px', color: '#9ca3af' }}>
-                  <span>▪ <span style={{ color: '#94a3b8' }}>Bulan lalu</span></span>
-                  <span>▪ <span style={{ color: trendCfg?.color ?? '#0344D8' }}>Bulan ini</span></span>
+                  <span>▪ <span style={{ color: '#94a3b8' }}>Bulan lalu (weekday)</span></span>
+                  <span>▪ <span style={{ color: '#e2e8f0' }}>Bulan lalu (weekend)</span></span>
+                  <span>▪ <span style={{ color: trendCfg?.color ?? '#0344D8' }}>Bulan ini (weekday)</span></span>
+                  <span>▪ <span style={{ color: trendCfg?.color === '#166534' ? '#4ade80' : trendCfg?.color === '#92400e' ? '#fbbf24' : '#93c5fd' }}>Bulan ini (weekend)</span></span>
                 </div>
               </div>
             )}
