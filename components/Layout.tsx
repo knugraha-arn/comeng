@@ -14,13 +14,14 @@ const navItems = [
 ]
 
 const analyticsNavItems = [
-  { href: '/analytics/pulse',           label: 'Business Pulse',  icon: '◈' },
-  { href: '/analytics/agents',          label: 'Kinerja 14 Hari', icon: '◈' },
-  { href: '/analytics/hidden-gem',      label: 'Produktifitas',   icon: '◈' },
-  { href: '/analytics/dashboard-3500',  label: 'Lite & Plus',     icon: '◈' },
+  { href: '/analytics/pulse',           label: 'Business Pulse',        icon: '◈' },
+  { href: '/analytics/agents',          label: 'Kinerja 14 Hari',       icon: '◈' },
+  { href: '/analytics/hidden-gem',      label: 'Produktifitas Agen',    icon: '◈' },
   { href: '/analytics/agent-liquidity', label: 'Likuiditas Agen', icon: '◈' },
   { href: '/analytics/mitra',           label: 'Kekuatan Mitra',  icon: '◈' },
-  { href: '/analytics/agent-profile',   label: 'Profil Agen',     icon: '◈' },
+  { href: '/analytics/pic',             label: 'Kekuatan PIC',    icon: '◈' },
+  { href: '/analytics/dashboard-3500',  label: 'Lite & Plus',     icon: '◈' },
+  { href: '/analytics/agent-profile',   label: 'Cari Agen',       icon: '◈' },
 ]
 
 const adminNavItems = [
