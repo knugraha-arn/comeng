@@ -877,6 +877,28 @@ export default function ProductivityPage() {
                   </div>
                 </div>
 
+                {/* 3. Likuiditas Cards */}
+                {returningLiqDetail.length > 0 && (() => {
+                  const liqSummary = returningLiqDetail[0]
+                  const cfg = LIQUIDITY_CONFIG[liqSummary.liquidity_status] ?? LIQUIDITY_CONFIG.no_data
+                  return (
+                    <div style={{ marginBottom: '24px' }}>
+                      <div style={{ fontSize: '11px', fontWeight: '700', color: '#9ca3af', letterSpacing: '0.08em', marginBottom: '12px' }}>LIKUIDITAS AGEN</div>
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                        <div style={{ padding: '10px 12px', backgroundColor: '#f9fafb', borderRadius: '8px', textAlign: 'center' }}>
+                          <div style={{ fontSize: '14px', fontWeight: '700', color: '#111827' }}>{formatAmount(liqSummary.avg_daily_amount_14d)}</div>
+                          <div style={{ fontSize: '10px', color: '#9ca3af', marginTop: '2px' }}>Avg Amount/Hari (14H)</div>
+                        </div>
+                        <div style={{ padding: '10px 12px', backgroundColor: cfg.bg, borderRadius: '8px', textAlign: 'center', border: `1px solid ${cfg.border}` }}>
+                          <div style={{ fontSize: '14px', fontWeight: '700', color: cfg.color }}>{liqSummary.liquidity_ratio?.toFixed(2)}x</div>
+                          <div style={{ fontSize: '10px', color: cfg.color, marginTop: '2px', opacity: 0.8 }}>{cfg.sublabel}</div>
+                          <div style={{ marginTop: '4px' }}><LiquidityChip status={liqSummary.liquidity_status} /></div>
+                        </div>
+                      </div>
+                    </div>
+                  )
+                })()}
+
                 {/* 3. Grafik TRX */}
                 {returningDetail.length > 0 && (
                   <div style={{ marginBottom: '24px' }}>
@@ -910,28 +932,13 @@ export default function ProductivityPage() {
                   </div>
                 )}
 
-                {/* 4. Grafik Likuiditas */}
+
+                {/* 5. Nominal Uang Beredar */}
                 {returningLiqDetail.length > 0 && (() => {
                   const liqSummary = returningLiqDetail[0]
                   return (
                     <div>
                       <div style={{ fontSize: '11px', fontWeight: '700', color: '#9ca3af', letterSpacing: '0.08em', marginBottom: '12px' }}>NOMINAL UANG BEREDAR (14H)</div>
-                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '12px' }}>
-                        <div style={{ padding: '10px 12px', backgroundColor: '#f9fafb', borderRadius: '8px', textAlign: 'center' }}>
-                          <div style={{ fontSize: '14px', fontWeight: '700', color: '#111827' }}>{formatAmount(liqSummary.avg_daily_amount_14d)}</div>
-                          <div style={{ fontSize: '10px', color: '#9ca3af', marginTop: '2px' }}>Avg Amount/Hari (14H)</div>
-                        </div>
-                        {(() => {
-                          const cfg = LIQUIDITY_CONFIG[liqSummary.liquidity_status] ?? LIQUIDITY_CONFIG.no_data
-                          return (
-                            <div style={{ padding: '10px 12px', backgroundColor: cfg.bg, borderRadius: '8px', textAlign: 'center', border: `1px solid ${cfg.border}` }}>
-                              <div style={{ fontSize: '14px', fontWeight: '700', color: cfg.color }}>{liqSummary.liquidity_ratio?.toFixed(2)}x</div>
-                              <div style={{ fontSize: '10px', color: cfg.color, marginTop: '2px', opacity: 0.8 }}>{cfg.sublabel}</div>
-                              <div style={{ marginTop: '4px' }}><LiquidityChip status={liqSummary.liquidity_status} /></div>
-                            </div>
-                          )
-                        })()}
-                      </div>
                       <div style={{ display: 'flex', alignItems: 'flex-end', gap: '3px', height: '70px' }}>
                         {(() => {
                           const maxAmount = Math.max(...returningLiqDetail.map(d => Number(d.daily_amount)), 1)
@@ -954,6 +961,12 @@ export default function ProductivityPage() {
                           })
                         })()}
                       </div>
+                      <div style={{ display: 'flex', gap: '16px', marginTop: '8px', fontSize: '10px', color: '#9ca3af' }}>
+                        <span>▪ <span style={{ color: '#22c55e' }}>≥ avg</span></span>
+                        <span>▪ <span style={{ color: '#eab308' }}>50–80% avg</span></span>
+                        <span>▪ <span style={{ color: '#ef4444' }}>&lt; 50% avg</span></span>
+                      </div>
+                      <div style={{ marginTop: '6px', fontSize: '10px', color: '#9ca3af' }}>Avg: {formatAmount(liqSummary.avg_daily_amount_14d)}/hari</div>
                     </div>
                   )
                 })()}
