@@ -20,7 +20,7 @@ const analyticsNavItems = [
   { href: '/analytics/dashboard-3500',  label: 'Lite & Plus',     icon: '◈' },
   { href: '/analytics/agent-liquidity', label: 'Likuiditas Agen', icon: '◈' },
   { href: '/analytics/mitra',           label: 'Kekuatan Mitra',  icon: '◈' },
-  { href: '/analytics/agent-profile',   label: 'Profil Agen',     icon: '🔍' },
+  { href: '/analytics/agent-profile',   label: 'Profil Agen',     icon: '◈' },
 ]
 
 const adminNavItems = [
