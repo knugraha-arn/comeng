@@ -203,6 +203,19 @@ export default function UploadCenter() {
       const { data: { session } } = await supabase.auth.getSession()
       if (!session) { router.push('/login'); return }
 
+      // Role check — hanya admin dan ceo yang bisa upload
+      const { data: userData } = await supabase
+        .from('users')
+        .select('role')
+        .eq('id', session.user.id)
+        .single()
+      const allowedRoles = ['admin']
+      if (!allowedRoles.includes(userData?.role ?? '')) {
+        setStage('error')
+        setErrorMsg('Akses ditolak — hanya Admin yang dapat mengupload data.')
+        return
+      }
+
       setStage('reading')
       setProgress(5)
       setProgressLabel('Membaca file...')
