@@ -295,6 +295,10 @@ setProgressLabel('Membersihkan data lama...')
 // Purge data lama
 try { await supabase.rpc('am_purge_old_data') } catch {}
 
+// Compute agent metrics
+setProgressLabel('Menghitung ulang metrics agen...')
+try { await supabase.rpc('compute_agent_metrics') } catch {}
+
       setProgress(100)
       setStage('success')
       setSummary({
