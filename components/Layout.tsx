@@ -10,7 +10,6 @@ const navItems = [
   { href: '/rekomendasi', label: 'Rekomendasi', icon: '◈' },
   { href: '/ai-assistant', label: 'AI Assistant', icon: '◈' },
   { href: '/upload', label: 'Upload WAG', icon: '◈' },
-  { href: '/config', label: 'Konfigurasi', icon: '◈' },
 ]
 
 const analyticsNavItems = [
@@ -28,6 +27,7 @@ const adminNavItems = [
   { href: '/analytics/upload',         label: 'Upload Data',    icon: '↑' },
   { href: '/analytics/history',        label: 'Upload History', icon: '◎' },
   { href: '/analytics/target-simple',  label: 'Target',         icon: '◎' },
+  { href: '/config',                   label: 'Konfigurasi',    icon: '◈' },
 ]
 
 // Cache di module level — persist selama session browser, tidak reset saat ganti halaman
