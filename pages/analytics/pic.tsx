@@ -1,9 +1,10 @@
-import { useEffect, useState, useRef } from 'react'
+import { useEffect, useState, useRef, useCallback } from 'react'
 import { useRouter } from 'next/router'
 import Head from 'next/head'
 import Layout from '../../components/Layout'
 import { createBrowserClient } from '@supabase/ssr'
 
+// ── Interfaces ────────────────────────────────────────────────
 interface PicRow {
   pic: string
   mitra: string
@@ -19,26 +20,74 @@ interface PicRow {
   health_score: number
 }
 
-interface PicAgent {
+interface RangerAgent {
   serial_number: string
   merchant_name: string | null
+  mitra: string | null
   active_days_14: number
   total_trx_14d: number
+  total_fee_14d: number
   avg_trx_14: number
   avg_trx_mtd: number
   trend: string
   trx_change_pct: number
+  bucket: string
 }
 
+interface AgentDayDetail {
+  transaction_date: string
+  total_trx: number
+  transfer_trx: number
+  cek_saldo_trx: number
+  total_fee: number
+  total_amount: number
+  dip_count: number
+  swipe_count: number
+  merchant_name: string | null
+  mitra: string | null
+  pic: string | null
+  alamat_struk: string | null
+  brand: string | null
+  tipe_mesin: string | null
+  source_app: string | null
+  terminal_data_source: string | null
+}
+
+interface AgentLiquidityDetail {
+  transaction_date: string
+  daily_amount: number
+  daily_trx: number
+  avg_daily_amount_14d: number
+  avg_daily_amount_mtd: number
+  liquidity_ratio: number
+  liquidity_status: 'kuat' | 'menurun' | 'lemah' | 'no_data'
+}
+
+// ── Constants ─────────────────────────────────────────────────
 const TREND_CONFIG = {
-  growing:    { label: 'Growing',   icon: '💎', color: '#166534', bg: '#dcfce7', border: '#bbf7d0', tooltip: 'Avg TRX/hari bulan ini > 120% vs 14H.' },
-  declining:  { label: 'Declining', icon: '⚠️', color: '#92400e', bg: '#fef9c3', border: '#fde68a', tooltip: 'Avg TRX/hari bulan ini < 80% vs 14H.' },
-  consistent: { label: 'Konsisten', icon: '✅', color: '#1e40af', bg: '#eff6ff', border: '#bfdbfe', tooltip: 'Avg TRX/hari bulan ini antara 80–120% vs 14H.' },
+  growing:    { label: 'Growing',   icon: '💎', color: '#166534', bg: '#dcfce7', border: '#bbf7d0' },
+  declining:  { label: 'Declining', icon: '⚠️', color: '#92400e', bg: '#fef9c3', border: '#fde68a' },
+  consistent: { label: 'Konsisten', icon: '✅', color: '#1e40af', bg: '#eff6ff', border: '#bfdbfe' },
 }
 
-const SKELETON_STYLE = `@keyframes shimmer { 0% { background-position: 200% 0 } 100% { background-position: -200% 0 } }`
-const PAGE_SIZE = 25
+const BUCKET_CONFIG: Record<string, { label: string, color: string, bg: string, border: string }> = {
+  productive: { label: 'Productive', color: '#166534', bg: '#dcfce7', border: '#bbf7d0' },
+  moderate:   { label: 'Moderate',   color: '#ca8a04', bg: '#fef9c3', border: '#fde68a' },
+  sporadic:   { label: 'Sporadic',   color: '#dc2626', bg: '#fee2e2', border: '#fecaca' },
+}
 
+const LIQUIDITY_CONFIG = {
+  kuat:    { label: 'Kuat',    color: '#166534', bg: '#dcfce7', border: '#bbf7d0', sublabel: 'Float kemungkinan aman' },
+  menurun: { label: 'Menurun', color: '#92400e', bg: '#fef9c3', border: '#fde68a', sublabel: 'Perlu perhatian' },
+  lemah:   { label: 'Lemah',   color: '#dc2626', bg: '#fee2e2', border: '#fecaca', sublabel: 'Kemungkinan float menipis' },
+  no_data: { label: '—',       color: '#9ca3af', bg: '#f9fafb', border: '#e5e7eb', sublabel: 'Data tidak cukup' },
+}
+
+const RANGER_MITRAS = ['arranet', 'ex dinar', 'ex ssdi']
+const PAGE_SIZE = 25
+const SKELETON_STYLE = `@keyframes shimmer { 0% { background-position: 200% 0 } 100% { background-position: -200% 0 } }`
+
+// ── Helpers ───────────────────────────────────────────────────
 function Skeleton({ width, height = 14, radius = 6 }: { width: string | number, height?: number, radius?: number }) {
   return <div style={{ width, height, borderRadius: radius, background: 'linear-gradient(90deg, #e5e7eb 25%, #f3f4f6 50%, #e5e7eb 75%)', backgroundSize: '200% 100%', animation: 'shimmer 1.4s infinite' }} />
 }
@@ -50,8 +99,18 @@ function formatFee(val: number): string {
   return `Rp ${val}`
 }
 
-function formatNum(val: number): string {
-  return val.toLocaleString('id')
+function formatAmount(val: number): string {
+  if (val >= 1000000000) return `${(val / 1000000000).toFixed(1)}M`
+  if (val >= 1000000) return `${(val / 1000000).toFixed(1)}jt`
+  if (val >= 1000) return `${(val / 1000).toFixed(0)}rb`
+  return String(val)
+}
+
+function formatNum(val: number): string { return val.toLocaleString('id') }
+
+function isRangerMitra(mitra: string | null): boolean {
+  if (!mitra) return false
+  return RANGER_MITRAS.some(m => mitra.toLowerCase().includes(m))
 }
 
 function HealthBar({ score }: { score: number }) {
@@ -66,6 +125,21 @@ function HealthBar({ score }: { score: number }) {
   )
 }
 
+function TrendChip({ trend }: { trend: string }) {
+  const cfg = TREND_CONFIG[trend as keyof typeof TREND_CONFIG] ?? TREND_CONFIG.consistent
+  return <span style={{ padding: '1px 7px', borderRadius: '99px', fontSize: '10px', fontWeight: '700', backgroundColor: cfg.bg, color: cfg.color, border: `1px solid ${cfg.border}` }}>{cfg.icon} {cfg.label}</span>
+}
+
+function BucketChip({ b }: { b: string }) {
+  const cfg = BUCKET_CONFIG[b] ?? BUCKET_CONFIG.sporadic
+  return <span style={{ padding: '1px 7px', borderRadius: '99px', fontSize: '10px', fontWeight: '700', backgroundColor: cfg.bg, color: cfg.color, border: `1px solid ${cfg.border}` }}>{cfg.label}</span>
+}
+
+function LiquidityChip({ status }: { status: string }) {
+  const cfg = LIQUIDITY_CONFIG[status as keyof typeof LIQUIDITY_CONFIG] ?? LIQUIDITY_CONFIG.no_data
+  return <span style={{ padding: '1px 7px', borderRadius: '99px', fontSize: '10px', fontWeight: '700', backgroundColor: cfg.bg, color: cfg.color, border: `1px solid ${cfg.border}` }}>{cfg.label}</span>
+}
+
 function exportCSV(filename: string, headers: string[], rows: (string | number)[][]) {
   const csv = [headers, ...rows].map(r => r.map(v => `"${v}"`).join(',')).join('\n')
   const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
@@ -75,6 +149,7 @@ function exportCSV(filename: string, headers: string[], rows: (string | number)[
   URL.revokeObjectURL(url)
 }
 
+// ── Main Component ────────────────────────────────────────────
 export default function PicPage() {
   const router = useRouter()
   const supabase = createBrowserClient(
@@ -82,36 +157,68 @@ export default function PicPage() {
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
   )
 
-  const [pics, setPics]         = useState<PicRow[]>([])
-  const [loading, setLoading]   = useState(true)
-  const [totalCount, setTotalCount] = useState(0)
-  const [page, setPage]         = useState(0)
+  // Tab state — 'semua' | 'ranger' | 'ranger_detail'
+  const [activeTab, setActiveTab] = useState<'semua' | 'ranger' | 'ranger_detail'>('semua')
+  const [selectedRanger, setSelectedRanger] = useState<PicRow | null>(null)
+
+  // Semua PIC tab
+  const [pics, setPics]               = useState<PicRow[]>([])
+  const [loading, setLoading]         = useState(true)
+  const [totalCount, setTotalCount]   = useState(0)
+  const [page, setPage]               = useState(0)
   const [filterMitra, setFilterMitra] = useState('')
-  const [search, setSearch]     = useState('')
+  const [search, setSearch]           = useState('')
   const [searchInput, setSearchInput] = useState('')
-  const [mitras, setMitras]     = useState<string[]>([])
-  const [exporting, setExporting] = useState(false)
-  const [tooltip, setTooltip]   = useState<{ text: string, x: number, y: number } | null>(null)
-  const debounceRef = useRef<NodeJS.Timeout>()
+  const [mitras, setMitras]           = useState<string[]>([])
+  const [exporting, setExporting]     = useState(false)
 
-  // Drawer
-  const [selected, setSelected]       = useState<PicRow | null>(null)
-  const [agents, setAgents]           = useState<PicAgent[]>([])
-  const [loadingDrawer, setLoadingDrawer] = useState(false)
+  // Ranger tab
+  const [rangers, setRangers]             = useState<PicRow[]>([])
+  const [loadingRangers, setLoadingRangers] = useState(false)
+  const [rangerSearch, setRangerSearch]   = useState('')
+  const [rangerSearchInput, setRangerSearchInput] = useState('')
+  const [rangerPage, setRangerPage]       = useState(0)
+  const [rangerTotal, setRangerTotal]     = useState(0)
 
-  useEffect(() => { initPage() }, [router.asPath])
+  // Ranger Detail tab
+  const [rangerAgents, setRangerAgents]         = useState<RangerAgent[]>([])
+  const [loadingRangerAgents, setLoadingRangerAgents] = useState(false)
+  const [rangerAgentPage, setRangerAgentPage]   = useState(0)
+  const [rangerAgentTotal, setRangerAgentTotal] = useState(0)
+
+  // Agent Drawer (reuse dari hidden-gem)
+  const [selectedAgent, setSelectedAgent]   = useState<RangerAgent | null>(null)
+  const [agentDetail, setAgentDetail]       = useState<AgentDayDetail[]>([])
+  const [liquiditySummary, setLiquiditySummary] = useState<AgentLiquidityDetail | null>(null)
+  const [liquidityDetail, setLiquidityDetail]   = useState<AgentLiquidityDetail[]>([])
+  const [loadingDrawer, setLoadingDrawer]   = useState(false)
+  const [sinceDate, setSinceDate]           = useState('')
+  const [lastDate, setLastDate]             = useState('')
+
+  const [tooltip, setTooltip] = useState<{ text: string, x: number, y: number } | null>(null)
+  const debounceRef    = useRef<NodeJS.Timeout>()
+  const debounceRgRef  = useRef<NodeJS.Timeout>()
+
+  // ── Init ────────────────────────────────────────────────────
+  useEffect(() => { initPage() }, [])
 
   async function initPage() {
     setLoading(true)
     try {
-      const [filterRes] = await Promise.all([
-        supabase.rpc('get_pic_filter_options'),
-      ])
+      const [filterRes] = await Promise.all([supabase.rpc('get_pic_filter_options')])
       if (filterRes.data?.[0]) setMitras(filterRes.data[0].mitras ?? [])
+
+      // Get date range
+      const { data: prog } = await supabase.rpc('get_monthly_progress')
+      if (prog?.[0]) {
+        setSinceDate(prog[0].end_date ? new Date(new Date(prog[0].end_date).getTime() - 13 * 86400000).toISOString().split('T')[0] : '')
+        setLastDate(prog[0].end_date ?? '')
+      }
       await loadPics(0, '', '')
     } finally { setLoading(false) }
   }
 
+  // ── Semua PIC ───────────────────────────────────────────────
   async function loadPics(newPage: number, mitra: string, srch: string) {
     setLoading(true)
     try {
@@ -122,14 +229,6 @@ export default function PicPage() {
       setPics(dataRes.data ?? [])
       setTotalCount(Number(countRes.data ?? 0))
     } finally { setLoading(false) }
-  }
-
-  async function openDrawer(pic: PicRow) {
-    setSelected(pic); setAgents([]); setLoadingDrawer(true)
-    try {
-      const { data } = await supabase.rpc('get_pic_agent_list', { p_pic: pic.pic })
-      setAgents(data ?? [])
-    } finally { setLoadingDrawer(false) }
   }
 
   function handleSearchInput(val: string) {
@@ -146,11 +245,6 @@ export default function PicPage() {
     await loadPics(0, mitra, search)
   }
 
-  async function handlePageChange(newPage: number) {
-    setPage(newPage)
-    await loadPics(newPage, filterMitra, search)
-  }
-
   async function handleReset() {
     setFilterMitra(''); setSearch(''); setSearchInput(''); setPage(0)
     await loadPics(0, '', '')
@@ -160,15 +254,78 @@ export default function PicPage() {
     setExporting(true)
     try {
       const { data } = await supabase.rpc('get_pic_list', { p_mitra: filterMitra, p_search: search, p_limit: 9999, p_offset: 0 })
-      const rows = (data ?? []).map((p: PicRow) => [
-        p.pic, p.mitra, p.total_agents, p.total_trx_14d, p.total_fee_14d,
-        p.avg_trx_per_agent, p.growing_count, p.growing_pct,
-        p.declining_count, p.declining_pct, p.health_score,
-      ])
-      exportCSV(`kekuatan_pic_${new Date().toISOString().split('T')[0]}.csv`,
-        ['PIC','Mitra','Agen','TRX 14H','Fee 14H','TRX/Agen','Growing','Growing %','Declining','Declining %','Health Score'],
-        rows)
+      const rows = (data ?? []).map((p: PicRow) => [p.pic, p.mitra, p.total_agents, p.total_trx_14d, p.total_fee_14d, p.avg_trx_per_agent, p.growing_count, p.growing_pct, p.declining_count, p.declining_pct, p.health_score])
+      exportCSV(`kekuatan_pic_${new Date().toISOString().split('T')[0]}.csv`, ['PIC','Mitra','Agen','TRX 14H','Fee 14H','TRX/Agen','Growing','Growing %','Declining','Declining %','Health Score'], rows)
     } finally { setExporting(false) }
+  }
+
+  // ── Ranger Tab ──────────────────────────────────────────────
+  async function loadRangers(newPage: number, srch: string) {
+    setLoadingRangers(true)
+    try {
+      // Filter: hanya mitra Arranet/ex Dinar/ex SSDI
+      const allMitra = ['ARRANET', 'ARRANET ex Dinar', 'ARRANET ex SSDI']
+      let allRangers: PicRow[] = []
+      for (const m of allMitra) {
+        const { data } = await supabase.rpc('get_pic_list', { p_mitra: m, p_search: srch, p_limit: 999, p_offset: 0 })
+        if (data) allRangers = [...allRangers, ...data]
+      }
+      // Deduplicate by pic name
+      const seen = new Set<string>()
+      const unique = allRangers.filter(r => { if (seen.has(r.pic)) return false; seen.add(r.pic); return true })
+      unique.sort((a, b) => b.total_fee_14d - a.total_fee_14d)
+      setRangerTotal(unique.length)
+      setRangers(unique.slice(newPage * PAGE_SIZE, (newPage + 1) * PAGE_SIZE))
+    } finally { setLoadingRangers(false) }
+  }
+
+  function handleRangerSearchInput(val: string) {
+    setRangerSearchInput(val)
+    if (debounceRgRef.current) clearTimeout(debounceRgRef.current)
+    debounceRgRef.current = setTimeout(async () => {
+      setRangerSearch(val); setRangerPage(0)
+      await loadRangers(0, val)
+    }, 400)
+  }
+
+  // ── Ranger Detail Tab ────────────────────────────────────────
+  async function openRangerDetail(ranger: PicRow) {
+    setSelectedRanger(ranger)
+    setActiveTab('ranger_detail')
+    setRangerAgentPage(0)
+    await loadRangerAgents(ranger.pic, 0)
+  }
+
+  async function loadRangerAgents(pic: string, newPage: number) {
+    setLoadingRangerAgents(true)
+    try {
+      const [dataRes, countRes] = await Promise.all([
+        supabase.rpc('get_ranger_agents', { p_pic: pic, p_limit: PAGE_SIZE, p_offset: newPage * PAGE_SIZE }),
+        supabase.rpc('get_ranger_agents_count', { p_pic: pic }),
+      ])
+      setRangerAgents(dataRes.data ?? [])
+      setRangerAgentTotal(Number(countRes.data ?? 0))
+    } finally { setLoadingRangerAgents(false) }
+  }
+
+  // ── Agent Drawer ─────────────────────────────────────────────
+  async function openAgentDrawer(agent: RangerAgent) {
+    setSelectedAgent(agent)
+    setAgentDetail([]); setLiquiditySummary(null); setLiquidityDetail([])
+    setLoadingDrawer(true)
+    try {
+      const [detailRes, liqRes] = await Promise.all([
+        supabase.rpc('get_agent_detail', { p_serial: agent.serial_number, p_since: sinceDate, p_until: lastDate }),
+        supabase.rpc('get_agent_liquidity_summary', { p_serial: agent.serial_number }),
+      ])
+      const detail = detailRes.data ?? []
+      setAgentDetail(detail)
+      const liqData = liqRes.data ?? []
+      if (liqData.length > 0) {
+        setLiquiditySummary(liqData[0])
+        setLiquidityDetail(liqData)
+      }
+    } finally { setLoadingDrawer(false) }
   }
 
   const tip = (text: string) => ({
@@ -177,28 +334,67 @@ export default function PicPage() {
     onMouseLeave: () => setTooltip(null),
   })
 
-  const totalPages = Math.ceil(totalCount / PAGE_SIZE)
+  const totalPages       = Math.ceil(totalCount / PAGE_SIZE)
+  const rangerTotalPages = Math.ceil(rangerTotal / PAGE_SIZE)
+  const agentTotalPages  = Math.ceil(rangerAgentTotal / PAGE_SIZE)
 
-  function TrendChip({ trend }: { trend: string }) {
-    const cfg = TREND_CONFIG[trend as keyof typeof TREND_CONFIG] ?? TREND_CONFIG.consistent
-    return (
-      <span style={{ padding: '1px 7px', borderRadius: '99px', fontSize: '10px', fontWeight: '700', backgroundColor: cfg.bg, color: cfg.color, border: `1px solid ${cfg.border}`, whiteSpace: 'nowrap' }}>
-        {cfg.icon} {cfg.label}
-      </span>
+  // ── PIC Table (reusable) ─────────────────────────────────────
+  function PicTable({ data, isLoading, onRowClick }: { data: PicRow[], isLoading: boolean, onRowClick?: (p: PicRow) => void }) {
+    return isLoading ? (
+      <div style={{ border: '1px solid #e5e7eb', borderRadius: '10px', overflow: 'hidden' }}>
+        {[1,2,3,4,5].map(i => (
+          <div key={i} style={{ display: 'grid', gridTemplateColumns: '1fr 150px 60px 90px 110px 90px 70px 70px 80px', padding: '13px 16px', borderBottom: '1px solid #f3f4f6', gap: '12px', alignItems: 'center' }}>
+            <Skeleton width={140} height={13} />
+            {[120,40,70,90,70,55,55,70].map((w, j) => <Skeleton key={j} width={w} height={12} />)}
+          </div>
+        ))}
+      </div>
+    ) : data.length > 0 ? (
+      <div style={{ border: '1px solid #e5e7eb', borderRadius: '10px', overflow: 'hidden' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 150px 60px 90px 110px 90px 70px 70px 80px', padding: '10px 16px', backgroundColor: '#f9fafb', borderBottom: '1px solid #e5e7eb', fontSize: '10px', fontWeight: '700', color: '#9ca3af', letterSpacing: '0.05em', gap: '12px' }}>
+          <div>PIC</div>
+          <div>MITRA</div>
+          <div style={{ textAlign: 'right' }}>AGEN</div>
+          <div style={{ textAlign: 'right' }}>TRX (14H)</div>
+          <div style={{ textAlign: 'right' }}>FEE (14H)</div>
+          <div style={{ textAlign: 'right' }}><span {...tip('Rata-rata TRX per agen dalam 14H.')}>TRX/AGEN ⓘ</span></div>
+          <div style={{ textAlign: 'right' }}><span {...tip('% agen growing MTD vs 14H.')}>GROWING ⓘ</span></div>
+          <div style={{ textAlign: 'right' }}><span {...tip('% agen declining MTD vs 14H.')}>DECLINING ⓘ</span></div>
+          <div><span {...tip('Composite score 0–100.')}>HEALTH ⓘ</span></div>
+        </div>
+        {data.map((p, i) => (
+          <div key={p.pic} onClick={() => onRowClick?.(p)}
+            style={{ display: 'grid', gridTemplateColumns: '1fr 150px 60px 90px 110px 90px 70px 70px 80px', padding: '11px 16px', borderBottom: i < data.length - 1 ? '1px solid #f3f4f6' : 'none', alignItems: 'center', backgroundColor: '#fff', cursor: onRowClick ? 'pointer' : 'default', gap: '12px' }}
+            onMouseEnter={e => { if (onRowClick) e.currentTarget.style.backgroundColor = '#f9fafb' }}
+            onMouseLeave={e => { if (onRowClick) e.currentTarget.style.backgroundColor = '#fff' }}>
+            <div style={{ fontSize: '13px', fontWeight: '600', color: '#111827', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.pic}</div>
+            <div style={{ fontSize: '11px', color: '#9ca3af', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.mitra}</div>
+            <div style={{ fontSize: '12px', color: '#374151', textAlign: 'right' }}>{formatNum(p.total_agents)}</div>
+            <div style={{ fontSize: '12px', color: '#374151', textAlign: 'right' }}>{formatNum(p.total_trx_14d)}</div>
+            <div style={{ fontSize: '12px', fontWeight: '600', color: '#111827', textAlign: 'right' }}>{formatFee(p.total_fee_14d)}</div>
+            <div style={{ textAlign: 'right' }}>
+              <span style={{ fontSize: '12px', fontWeight: '700', color: p.avg_trx_per_agent >= 80 ? '#166534' : p.avg_trx_per_agent >= 40 ? '#374151' : '#dc2626' }}>{p.avg_trx_per_agent}</span>
+            </div>
+            <div style={{ textAlign: 'right' }}>
+              <span style={{ fontSize: '12px', fontWeight: '600', color: p.growing_pct >= 10 ? '#166534' : '#374151' }}>{p.growing_pct}%</span>
+              <div style={{ fontSize: '10px', color: '#9ca3af' }}>{formatNum(p.growing_count)} agen</div>
+            </div>
+            <div style={{ textAlign: 'right' }}>
+              <span style={{ fontSize: '12px', fontWeight: '600', color: p.declining_pct > 20 ? '#dc2626' : p.declining_pct > 10 ? '#ca8a04' : '#374151' }}>{p.declining_pct}%</span>
+              <div style={{ fontSize: '10px', color: '#9ca3af' }}>{formatNum(p.declining_count)} agen</div>
+            </div>
+            <div><HealthBar score={p.health_score} /></div>
+          </div>
+        ))}
+      </div>
+    ) : (
+      <div style={{ textAlign: 'center', padding: '60px', backgroundColor: '#f9fafb', borderRadius: '10px', border: '1px dashed #e5e7eb', color: '#9ca3af', fontSize: '13px' }}>
+        Tidak ada PIC ditemukan
+      </div>
     )
   }
 
-  // Signals untuk drawer
-  function getSignals(p: PicRow): { type: 'red' | 'yellow' | 'green', text: string }[] {
-    const s: { type: 'red' | 'yellow' | 'green', text: string }[] = []
-    if (p.declining_pct > 20)  s.push({ type: 'red',    text: `${p.declining_pct}% agen declining — perlu perhatian segera` })
-    if (p.declining_pct > 10 && p.declining_pct <= 20) s.push({ type: 'yellow', text: `${p.declining_pct}% agen declining — pantau terus` })
-    if (p.growing_pct > 10)    s.push({ type: 'green',  text: `${p.growing_pct}% agen growing — coaching efektif` })
-    if (p.avg_trx_per_agent > 80) s.push({ type: 'green', text: `Avg ${p.avg_trx_per_agent} TRX/agen — produktivitas tinggi` })
-    if (p.avg_trx_per_agent < 20) s.push({ type: 'yellow', text: `Avg ${p.avg_trx_per_agent} TRX/agen — produktivitas rendah` })
-    return s
-  }
-
+  // ── Render ────────────────────────────────────────────────────
   return (
     <Layout>
       <style>{SKELETON_STYLE}</style>
@@ -216,208 +412,370 @@ export default function PicPage() {
         <div style={{ marginBottom: '24px' }}>
           <div style={{ fontSize: '11px', fontWeight: '600', color: '#9ca3af', letterSpacing: '0.1em', marginBottom: '4px' }}>ANALITIK JARINGAN</div>
           <h1 style={{ fontSize: '24px', fontWeight: '800', color: '#111827', margin: 0, letterSpacing: '-0.02em' }}>👤 Kekuatan PIC</h1>
-          <p style={{ fontSize: '13px', color: '#6b7280', marginTop: '4px' }}>Performa dan kualitas coaching PIC berdasarkan 14 hari terakhir.</p>
         </div>
 
-        {/* Filters + Search + Export */}
-        <div style={{ display: 'flex', gap: '10px', marginBottom: '16px', flexWrap: 'wrap', alignItems: 'center' }}>
-          <input
-            type="text"
-            value={searchInput}
-            onChange={e => handleSearchInput(e.target.value)}
-            placeholder="Cari nama PIC..."
-            style={{ padding: '7px 12px', borderRadius: '8px', border: '1px solid #e5e7eb', fontSize: '12px', color: '#374151', width: '200px', outline: 'none' }}
-          />
-          <select value={filterMitra} onChange={e => handleMitraChange(e.target.value)}
-            style={{ padding: '7px 12px', borderRadius: '8px', border: '1px solid #e5e7eb', fontSize: '12px', color: '#374151', backgroundColor: '#fff', cursor: 'pointer' }}>
-            <option value="">Semua Mitra</option>
-            {mitras.map(m => <option key={m} value={m}>{m}</option>)}
-          </select>
-          {(filterMitra || search) && (
-            <button onClick={handleReset} style={{ padding: '7px 12px', borderRadius: '8px', border: '1px solid #e5e7eb', backgroundColor: '#fff', color: '#6b7280', fontSize: '12px', cursor: 'pointer' }}>✕ Reset</button>
-          )}
-          <span style={{ marginLeft: 'auto', fontSize: '13px', color: '#6b7280' }}>
-            {loading ? 'Memuat...' : `${formatNum(totalCount)} PIC`}
-          </span>
-          <button onClick={handleExport} disabled={exporting || loading}
-            style={{ padding: '7px 14px', borderRadius: '8px', border: '1px solid #e5e7eb', backgroundColor: '#fff', color: exporting ? '#9ca3af' : '#374151', fontSize: '12px', cursor: exporting ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}>
-            {exporting ? '⏳' : '⬇'} Export CSV
-          </button>
+        {/* Tabs */}
+        <div style={{ display: 'flex', gap: '4px', marginBottom: '24px', borderBottom: '1px solid #e5e7eb', paddingBottom: '0' }}>
+          {[
+            { key: 'semua',         label: 'Semua PIC' },
+            { key: 'ranger',        label: '⚡ Ranger' },
+            { key: 'ranger_detail', label: selectedRanger ? `📋 ${selectedRanger.pic}` : '📋 Detail Ranger', disabled: !selectedRanger },
+          ].map(tab => (
+            <button key={tab.key}
+              onClick={() => {
+                if (tab.disabled) return
+                setActiveTab(tab.key as any)
+                if (tab.key === 'ranger' && rangers.length === 0) loadRangers(0, '')
+              }}
+              disabled={tab.disabled}
+              style={{
+                padding: '8px 16px', fontSize: '13px', fontWeight: '600', cursor: tab.disabled ? 'not-allowed' : 'pointer',
+                border: 'none', borderBottom: activeTab === tab.key ? '2px solid #0344D8' : '2px solid transparent',
+                backgroundColor: 'transparent', color: tab.disabled ? '#d1d5db' : activeTab === tab.key ? '#0344D8' : '#6b7280',
+                marginBottom: '-1px', transition: 'all 0.15s',
+              }}>
+              {tab.label}
+            </button>
+          ))}
         </div>
 
-        {/* Table */}
-        {loading ? (
-          <div style={{ border: '1px solid #e5e7eb', borderRadius: '10px', overflow: 'hidden' }}>
-            {[1,2,3,4,5].map(i => (
-              <div key={i} style={{ display: 'grid', gridTemplateColumns: '1fr 150px 60px 90px 110px 90px 70px 70px 80px', padding: '13px 16px', borderBottom: '1px solid #f3f4f6', gap: '12px', alignItems: 'center' }}>
-                <Skeleton width={140} height={13} />
-                {[120,40,70,90,70,55,55,70].map((w, j) => <Skeleton key={j} width={w} height={12} />)}
+        {/* ── TAB 1: Semua PIC ── */}
+        {activeTab === 'semua' && (
+          <>
+            <div style={{ display: 'flex', gap: '10px', marginBottom: '16px', flexWrap: 'wrap', alignItems: 'center' }}>
+              <input type="text" value={searchInput} onChange={e => handleSearchInput(e.target.value)} placeholder="Cari nama PIC..."
+                style={{ padding: '7px 12px', borderRadius: '8px', border: '1px solid #e5e7eb', fontSize: '12px', color: '#374151', width: '200px', outline: 'none' }} />
+              <select value={filterMitra} onChange={e => handleMitraChange(e.target.value)}
+                style={{ padding: '7px 12px', borderRadius: '8px', border: '1px solid #e5e7eb', fontSize: '12px', color: '#374151', backgroundColor: '#fff', cursor: 'pointer' }}>
+                <option value="">Semua Mitra</option>
+                {mitras.map(m => <option key={m} value={m}>{m}</option>)}
+              </select>
+              {(filterMitra || search) && (
+                <button onClick={handleReset} style={{ padding: '7px 12px', borderRadius: '8px', border: '1px solid #e5e7eb', backgroundColor: '#fff', color: '#6b7280', fontSize: '12px', cursor: 'pointer' }}>✕ Reset</button>
+              )}
+              <span style={{ marginLeft: 'auto', fontSize: '13px', color: '#6b7280' }}>{loading ? 'Memuat...' : `${formatNum(totalCount)} PIC`}</span>
+              <button onClick={handleExport} disabled={exporting || loading}
+                style={{ padding: '7px 14px', borderRadius: '8px', border: '1px solid #e5e7eb', backgroundColor: '#fff', color: exporting ? '#9ca3af' : '#374151', fontSize: '12px', cursor: exporting ? 'not-allowed' : 'pointer' }}>
+                {exporting ? '⏳' : '⬇'} Export CSV
+              </button>
+            </div>
+            <PicTable data={pics} isLoading={loading} />
+            {totalPages > 1 && (
+              <div style={{ display: 'flex', justifyContent: 'center', gap: '8px', alignItems: 'center', marginTop: '16px' }}>
+                <button onClick={() => { setPage(p => Math.max(0, p - 1)); loadPics(Math.max(0, page - 1), filterMitra, search) }} disabled={page === 0}
+                  style={{ padding: '7px 14px', borderRadius: '8px', border: '1px solid #e5e7eb', backgroundColor: '#fff', color: page === 0 ? '#d1d5db' : '#374151', fontSize: '13px', cursor: page === 0 ? 'not-allowed' : 'pointer' }}>← Prev</button>
+                <span style={{ fontSize: '13px', color: '#6b7280' }}>{page + 1} / {totalPages}</span>
+                <button onClick={() => { setPage(p => Math.min(totalPages - 1, p + 1)); loadPics(Math.min(totalPages - 1, page + 1), filterMitra, search) }} disabled={page >= totalPages - 1}
+                  style={{ padding: '7px 14px', borderRadius: '8px', border: '1px solid #e5e7eb', backgroundColor: '#fff', color: page >= totalPages - 1 ? '#d1d5db' : '#374151', fontSize: '13px', cursor: page >= totalPages - 1 ? 'not-allowed' : 'pointer' }}>Next →</button>
               </div>
-            ))}
-          </div>
-        ) : pics.length > 0 ? (
-          <div style={{ border: '1px solid #e5e7eb', borderRadius: '10px', overflow: 'hidden' }}>
-            {/* Header */}
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 150px 60px 90px 110px 90px 70px 70px 80px', padding: '10px 16px', backgroundColor: '#f9fafb', borderBottom: '1px solid #e5e7eb', fontSize: '10px', fontWeight: '700', color: '#9ca3af', letterSpacing: '0.05em', gap: '12px' }}>
-              <div>PIC</div>
-              <div>MITRA</div>
-              <div style={{ textAlign: 'right' }}>AGEN</div>
-              <div style={{ textAlign: 'right' }}>TRX (14H)</div>
-              <div style={{ textAlign: 'right' }}>FEE (14H)</div>
-              <div style={{ textAlign: 'right' }}>
-                <span {...tip('Rata-rata TRX per agen dalam 14H. Indikator kualitas coaching PIC.')}>TRX/AGEN ⓘ</span>
+            )}
+          </>
+        )}
+
+        {/* ── TAB 2: Ranger ── */}
+        {activeTab === 'ranger' && (
+          <>
+            <div style={{ display: 'flex', gap: '10px', marginBottom: '16px', alignItems: 'center' }}>
+              <input type="text" value={rangerSearchInput} onChange={e => handleRangerSearchInput(e.target.value)} placeholder="Cari nama Ranger..."
+                style={{ padding: '7px 12px', borderRadius: '8px', border: '1px solid #e5e7eb', fontSize: '12px', color: '#374151', width: '200px', outline: 'none' }} />
+              <span style={{ marginLeft: 'auto', fontSize: '13px', color: '#6b7280' }}>{loadingRangers ? 'Memuat...' : `${formatNum(rangerTotal)} Ranger`}</span>
+            </div>
+            <div style={{ marginBottom: '12px', padding: '10px 14px', backgroundColor: '#eff6ff', borderRadius: '8px', fontSize: '12px', color: '#1e40af', border: '1px solid #bfdbfe' }}>
+              ⚡ Ranger adalah PIC dari mitra ARRANET, ARRANET ex Dinar, dan ARRANET ex SSDI. Klik baris untuk melihat detail agen.
+            </div>
+            <PicTable data={rangers} isLoading={loadingRangers} onRowClick={openRangerDetail} />
+            {rangerTotalPages > 1 && (
+              <div style={{ display: 'flex', justifyContent: 'center', gap: '8px', alignItems: 'center', marginTop: '16px' }}>
+                <button onClick={() => { setRangerPage(p => Math.max(0, p - 1)); loadRangers(Math.max(0, rangerPage - 1), rangerSearch) }} disabled={rangerPage === 0}
+                  style={{ padding: '7px 14px', borderRadius: '8px', border: '1px solid #e5e7eb', backgroundColor: '#fff', color: rangerPage === 0 ? '#d1d5db' : '#374151', fontSize: '13px', cursor: rangerPage === 0 ? 'not-allowed' : 'pointer' }}>← Prev</button>
+                <span style={{ fontSize: '13px', color: '#6b7280' }}>{rangerPage + 1} / {rangerTotalPages}</span>
+                <button onClick={() => { setRangerPage(p => Math.min(rangerTotalPages - 1, p + 1)); loadRangers(Math.min(rangerTotalPages - 1, rangerPage + 1), rangerSearch) }} disabled={rangerPage >= rangerTotalPages - 1}
+                  style={{ padding: '7px 14px', borderRadius: '8px', border: '1px solid #e5e7eb', backgroundColor: '#fff', color: rangerPage >= rangerTotalPages - 1 ? '#d1d5db' : '#374151', fontSize: '13px', cursor: rangerPage >= rangerTotalPages - 1 ? 'not-allowed' : 'pointer' }}>Next →</button>
               </div>
-              <div style={{ textAlign: 'right' }}>
-                <span {...tip('% agen yang avg TRX/hari bulan ini > 120% vs 14H.')}>GROWING ⓘ</span>
+            )}
+          </>
+        )}
+
+        {/* ── TAB 3: Ranger Detail ── */}
+        {activeTab === 'ranger_detail' && selectedRanger && (
+          <>
+            {/* Back button */}
+            <button onClick={() => setActiveTab('ranger')}
+              style={{ padding: '6px 12px', borderRadius: '8px', border: '1px solid #e5e7eb', backgroundColor: '#fff', color: '#374151', fontSize: '12px', cursor: 'pointer', marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+              ← Kembali ke Ranger
+            </button>
+
+            {/* Ranger Header */}
+            <div style={{ backgroundColor: '#fff', border: '1px solid #e5e7eb', borderRadius: '12px', padding: '20px 24px', marginBottom: '16px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                <div>
+                  <div style={{ fontSize: '20px', fontWeight: '800', color: '#111827', marginBottom: '4px' }}>⚡ {selectedRanger.pic}</div>
+                  <div style={{ fontSize: '12px', color: '#9ca3af', marginBottom: '10px' }}>{selectedRanger.mitra}</div>
+                </div>
+                <div style={{ textAlign: 'right' }}>
+                  <div style={{ fontSize: '11px', color: '#9ca3af', marginBottom: '4px' }}>Health Score</div>
+                  <div style={{ fontSize: '20px', fontWeight: '800', color: selectedRanger.health_score >= 65 ? '#166534' : selectedRanger.health_score >= 50 ? '#ca8a04' : '#dc2626' }}>{selectedRanger.health_score}</div>
+                </div>
               </div>
-              <div style={{ textAlign: 'right' }}>
-                <span {...tip('% agen yang avg TRX/hari bulan ini < 80% vs 14H.')}>DECLINING ⓘ</span>
-              </div>
-              <div>
-                <span {...tip('Composite score 0–100. Komponen: % Productive (30%), % Growing (25%), % rendah Declining (25%), fixed 25%.')}>HEALTH ⓘ</span>
+              {/* Summary cards */}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '10px', marginTop: '16px', paddingTop: '16px', borderTop: '1px solid #f3f4f6' }}>
+                {[
+                  { label: 'Total Agen',   value: formatNum(selectedRanger.total_agents) },
+                  { label: 'Fee 14H',      value: formatFee(selectedRanger.total_fee_14d), highlight: true },
+                  { label: 'TRX/Agen',     value: String(selectedRanger.avg_trx_per_agent) },
+                  { label: 'Growing',      value: `${selectedRanger.growing_pct}%`,   color: '#166534' },
+                  { label: 'Declining',    value: `${selectedRanger.declining_pct}%`, color: selectedRanger.declining_pct > 15 ? '#dc2626' : '#374151' },
+                ].map(s => (
+                  <div key={s.label} style={{ padding: '10px 12px', backgroundColor: (s as any).highlight ? '#eff6ff' : '#f9fafb', borderRadius: '8px', textAlign: 'center', border: (s as any).highlight ? '1px solid #bfdbfe' : 'none' }}>
+                    <div style={{ fontSize: '16px', fontWeight: '700', color: (s as any).color ?? ((s as any).highlight ? '#1e40af' : '#111827') }}>{s.value}</div>
+                    <div style={{ fontSize: '10px', color: '#9ca3af', marginTop: '2px' }}>{s.label}</div>
+                  </div>
+                ))}
               </div>
             </div>
 
-            {/* Rows */}
-            {pics.map((p, i) => (
-              <div key={p.pic} onClick={() => openDrawer(p)}
-                style={{ display: 'grid', gridTemplateColumns: '1fr 150px 60px 90px 110px 90px 70px 70px 80px', padding: '11px 16px', borderBottom: i < pics.length - 1 ? '1px solid #f3f4f6' : 'none', alignItems: 'center', backgroundColor: '#fff', cursor: 'pointer', gap: '12px' }}
-                onMouseEnter={e => e.currentTarget.style.backgroundColor = '#f9fafb'}
-                onMouseLeave={e => e.currentTarget.style.backgroundColor = '#fff'}>
-                <div style={{ fontSize: '13px', fontWeight: '600', color: '#111827', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.pic}</div>
-                <div style={{ fontSize: '11px', color: '#9ca3af', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.mitra}</div>
-                <div style={{ fontSize: '12px', color: '#374151', textAlign: 'right' }}>{formatNum(p.total_agents)}</div>
-                <div style={{ fontSize: '12px', color: '#374151', textAlign: 'right' }}>{formatNum(p.total_trx_14d)}</div>
-                <div style={{ fontSize: '12px', fontWeight: '600', color: '#111827', textAlign: 'right' }}>{formatFee(p.total_fee_14d)}</div>
-                <div style={{ textAlign: 'right' }}>
-                  <span style={{ fontSize: '12px', fontWeight: '700', color: p.avg_trx_per_agent >= 80 ? '#166534' : p.avg_trx_per_agent >= 40 ? '#374151' : '#dc2626' }}>
-                    {p.avg_trx_per_agent}
-                  </span>
-                </div>
-                <div style={{ textAlign: 'right' }}>
-                  <span style={{ fontSize: '12px', fontWeight: '600', color: p.growing_pct >= 10 ? '#166534' : '#374151' }}>{p.growing_pct}%</span>
-                  <div style={{ fontSize: '10px', color: '#9ca3af' }}>{formatNum(p.growing_count)} agen</div>
-                </div>
-                <div style={{ textAlign: 'right' }}>
-                  <span style={{ fontSize: '12px', fontWeight: '600', color: p.declining_pct > 20 ? '#dc2626' : p.declining_pct > 10 ? '#ca8a04' : '#374151' }}>{p.declining_pct}%</span>
-                  <div style={{ fontSize: '10px', color: '#9ca3af' }}>{formatNum(p.declining_count)} agen</div>
-                </div>
-                <div><HealthBar score={p.health_score} /></div>
+            {/* Agent List */}
+            <div style={{ fontSize: '11px', fontWeight: '700', color: '#9ca3af', letterSpacing: '0.08em', marginBottom: '12px' }}>
+              DAFTAR AGEN ({formatNum(rangerAgentTotal)} agen) — klik untuk detail
+            </div>
+
+            {loadingRangerAgents ? (
+              <div style={{ border: '1px solid #e5e7eb', borderRadius: '10px', overflow: 'hidden' }}>
+                {[1,2,3,4,5].map(i => (
+                  <div key={i} style={{ display: 'grid', gridTemplateColumns: '1fr 80px 70px 90px 100px 70px 80px', padding: '12px 16px', borderBottom: '1px solid #f3f4f6', gap: '12px' }}>
+                    <Skeleton width={160} height={13} />
+                    {[60,60,70,80,60,70].map((w,j) => <Skeleton key={j} width={w} height={12} />)}
+                  </div>
+                ))}
               </div>
-            ))}
-          </div>
-        ) : (
-          <div style={{ textAlign: 'center', padding: '60px', backgroundColor: '#f9fafb', borderRadius: '10px', border: '1px dashed #e5e7eb', color: '#9ca3af', fontSize: '13px' }}>
-            Tidak ada PIC ditemukan
-          </div>
+            ) : rangerAgents.length > 0 ? (
+              <div style={{ border: '1px solid #e5e7eb', borderRadius: '10px', overflow: 'hidden' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 80px 70px 90px 100px 70px 80px', padding: '10px 16px', backgroundColor: '#f9fafb', borderBottom: '1px solid #e5e7eb', fontSize: '10px', fontWeight: '700', color: '#9ca3af', letterSpacing: '0.05em', gap: '12px' }}>
+                  <div>AGEN</div>
+                  <div style={{ textAlign: 'right' }}>HARI AKTIF</div>
+                  <div style={{ textAlign: 'right' }}>TRX 14H</div>
+                  <div style={{ textAlign: 'right' }}>FEE 14H</div>
+                  <div style={{ textAlign: 'right' }}>AVG TRX/HARI</div>
+                  <div style={{ textAlign: 'center' }}>BUCKET</div>
+                  <div style={{ textAlign: 'center' }}>TREND</div>
+                </div>
+                {rangerAgents.map((a, i) => (
+                  <div key={a.serial_number} onClick={() => openAgentDrawer(a)}
+                    style={{ display: 'grid', gridTemplateColumns: '1fr 80px 70px 90px 100px 70px 80px', padding: '11px 16px', borderBottom: i < rangerAgents.length - 1 ? '1px solid #f3f4f6' : 'none', alignItems: 'center', backgroundColor: '#fff', cursor: 'pointer', gap: '12px' }}
+                    onMouseEnter={e => e.currentTarget.style.backgroundColor = '#f9fafb'}
+                    onMouseLeave={e => e.currentTarget.style.backgroundColor = '#fff'}>
+                    <div>
+                      <div style={{ fontSize: '13px', fontWeight: '600', color: '#111827', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{a.merchant_name ?? a.serial_number}</div>
+                      <div style={{ fontSize: '10px', color: '#d1d5db' }}>{a.serial_number}</div>
+                    </div>
+                    <div style={{ fontSize: '12px', fontWeight: '700', color: a.active_days_14 >= 8 ? '#166534' : a.active_days_14 >= 5 ? '#ca8a04' : '#dc2626', textAlign: 'right' }}>{a.active_days_14}</div>
+                    <div style={{ fontSize: '12px', color: '#374151', textAlign: 'right' }}>{formatNum(a.total_trx_14d)}</div>
+                    <div style={{ fontSize: '12px', color: '#374151', textAlign: 'right' }}>{formatFee(a.total_fee_14d)}</div>
+                    <div style={{ fontSize: '12px', fontWeight: '700', color: '#1e40af', textAlign: 'right' }}>{a.avg_trx_14}</div>
+                    <div style={{ textAlign: 'center' }}><BucketChip b={a.bucket} /></div>
+                    <div style={{ textAlign: 'center' }}><TrendChip trend={a.trend} /></div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div style={{ textAlign: 'center', padding: '40px', backgroundColor: '#f9fafb', borderRadius: '10px', border: '1px dashed #e5e7eb', color: '#9ca3af', fontSize: '13px' }}>
+                Tidak ada agen
+              </div>
+            )}
+
+            {/* Agent Pagination */}
+            {agentTotalPages > 1 && (
+              <div style={{ display: 'flex', justifyContent: 'center', gap: '8px', alignItems: 'center', marginTop: '16px' }}>
+                <button onClick={() => { setRangerAgentPage(p => Math.max(0, p - 1)); loadRangerAgents(selectedRanger.pic, Math.max(0, rangerAgentPage - 1)) }} disabled={rangerAgentPage === 0}
+                  style={{ padding: '7px 14px', borderRadius: '8px', border: '1px solid #e5e7eb', backgroundColor: '#fff', color: rangerAgentPage === 0 ? '#d1d5db' : '#374151', fontSize: '13px', cursor: rangerAgentPage === 0 ? 'not-allowed' : 'pointer' }}>← Prev</button>
+                <span style={{ fontSize: '13px', color: '#6b7280' }}>{rangerAgentPage + 1} / {agentTotalPages}</span>
+                <button onClick={() => { setRangerAgentPage(p => Math.min(agentTotalPages - 1, p + 1)); loadRangerAgents(selectedRanger.pic, Math.min(agentTotalPages - 1, rangerAgentPage + 1)) }} disabled={rangerAgentPage >= agentTotalPages - 1}
+                  style={{ padding: '7px 14px', borderRadius: '8px', border: '1px solid #e5e7eb', backgroundColor: '#fff', color: rangerAgentPage >= agentTotalPages - 1 ? '#d1d5db' : '#374151', fontSize: '13px', cursor: rangerAgentPage >= agentTotalPages - 1 ? 'not-allowed' : 'pointer' }}>Next →</button>
+              </div>
+            )}
+          </>
         )}
 
-        {/* Pagination */}
-        {totalPages > 1 && (
-          <div style={{ display: 'flex', justifyContent: 'center', gap: '8px', alignItems: 'center', marginTop: '16px' }}>
-            <button onClick={() => handlePageChange(Math.max(0, page - 1))} disabled={page === 0}
-              style={{ padding: '7px 14px', borderRadius: '8px', border: '1px solid #e5e7eb', backgroundColor: '#fff', color: page === 0 ? '#d1d5db' : '#374151', fontSize: '13px', cursor: page === 0 ? 'not-allowed' : 'pointer' }}>← Prev</button>
-            <span style={{ fontSize: '13px', color: '#6b7280' }}>{page + 1} / {totalPages}</span>
-            <button onClick={() => handlePageChange(Math.min(totalPages - 1, page + 1))} disabled={page >= totalPages - 1}
-              style={{ padding: '7px 14px', borderRadius: '8px', border: '1px solid #e5e7eb', backgroundColor: '#fff', color: page >= totalPages - 1 ? '#d1d5db' : '#374151', fontSize: '13px', cursor: page >= totalPages - 1 ? 'not-allowed' : 'pointer' }}>Next →</button>
-          </div>
-        )}
       </div>
 
-      {/* Drawer */}
-      {selected && (
+      {/* ── Agent Drawer (reuse dari hidden-gem) ── */}
+      {selectedAgent && (
         <div style={{ position: 'fixed', inset: 0, zIndex: 1000, display: 'flex', justifyContent: 'flex-end' }}>
-          <div onClick={() => setSelected(null)} style={{ position: 'absolute', inset: 0, backgroundColor: 'rgba(0,0,0,0.3)' }} />
+          <div onClick={() => setSelectedAgent(null)} style={{ position: 'absolute', inset: 0, backgroundColor: 'rgba(0,0,0,0.3)' }} />
           <div style={{ position: 'relative', width: '480px', height: '100%', backgroundColor: '#fff', boxShadow: '-4px 0 24px rgba(0,0,0,0.12)', display: 'flex', flexDirection: 'column', overflowY: 'auto' }}>
-
-            {/* Drawer Header */}
             <div style={{ padding: '20px 24px', borderBottom: '1px solid #f3f4f6', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', position: 'sticky', top: 0, backgroundColor: '#fff', zIndex: 1 }}>
               <div>
-                <div style={{ fontSize: '18px', fontWeight: '800', color: '#111827', marginBottom: '2px' }}>{selected.pic}</div>
-                <div style={{ fontSize: '12px', color: '#9ca3af', marginBottom: '6px' }}>{selected.mitra} · {formatNum(selected.total_agents)} agen</div>
-                <div style={{ fontSize: '12px', color: '#6b7280' }}>Health Score: <span style={{ fontWeight: '700', color: selected.health_score >= 65 ? '#166534' : selected.health_score >= 50 ? '#ca8a04' : '#dc2626' }}>{selected.health_score}/100</span></div>
+                <div style={{ fontSize: '18px', fontWeight: '800', color: '#111827', marginBottom: '4px' }}>{selectedAgent.merchant_name ?? selectedAgent.serial_number}</div>
+                <div style={{ fontSize: '11px', color: '#9ca3af', marginBottom: '6px' }}>{selectedAgent.serial_number}</div>
+                <div style={{ display: 'flex', gap: '6px' }}><TrendChip trend={selectedAgent.trend} /><BucketChip b={selectedAgent.bucket} /></div>
               </div>
-              <button onClick={() => setSelected(null)} style={{ padding: '6px 10px', borderRadius: '8px', border: '1px solid #e5e7eb', backgroundColor: '#fff', color: '#6b7280', fontSize: '18px', cursor: 'pointer', lineHeight: 1 }}>✕</button>
+              <button onClick={() => setSelectedAgent(null)} style={{ padding: '6px 10px', borderRadius: '8px', border: '1px solid #e5e7eb', backgroundColor: '#fff', color: '#6b7280', fontSize: '18px', cursor: 'pointer', lineHeight: 1 }}>✕</button>
             </div>
 
             {loadingDrawer ? (
               <div style={{ padding: '40px', textAlign: 'center', color: '#9ca3af', fontSize: '13px' }}>Memuat data...</div>
-            ) : (
+            ) : agentDetail.length > 0 ? (
               <div style={{ padding: '20px 24px' }}>
 
-                {/* Signals */}
+                {/* INFO AGEN */}
                 {(() => {
-                  const signals = getSignals(selected)
-                  if (signals.length === 0) return null
+                  const latest = agentDetail[agentDetail.length - 1]
                   return (
-                    <div style={{ marginBottom: '20px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                      {signals.map((s, i) => (
-                        <div key={i} style={{ padding: '8px 12px', borderRadius: '8px', fontSize: '12px', fontWeight: '500', backgroundColor: s.type === 'red' ? '#fef2f2' : s.type === 'yellow' ? '#fffbeb' : '#f0fdf4', color: s.type === 'red' ? '#dc2626' : s.type === 'yellow' ? '#92400e' : '#166534', border: `1px solid ${s.type === 'red' ? '#fecaca' : s.type === 'yellow' ? '#fde68a' : '#bbf7d0'}` }}>
-                          {s.type === 'red' ? '🔴' : s.type === 'yellow' ? '🟡' : '🟢'} {s.text}
+                    <div style={{ marginBottom: '24px' }}>
+                      <div style={{ fontSize: '11px', fontWeight: '700', color: '#9ca3af', letterSpacing: '0.08em', marginBottom: '12px' }}>INFO AGEN</div>
+                      {[
+                        { label: 'Mitra', value: latest.mitra }, { label: 'PIC', value: latest.pic },
+                        { label: 'Alamat', value: latest.alamat_struk }, { label: 'Brand', value: latest.brand },
+                        { label: 'Mesin', value: latest.tipe_mesin }, { label: 'Aplikasi', value: latest.source_app },
+                        { label: 'Terminal', value: latest.terminal_data_source },
+                      ].filter(r => r.value).map(r => (
+                        <div key={r.label} style={{ display: 'flex', gap: '12px', padding: '7px 0', borderBottom: '1px solid #f9fafb' }}>
+                          <span style={{ fontSize: '12px', color: '#9ca3af', minWidth: '80px', flexShrink: 0 }}>{r.label}</span>
+                          <span style={{ fontSize: '12px', color: '#111827', fontWeight: '500' }}>{r.value}</span>
                         </div>
                       ))}
                     </div>
                   )
                 })()}
 
-                {/* Summary Cards */}
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '24px' }}>
-                  {[
-                    { label: 'Fee 14H',    value: formatFee(selected.total_fee_14d) },
-                    { label: 'TRX/Agen',   value: String(selected.avg_trx_per_agent), highlight: true, tip: 'Proxy coaching quality — semakin tinggi semakin baik.' },
-                    { label: 'Growing',    value: `${selected.growing_pct}%`,    color: '#166534' },
-                    { label: 'Declining',  value: `${selected.declining_pct}%`,  color: selected.declining_pct > 15 ? '#dc2626' : '#374151' },
-                    { label: 'Konsisten',  value: `${Math.round(selected.consistent_count / Math.max(selected.total_agents, 1) * 100)}%`, color: '#1e40af' },
-                    { label: 'Total TRX',  value: formatNum(selected.total_trx_14d) },
-                  ].map(s => (
-                    <div key={s.label} style={{ padding: '10px 12px', backgroundColor: s.highlight ? '#eff6ff' : '#f9fafb', borderRadius: '8px', textAlign: 'center', border: s.highlight ? '1px solid #bfdbfe' : 'none' }}>
-                      <div style={{ fontSize: '16px', fontWeight: '700', color: s.color ?? (s.highlight ? '#1e40af' : '#111827') }}>{s.value}</div>
-                      <div style={{ fontSize: '10px', color: '#9ca3af', marginTop: '2px' }}>{s.label}</div>
-                    </div>
-                  ))}
+                {/* PERBANDINGAN PERFORMA */}
+                <div style={{ marginBottom: '24px' }}>
+                  <div style={{ fontSize: '11px', fontWeight: '700', color: '#9ca3af', letterSpacing: '0.08em', marginBottom: '12px' }}>PERBANDINGAN PERFORMA</div>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                    {[
+                      { label: 'Avg TRX/hari (14H)',    value: String(selectedAgent.avg_trx_14) },
+                      { label: 'Avg TRX/hari (MTD)',    value: String(selectedAgent.avg_trx_mtd), highlight: true },
+                      { label: 'Total TRX 14H',          value: formatNum(selectedAgent.total_trx_14d) },
+                      { label: 'Growth',                 value: `${selectedAgent.trx_change_pct > 0 ? '+' : ''}${selectedAgent.trx_change_pct}%`, highlight: true },
+                    ].map(s => {
+                      const cfg = TREND_CONFIG[selectedAgent.trend as keyof typeof TREND_CONFIG] ?? TREND_CONFIG.consistent
+                      return (
+                        <div key={s.label} style={{ padding: '10px 12px', backgroundColor: s.highlight ? cfg.bg : '#f9fafb', borderRadius: '8px', textAlign: 'center', border: s.highlight ? `1px solid ${cfg.border}` : 'none' }}>
+                          <div style={{ fontSize: '14px', fontWeight: '700', color: s.highlight ? cfg.color : '#111827' }}>{s.value}</div>
+                          <div style={{ fontSize: '10px', color: '#9ca3af', marginTop: '2px' }}>{s.label}</div>
+                        </div>
+                      )
+                    })}
+                  </div>
                 </div>
 
-                {/* Agent List */}
-                {agents.length > 0 && (
-                  <div>
-                    <div style={{ fontSize: '11px', fontWeight: '700', color: '#9ca3af', letterSpacing: '0.08em', marginBottom: '12px' }}>
-                      TOP AGEN (by TRX 14H)
-                      <span {...tip('Daftar agen yang dikelola PIC ini, diurutkan by TRX terbanyak. Maks 20 agen.')} style={{ marginLeft: '6px', cursor: 'default', fontWeight: '400' }}>ⓘ</span>
-                    </div>
-                    <div style={{ border: '1px solid #f3f4f6', borderRadius: '8px', overflow: 'hidden' }}>
-                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 50px 60px 60px', gap: '8px', padding: '8px 12px', fontSize: '9px', fontWeight: '700', color: '#9ca3af', letterSpacing: '0.05em', backgroundColor: '#f9fafb' }}>
-                        <div>AGEN</div>
-                        <div style={{ textAlign: 'right' }}>HARI</div>
-                        <div style={{ textAlign: 'right' }}>TRX 14H</div>
-                        <div style={{ textAlign: 'right' }}>TREND</div>
+                {/* RINGKASAN 14 HARI */}
+                <div style={{ marginBottom: '24px' }}>
+                  <div style={{ fontSize: '11px', fontWeight: '700', color: '#9ca3af', letterSpacing: '0.08em', marginBottom: '12px' }}>RINGKASAN 14 HARI</div>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '10px' }}>
+                    {[
+                      { label: 'Total TRX',  value: agentDetail.reduce((s, d) => s + Number(d.total_trx), 0).toLocaleString('id') },
+                      { label: 'Transfer',   value: agentDetail.reduce((s, d) => s + Number(d.transfer_trx), 0).toLocaleString('id') },
+                      { label: 'Cek Saldo',  value: agentDetail.reduce((s, d) => s + Number(d.cek_saldo_trx), 0).toLocaleString('id') },
+                      { label: 'Total Fee',  value: formatFee(agentDetail.reduce((s, d) => s + Number(d.total_fee), 0)) },
+                      { label: 'Total Amount', value: formatAmount(agentDetail.reduce((s, d) => s + Number(d.total_amount), 0)) },
+                      { label: 'Hari Aktif', value: `${agentDetail.length} hari` },
+                    ].map(s => (
+                      <div key={s.label} style={{ padding: '10px 12px', backgroundColor: '#f9fafb', borderRadius: '8px', textAlign: 'center' }}>
+                        <div style={{ fontSize: '14px', fontWeight: '700', color: '#111827' }}>{s.value}</div>
+                        <div style={{ fontSize: '10px', color: '#9ca3af', marginTop: '2px' }}>{s.label}</div>
                       </div>
-                      {agents.map((a, i) => {
-                        const trendCfg = TREND_CONFIG[a.trend as keyof typeof TREND_CONFIG] ?? TREND_CONFIG.consistent
+                    ))}
+                  </div>
+                </div>
+
+                {/* LIKUIDITAS */}
+                {liquiditySummary && (
+                  <div style={{ marginBottom: '24px' }}>
+                    <div style={{ fontSize: '11px', fontWeight: '700', color: '#9ca3af', letterSpacing: '0.08em', marginBottom: '12px' }}>LIKUIDITAS AGEN</div>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                      <div style={{ padding: '10px 12px', backgroundColor: '#f9fafb', borderRadius: '8px', textAlign: 'center' }}>
+                        <div style={{ fontSize: '14px', fontWeight: '700', color: '#111827' }}>{formatAmount(liquiditySummary.avg_daily_amount_14d)}</div>
+                        <div style={{ fontSize: '10px', color: '#9ca3af', marginTop: '2px' }}>Avg Amount/Hari (14H)</div>
+                      </div>
+                      {(() => {
+                        const cfg = LIQUIDITY_CONFIG[liquiditySummary.liquidity_status] ?? LIQUIDITY_CONFIG.no_data
                         return (
-                          <div key={a.serial_number} style={{ display: 'grid', gridTemplateColumns: '1fr 50px 60px 60px', gap: '8px', padding: '8px 12px', borderTop: '1px solid #f9fafb', alignItems: 'center' }}>
-                            <div>
-                              <div style={{ fontSize: '12px', fontWeight: '600', color: '#111827', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{a.merchant_name ?? a.serial_number}</div>
-                              <div style={{ fontSize: '9px', color: '#d1d5db' }}>{a.serial_number}</div>
-                            </div>
-                            <div style={{ fontSize: '11px', color: a.active_days_14 >= 8 ? '#166534' : a.active_days_14 >= 5 ? '#ca8a04' : '#dc2626', fontWeight: '700', textAlign: 'right' }}>{a.active_days_14}</div>
-                            <div style={{ fontSize: '11px', color: '#374151', textAlign: 'right' }}>{formatNum(a.total_trx_14d)}</div>
-                            <div style={{ textAlign: 'right' }}>
-                              <span style={{ padding: '1px 6px', borderRadius: '99px', fontSize: '9px', fontWeight: '700', backgroundColor: trendCfg.bg, color: trendCfg.color, border: `1px solid ${trendCfg.border}` }}>
-                                {a.trx_change_pct > 0 ? '↑' : a.trx_change_pct < 0 ? '↓' : '→'} {Math.abs(a.trx_change_pct)}%
-                              </span>
-                            </div>
+                          <div style={{ padding: '10px 12px', backgroundColor: cfg.bg, borderRadius: '8px', textAlign: 'center', border: `1px solid ${cfg.border}` }}>
+                            <div style={{ fontSize: '14px', fontWeight: '700', color: cfg.color }}>{liquiditySummary.liquidity_ratio?.toFixed(2)}x</div>
+                            <div style={{ fontSize: '10px', color: cfg.color, marginTop: '2px', opacity: 0.8 }}>{cfg.sublabel}</div>
+                            <div style={{ marginTop: '4px' }}><LiquidityChip status={liquiditySummary.liquidity_status} /></div>
                           </div>
                         )
-                      })}
+                      })()}
                     </div>
                   </div>
                 )}
 
+                {/* TRANSAKSI PER HARI */}
+                <div style={{ marginBottom: '24px' }}>
+                  <div style={{ fontSize: '11px', fontWeight: '700', color: '#9ca3af', letterSpacing: '0.08em', marginBottom: '12px' }}>TRANSAKSI PER HARI</div>
+                  <div style={{ display: 'flex', alignItems: 'flex-end', gap: '3px', height: '80px' }}>
+                    {(() => {
+                      const cfg = TREND_CONFIG[selectedAgent.trend as keyof typeof TREND_CONFIG] ?? TREND_CONFIG.consistent
+                      const maxTrx = Math.max(...agentDetail.map(d => Number(d.total_trx)), 1)
+                      const sd = new Date(sinceDate)
+                      return Array.from({ length: 14 }, (_, i) => {
+                        const d = new Date(sd); d.setDate(sd.getDate() + i)
+                        const dateStr = d.toISOString().split('T')[0]
+                        const found = agentDetail.find(a => a.transaction_date === dateStr)
+                        const trx = found ? Number(found.total_trx) : 0
+                        const isThisMonth = dateStr >= (lastDate ? lastDate.substring(0, 7) + '-01' : '')
+                        return (
+                          <div key={dateStr} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px' }} title={`${dateStr}: ${trx} trx`}>
+                            <div style={{ width: '100%', height: `${Math.max(4, (trx / maxTrx) * 64)}px`, backgroundColor: trx > 0 ? (isThisMonth ? cfg.color : '#94a3b8') : '#f3f4f6', borderRadius: '3px 3px 0 0', transition: 'height 0.3s' }} />
+                            <div style={{ fontSize: '8px', color: '#9ca3af', writingMode: 'vertical-rl', transform: 'rotate(180deg)' }}>
+                              {new Date(dateStr).toLocaleDateString('id-ID', { day: 'numeric', month: 'short' })}
+                            </div>
+                          </div>
+                        )
+                      })
+                    })()}
+                  </div>
+                  <div style={{ display: 'flex', gap: '12px', marginTop: '8px', fontSize: '10px', color: '#9ca3af' }}>
+                    <span>▪ <span style={{ color: '#94a3b8' }}>Bulan lalu</span></span>
+                    <span>▪ <span style={{ color: (TREND_CONFIG[selectedAgent.trend as keyof typeof TREND_CONFIG] ?? TREND_CONFIG.consistent).color }}>Bulan ini</span></span>
+                  </div>
+                </div>
+
+                {/* NOMINAL UANG BEREDAR */}
+                {liquidityDetail.length > 0 && (
+                  <div>
+                    <div style={{ fontSize: '11px', fontWeight: '700', color: '#9ca3af', letterSpacing: '0.08em', marginBottom: '12px' }}>NOMINAL UANG BEREDAR (14H)</div>
+                    <div style={{ display: 'flex', alignItems: 'flex-end', gap: '3px', height: '80px' }}>
+                      {(() => {
+                        const maxAmount = Math.max(...liquidityDetail.map(d => Number(d.daily_amount)), 1)
+                        const avgAmount = liquiditySummary?.avg_daily_amount_14d ?? 0
+                        const sd = new Date(sinceDate)
+                        return Array.from({ length: 14 }, (_, i) => {
+                          const d = new Date(sd); d.setDate(sd.getDate() + i)
+                          const dateStr = d.toISOString().split('T')[0]
+                          const found = liquidityDetail.find(a => a.transaction_date === dateStr)
+                          const amount = found ? Number(found.daily_amount) : 0
+                          const barColor = amount === 0 ? '#f3f4f6' : amount < avgAmount * 0.5 ? '#ef4444' : amount < avgAmount * 0.8 ? '#eab308' : '#22c55e'
+                          return (
+                            <div key={dateStr} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px' }} title={`${dateStr}: ${formatAmount(amount)}`}>
+                              <div style={{ width: '100%', height: `${Math.max(4, (amount / maxAmount) * 64)}px`, backgroundColor: barColor, borderRadius: '3px 3px 0 0', transition: 'height 0.3s' }} />
+                              <div style={{ fontSize: '8px', color: '#9ca3af', writingMode: 'vertical-rl', transform: 'rotate(180deg)' }}>
+                                {new Date(dateStr).toLocaleDateString('id-ID', { day: 'numeric', month: 'short' })}
+                              </div>
+                            </div>
+                          )
+                        })
+                      })()}
+                    </div>
+                    <div style={{ display: 'flex', gap: '16px', marginTop: '8px', fontSize: '10px', color: '#9ca3af' }}>
+                      <span>▪ <span style={{ color: '#22c55e' }}>≥ avg</span></span>
+                      <span>▪ <span style={{ color: '#eab308' }}>50–80% avg</span></span>
+                      <span>▪ <span style={{ color: '#ef4444' }}>&lt; 50% avg</span></span>
+                    </div>
+                    <div style={{ marginTop: '6px', fontSize: '10px', color: '#9ca3af' }}>Avg: {formatAmount(liquiditySummary?.avg_daily_amount_14d ?? 0)}/hari</div>
+                  </div>
+                )}
+
               </div>
+            ) : (
+              <div style={{ padding: '40px', textAlign: 'center', color: '#9ca3af', fontSize: '13px' }}>Tidak ada data</div>
             )}
           </div>
         </div>
       )}
+
     </Layout>
   )
 }
