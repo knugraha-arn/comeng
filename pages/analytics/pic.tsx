@@ -177,7 +177,10 @@ export default function PicPage() {
   const [loadingRangers, setLoadingRangers] = useState(false)
   const [rangerSearch, setRangerSearch]   = useState('')
   const [rangerSearchInput, setRangerSearchInput] = useState('')
-  const [rangerPage, setRangerPage]       = useState(0)
+  const [allRangers, setAllRangers]           = useState<PicRow[]>([])
+  const [rangerCluster, setRangerCluster]     = useState<string>('semua')
+  const [rangerSortBy, setRangerSortBy]       = useState<string>('fee_per_agent')
+  const [rangerPage, setRangerPage]           = useState(0)
   const [rangerTotal, setRangerTotal]     = useState(0)
 
   // Ranger Detail tab
@@ -266,20 +269,24 @@ export default function PicPage() {
     try {
       const { data } = await supabase.rpc('get_ranger_list')
       let all: PicRow[] = (data ?? []).map((r: any) => ({
-        pic:              r.ranger_name,
-        mitra:            r.mitras?.join(', ') ?? '',
-        total_agents:     r.total_agents,
-        total_trx_14d:    r.total_trx_14d,
-        total_fee_14d:    r.total_fee_14d,
+        pic:               r.ranger_name,
+        mitra:             r.mitras?.join(', ') ?? '',
+        total_agents:      r.total_agents,
+        total_trx_14d:     r.total_trx_14d,
+        total_fee_14d:     r.total_fee_14d,
         avg_trx_per_agent: r.avg_trx_per_agent,
-        growing_count:    r.growing_count,
-        declining_count:  r.declining_count,
-        consistent_count: r.consistent_count,
-        growing_pct:      r.growing_pct,
-        declining_pct:    r.declining_pct,
-        health_score:     r.health_score,
+        growing_count:     r.growing_count,
+        declining_count:   r.declining_count,
+        consistent_count:  r.consistent_count,
+        growing_pct:       r.growing_pct,
+        declining_pct:     r.declining_pct,
+        health_score:      r.health_score,
+        fee_per_agent:     r.total_agents > 0 ? Math.round(r.total_fee_14d / r.total_agents) : 0,
       }))
       if (srch) all = all.filter(r => r.pic.toLowerCase().includes(srch.toLowerCase()))
+      // Sort by fee_per_agent default
+      all.sort((a, b) => (b as any).fee_per_agent - (a as any).fee_per_agent)
+      setAllRangers(all)
       setRangerTotal(all.length)
       setRangers(all.slice(newPage * PAGE_SIZE, (newPage + 1) * PAGE_SIZE))
     } finally { setLoadingRangers(false) }
@@ -497,24 +504,194 @@ export default function PicPage() {
         {/* ── TAB 2: Ranger ── */}
         {activeTab === 'ranger' && (
           <>
-            <div style={{ display: 'flex', gap: '10px', marginBottom: '16px', alignItems: 'center' }}>
-              <input type="text" value={rangerSearchInput} onChange={e => handleRangerSearchInput(e.target.value)} placeholder="Cari nama Ranger..."
-                style={{ padding: '7px 12px', borderRadius: '8px', border: '1px solid #e5e7eb', fontSize: '12px', color: '#374151', width: '200px', outline: 'none' }} />
-              <span style={{ marginLeft: 'auto', fontSize: '13px', color: '#6b7280' }}>{loadingRangers ? 'Memuat...' : `${formatNum(rangerTotal)} Ranger`}</span>
-            </div>
-            <div style={{ marginBottom: '12px', padding: '10px 14px', backgroundColor: '#eff6ff', borderRadius: '8px', fontSize: '12px', color: '#1e40af', border: '1px solid #bfdbfe' }}>
-              ⚡ Ranger adalah PIC dari mitra ARRANET, ARRANET ex Dinar, dan ARRANET ex SSDI. Klik baris untuk melihat detail agen.
-            </div>
-            <PicTable data={rangers} isLoading={loadingRangers} onRowClick={openRangerDetail} />
-            {rangerTotalPages > 1 && (
-              <div style={{ display: 'flex', justifyContent: 'center', gap: '8px', alignItems: 'center', marginTop: '16px' }}>
-                <button onClick={() => { setRangerPage(p => Math.max(0, p - 1)); loadRangers(Math.max(0, rangerPage - 1), rangerSearch) }} disabled={rangerPage === 0}
-                  style={{ padding: '7px 14px', borderRadius: '8px', border: '1px solid #e5e7eb', backgroundColor: '#fff', color: rangerPage === 0 ? '#d1d5db' : '#374151', fontSize: '13px', cursor: rangerPage === 0 ? 'not-allowed' : 'pointer' }}>← Prev</button>
-                <span style={{ fontSize: '13px', color: '#6b7280' }}>{rangerPage + 1} / {rangerTotalPages}</span>
-                <button onClick={() => { setRangerPage(p => Math.min(rangerTotalPages - 1, p + 1)); loadRangers(Math.min(rangerTotalPages - 1, rangerPage + 1), rangerSearch) }} disabled={rangerPage >= rangerTotalPages - 1}
-                  style={{ padding: '7px 14px', borderRadius: '8px', border: '1px solid #e5e7eb', backgroundColor: '#fff', color: rangerPage >= rangerTotalPages - 1 ? '#d1d5db' : '#374151', fontSize: '13px', cursor: rangerPage >= rangerTotalPages - 1 ? 'not-allowed' : 'pointer' }}>Next →</button>
-              </div>
-            )}
+            {/* Summary Cards */}
+            {!loadingRangers && allRangers.length > 0 && (() => {
+              const totalRanger  = allRangers.length
+              const totalAgents  = allRangers.reduce((s, r) => s + r.total_agents, 0)
+              const totalFee     = allRangers.reduce((s, r) => s + r.total_fee_14d, 0)
+              const avgFeePerAgen = totalAgents > 0 ? Math.round(totalFee / totalAgents) : 0
+              const topRanger    = [...allRangers].sort((a, b) => (b as any).fee_per_agent - (a as any).fee_per_agent)[0]
+              const bottomRanger = [...allRangers].sort((a, b) => (a as any).fee_per_agent - (b as any).fee_per_agent)[0]
+              return (
+                <>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '12px', marginBottom: '16px' }}>
+                    {[
+                      { label: 'Total Ranger', value: formatNum(totalRanger), tip: 'Jumlah Ranger aktif dari mitra ARRANET, ARRANET ex Dinar, dan ARRANET ex SSDI.' },
+                      { label: 'Total Agen', value: formatNum(totalAgents), tip: 'Total agen yang dikelola oleh seluruh Ranger dalam 14 hari terakhir.' },
+                      { label: 'Total Fee 14H', value: formatFee(totalFee), tip: 'Total fee yang dihasilkan oleh seluruh jaringan Ranger dalam 14 hari terakhir.', highlight: true },
+                      { label: 'Avg Fee/Agen', value: formatFee(avgFeePerAgen), tip: 'Rata-rata fee per agen dari seluruh jaringan Ranger. Indikator efisiensi coaching secara keseluruhan.' },
+                    ].map(s => (
+                      <div key={s.label} {...tip(s.tip)} style={{ backgroundColor: s.highlight ? '#eff6ff' : '#fff', border: `1px solid ${s.highlight ? '#bfdbfe' : '#e5e7eb'}`, borderRadius: '10px', padding: '14px 16px', textAlign: 'center', cursor: 'default' }}>
+                        <div style={{ fontSize: '18px', fontWeight: '800', color: s.highlight ? '#1e40af' : '#111827' }}>{s.value}</div>
+                        <div style={{ fontSize: '11px', color: '#9ca3af', marginTop: '4px' }}>{s.label}</div>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Top & Bottom highlight */}
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '16px' }}>
+                    <div {...tip('Ranger dengan Fee/Agen tertinggi — paling efisien dalam menghasilkan pendapatan per agen yang dikelola.')}
+                      style={{ padding: '10px 14px', backgroundColor: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: '10px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'default' }}>
+                      <div>
+                        <div style={{ fontSize: '10px', color: '#166534', fontWeight: '700', marginBottom: '2px' }}>🏆 TOP PERFORMER</div>
+                        <div style={{ fontSize: '13px', fontWeight: '700', color: '#111827' }}>{topRanger.pic}</div>
+                      </div>
+                      <div style={{ textAlign: 'right' }}>
+                        <div style={{ fontSize: '14px', fontWeight: '800', color: '#166534' }}>{formatFee((topRanger as any).fee_per_agent)}</div>
+                        <div style={{ fontSize: '10px', color: '#9ca3af' }}>per agen</div>
+                      </div>
+                    </div>
+                    <div {...tip('Ranger dengan Fee/Agen terendah dibanding sesama Ranger. Bukan berarti buruk secara absolut — ini perbandingan relatif dalam jaringan.')}
+                      style={{ padding: '10px 14px', backgroundColor: '#fef2f2', border: '1px solid #fecaca', borderRadius: '10px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'default' }}>
+                      <div>
+                        <div style={{ fontSize: '10px', color: '#dc2626', fontWeight: '700', marginBottom: '2px' }}>⚠️ PERLU PERHATIAN</div>
+                        <div style={{ fontSize: '13px', fontWeight: '700', color: '#111827' }}>{bottomRanger.pic}</div>
+                      </div>
+                      <div style={{ textAlign: 'right' }}>
+                        <div style={{ fontSize: '14px', fontWeight: '800', color: '#dc2626' }}>{formatFee((bottomRanger as any).fee_per_agent)}</div>
+                        <div style={{ fontSize: '10px', color: '#9ca3af' }}>per agen</div>
+                      </div>
+                    </div>
+                  </div>
+                </>
+              )
+            })()}
+
+            {/* Cluster chips + search + export */}
+            {!loadingRangers && allRangers.length > 0 && (() => {
+              // Compute clusters by fee_per_agent percentile
+              const sorted = [...allRangers].sort((a, b) => (b as any).fee_per_agent - (a as any).fee_per_agent)
+              const n = sorted.length
+              const getCluster = (r: any) => {
+                const rank = sorted.findIndex(s => s.pic === r.pic) / n
+                if (rank < 0.2)  return 'elite'
+                if (rank < 0.4)  return 'solid'
+                if (rank < 0.6)  return 'average'
+                if (rank < 0.8)  return 'below'
+                return 'perhatian'
+              }
+              const clusterCount = { elite: 0, solid: 0, average: 0, below: 0, perhatian: 0 }
+              allRangers.forEach(r => { clusterCount[getCluster(r) as keyof typeof clusterCount]++ })
+
+              const CLUSTERS = [
+                { key: 'semua',     label: 'Semua',          icon: '📋', count: allRangers.length, activeBg: '#1e40af', activeColor: '#fff', activeBorder: '#1e40af', tip: 'Semua Ranger.' },
+                { key: 'elite',     label: 'Elite',          icon: '🏆', count: clusterCount.elite,     activeBg: '#dcfce7', activeColor: '#166534', activeBorder: '#bbf7d0', tip: 'Top 20% Ranger berdasarkan Fee/Agen. Ranger paling efisien di jaringan.' },
+                { key: 'solid',     label: 'Solid',          icon: '⭐', count: clusterCount.solid,     activeBg: '#d1fae5', activeColor: '#065f46', activeBorder: '#6ee7b7', tip: '20–40% terbaik. Ranger dengan performa di atas rata-rata.' },
+                { key: 'average',   label: 'Average',        icon: '📊', count: clusterCount.average,   activeBg: '#eff6ff', activeColor: '#1e40af', activeBorder: '#bfdbfe', tip: '40–60%. Ranger dengan performa rata-rata jaringan.' },
+                { key: 'below',     label: 'Below Average',  icon: '📉', count: clusterCount.below,     activeBg: '#fffbeb', activeColor: '#92400e', activeBorder: '#fde68a', tip: '60–80%. Ranger dengan performa di bawah rata-rata — perlu coaching.' },
+                { key: 'perhatian', label: 'Perlu Perhatian',icon: '⚠️', count: clusterCount.perhatian, activeBg: '#fee2e2', activeColor: '#dc2626', activeBorder: '#fecaca', tip: 'Bottom 20%. Ranger dengan Fee/Agen terendah. Bukan berarti buruk secara absolut — ini perbandingan relatif dalam jaringan.' },
+              ]
+
+              // Filter + sort allRangers
+              let filtered = rangerCluster === 'semua' ? allRangers : allRangers.filter(r => getCluster(r) === rangerCluster)
+              filtered = [...filtered].sort((a, b) => (b as any).fee_per_agent - (a as any).fee_per_agent)
+              const paged = filtered.slice(rangerPage * PAGE_SIZE, (rangerPage + 1) * PAGE_SIZE)
+              const totalPages = Math.ceil(filtered.length / PAGE_SIZE)
+
+              const handleExportRangers = () => {
+                const rows = filtered.map(r => [
+                  r.pic, r.mitra, r.total_agents, r.total_trx_14d, r.total_fee_14d,
+                  (r as any).fee_per_agent, r.avg_trx_per_agent,
+                  r.growing_count, r.growing_pct, r.declining_count, r.declining_pct,
+                  r.health_score, getCluster(r)
+                ])
+                exportCSV(`ranger_${new Date().toISOString().split('T')[0]}.csv`,
+                  ['Ranger','Mitra','Agen','TRX 14H','Fee 14H','Fee/Agen','TRX/Agen','Growing','Growing %','Declining','Declining %','Health Score','Cluster'],
+                  rows)
+              }
+
+              return (
+                <>
+                  {/* Cluster chips */}
+                  <div style={{ display: 'flex', gap: '6px', marginBottom: '12px', flexWrap: 'wrap' }}>
+                    {CLUSTERS.map(c => {
+                      const isActive = rangerCluster === c.key
+                      return (
+                        <button key={c.key} onClick={() => { setRangerCluster(c.key); setRangerPage(0) }}
+                          {...tip(c.tip)}
+                          style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '6px 14px', borderRadius: '99px', border: `1px solid ${isActive ? c.activeBorder : '#e5e7eb'}`, backgroundColor: isActive ? c.activeBg : '#f9fafb', color: isActive ? c.activeColor : '#374151', fontSize: '12px', fontWeight: '600', cursor: 'pointer', transition: 'all 0.15s' }}>
+                          <span>{c.icon} {c.label}</span>
+                          <span style={{ backgroundColor: 'rgba(0,0,0,0.08)', borderRadius: '99px', padding: '1px 7px', fontSize: '11px', fontWeight: '700' }}>{c.count}</span>
+                        </button>
+                      )
+                    })}
+                  </div>
+
+                  {/* Search + count + export */}
+                  <div style={{ display: 'flex', gap: '10px', marginBottom: '16px', alignItems: 'center' }}>
+                    <input type="text" value={rangerSearchInput} onChange={e => handleRangerSearchInput(e.target.value)} placeholder="Cari nama Ranger..."
+                      style={{ padding: '7px 12px', borderRadius: '8px', border: '1px solid #e5e7eb', fontSize: '12px', color: '#374151', width: '200px', outline: 'none' }} />
+                    <span {...tip('Sort berdasarkan Fee per Agen — indikator efisiensi Ranger menghasilkan pendapatan dari setiap agen yang dikelola.')}
+                      style={{ fontSize: '11px', color: '#9ca3af', cursor: 'default' }}>Sort: Fee/Agen ↓ ⓘ</span>
+                    <span style={{ marginLeft: 'auto', fontSize: '13px', color: '#6b7280' }}>{formatNum(filtered.length)} Ranger</span>
+                    <button onClick={handleExportRangers}
+                      style={{ padding: '7px 14px', borderRadius: '8px', border: '1px solid #e5e7eb', backgroundColor: '#fff', color: '#374151', fontSize: '12px', cursor: 'pointer' }}>
+                      ⬇ Export CSV
+                    </button>
+                  </div>
+
+                  {/* Table — add Fee/Agen column */}
+                  {loadingRangers ? (
+                    <div style={{ border: '1px solid #e5e7eb', borderRadius: '10px', overflow: 'hidden' }}>
+                      {[1,2,3].map(i => <div key={i} style={{ padding: '13px 16px', borderBottom: '1px solid #f3f4f6' }}><Skeleton width="100%" height={13} /></div>)}
+                    </div>
+                  ) : paged.length > 0 ? (
+                    <div style={{ border: '1px solid #e5e7eb', borderRadius: '10px', overflow: 'hidden' }}>
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 140px 60px 90px 110px 100px 80px 80px', padding: '10px 16px', backgroundColor: '#f9fafb', borderBottom: '1px solid #e5e7eb', fontSize: '10px', fontWeight: '700', color: '#9ca3af', letterSpacing: '0.05em', gap: '12px' }}>
+                        <div>RANGER</div>
+                        <div>MITRA</div>
+                        <div style={{ textAlign: 'right' }}>AGEN</div>
+                        <div style={{ textAlign: 'right' }}>TRX (14H)</div>
+                        <div style={{ textAlign: 'right' }}>FEE (14H)</div>
+                        <div style={{ textAlign: 'right' }}><span {...tip('Fee per Agen = Total Fee 14H ÷ Jumlah Agen. Indikator efisiensi Ranger — lebih tinggi = lebih efisien menghasilkan pendapatan.')}>FEE/AGEN ⓘ</span></div>
+                        <div style={{ textAlign: 'right' }}><span {...tip('Rata-rata transaksi per agen dalam 14 hari terakhir. Proxy kualitas coaching.')}>TRX/AGEN ⓘ</span></div>
+                        <div><span {...tip('Composite score 0–100 berdasarkan % Productive, % Growing, % rendah Declining.')}>HEALTH ⓘ</span></div>
+                      </div>
+                      {paged.map((r, i) => {
+                        const cluster = getCluster(r)
+                        const clusterCfg = CLUSTERS.find(c => c.key === cluster)!
+                        return (
+                          <div key={r.pic} onClick={() => openRangerDetail(r)}
+                            style={{ display: 'grid', gridTemplateColumns: '1fr 140px 60px 90px 110px 100px 80px 80px', padding: '11px 16px', borderBottom: i < paged.length - 1 ? '1px solid #f3f4f6' : 'none', alignItems: 'center', backgroundColor: '#fff', cursor: 'pointer', gap: '12px' }}
+                            onMouseEnter={e => e.currentTarget.style.backgroundColor = '#f9fafb'}
+                            onMouseLeave={e => e.currentTarget.style.backgroundColor = '#fff'}>
+                            <div>
+                              <div style={{ fontSize: '13px', fontWeight: '600', color: '#111827', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.pic}</div>
+                              <span style={{ padding: '1px 6px', borderRadius: '99px', fontSize: '9px', fontWeight: '700', backgroundColor: clusterCfg.activeBg, color: clusterCfg.activeColor, border: `1px solid ${clusterCfg.activeBorder}` }}>{clusterCfg.icon} {clusterCfg.label}</span>
+                            </div>
+                            <div style={{ fontSize: '11px', color: '#9ca3af', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.mitra}</div>
+                            <div style={{ fontSize: '12px', color: '#374151', textAlign: 'right' }}>{formatNum(r.total_agents)}</div>
+                            <div style={{ fontSize: '12px', color: '#374151', textAlign: 'right' }}>{formatNum(r.total_trx_14d)}</div>
+                            <div style={{ fontSize: '12px', fontWeight: '600', color: '#111827', textAlign: 'right' }}>{formatFee(r.total_fee_14d)}</div>
+                            <div style={{ textAlign: 'right' }}>
+                              <span style={{ fontSize: '13px', fontWeight: '800', color: clusterCfg.activeColor }}>{formatFee((r as any).fee_per_agent)}</span>
+                            </div>
+                            <div style={{ textAlign: 'right' }}>
+                              <span style={{ fontSize: '12px', fontWeight: '600', color: '#374151' }}>{r.avg_trx_per_agent}</span>
+                            </div>
+                            <div><HealthBar score={r.health_score} /></div>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  ) : (
+                    <div style={{ textAlign: 'center', padding: '40px', backgroundColor: '#f9fafb', borderRadius: '10px', border: '1px dashed #e5e7eb', color: '#9ca3af', fontSize: '13px' }}>Tidak ada Ranger</div>
+                  )}
+
+                  {/* Pagination */}
+                  {totalPages > 1 && (
+                    <div style={{ display: 'flex', justifyContent: 'center', gap: '8px', alignItems: 'center', marginTop: '16px' }}>
+                      <button onClick={() => setRangerPage(p => Math.max(0, p - 1))} disabled={rangerPage === 0}
+                        style={{ padding: '7px 14px', borderRadius: '8px', border: '1px solid #e5e7eb', backgroundColor: '#fff', color: rangerPage === 0 ? '#d1d5db' : '#374151', fontSize: '13px', cursor: rangerPage === 0 ? 'not-allowed' : 'pointer' }}>← Prev</button>
+                      <span style={{ fontSize: '13px', color: '#6b7280' }}>{rangerPage + 1} / {totalPages}</span>
+                      <button onClick={() => setRangerPage(p => Math.min(totalPages - 1, p + 1))} disabled={rangerPage >= totalPages - 1}
+                        style={{ padding: '7px 14px', borderRadius: '8px', border: '1px solid #e5e7eb', backgroundColor: '#fff', color: rangerPage >= totalPages - 1 ? '#d1d5db' : '#374151', fontSize: '13px', cursor: rangerPage >= totalPages - 1 ? 'not-allowed' : 'pointer' }}>Next →</button>
+                    </div>
+                  )}
+                </>
+              )
+            })()}
+            {loadingRangers && <div style={{ textAlign: 'center', padding: '60px', color: '#9ca3af', fontSize: '13px' }}>Memuat data Ranger...</div>}
           </>
         )}
 
