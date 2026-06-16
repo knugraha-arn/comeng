@@ -9,7 +9,6 @@ const navItems = [
   { href: '/trends', label: 'Tren', icon: '◈' },
   { href: '/rekomendasi', label: 'Rekomendasi', icon: '◈' },
   { href: '/ai-assistant', label: 'AI Assistant', icon: '◈' },
-  { href: '/upload', label: 'Upload WAG', icon: '◈' },
 ]
 
 const analyticsNavItems = [
@@ -24,9 +23,10 @@ const analyticsNavItems = [
 ]
 
 const adminNavItems = [
-  { href: '/analytics/upload',         label: 'Upload Data',    icon: '↑' },
-  { href: '/analytics/history',        label: 'Upload History', icon: '◎' },
-  { href: '/analytics/target-simple',  label: 'Target',         icon: '◎' },
+  { href: '/analytics/upload',         label: 'Upload Transaksi',    icon: '↑' },
+  { href: '/analytics/history',        label: 'History Upload Transaksi', icon: '◎' },
+  { href: '/upload',                   label: 'Upload WAG', icon: '◈' },
+  { href: '/analytics/target-simple',  label: 'Target Bisnis',         icon: '◎' },
   { href: '/config',                   label: 'Konfigurasi',    icon: '◈' },
 ]
 
