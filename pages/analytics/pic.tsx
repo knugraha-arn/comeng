@@ -181,6 +181,7 @@ export default function PicPage() {
   const [rangerTotal, setRangerTotal]     = useState(0)
 
   // Ranger Detail tab
+  const [rangerAgentFilter, setRangerAgentFilter] = useState<string>('semua')
   const [rangerAgents, setRangerAgents]         = useState<RangerAgent[]>([])
   const [loadingRangerAgents, setLoadingRangerAgents] = useState(false)
   const [rangerAgentPage, setRangerAgentPage]   = useState(0)
@@ -293,6 +294,7 @@ export default function PicPage() {
     setSelectedRanger(ranger)
     setActiveTab('ranger_detail')
     setRangerAgentPage(0)
+    setRangerAgentFilter('semua')
     await loadRangerAgents(ranger.pic, 0)
   }
 
@@ -547,9 +549,37 @@ export default function PicPage() {
             </div>
 
             {/* Agent List */}
-            <div style={{ fontSize: '11px', fontWeight: '700', color: '#9ca3af', letterSpacing: '0.08em', marginBottom: '12px' }}>
-              DAFTAR AGEN ({formatNum(rangerAgentTotal)} agen) — klik untuk detail
-            </div>
+            {/* Trend filter chips */}
+            {(() => {
+              const all       = rangerAgents
+              const growing   = all.filter(a => a.trend === 'growing').length
+              const declining = all.filter(a => a.trend === 'declining').length
+              const consistent = all.filter(a => a.trend === 'consistent').length
+              const chips = [
+                { key: 'semua',      label: 'Semua',     count: rangerAgentTotal, icon: '📋',  bg: '#f9fafb',  border: '#e5e7eb',  color: '#374151', activeBg: '#1e40af', activeColor: '#fff', activeBorder: '#1e40af' },
+                { key: 'growing',    label: 'Growing',   count: growing,          icon: '💎',  bg: '#f9fafb',  border: '#e5e7eb',  color: '#374151', activeBg: '#dcfce7', activeColor: '#166534', activeBorder: '#bbf7d0' },
+                { key: 'declining',  label: 'Declining', count: declining,        icon: '⚠️',  bg: '#f9fafb',  border: '#e5e7eb',  color: '#374151', activeBg: '#fef9c3', activeColor: '#92400e', activeBorder: '#fde68a' },
+                { key: 'consistent', label: 'Konsisten', count: consistent,       icon: '✅',  bg: '#f9fafb',  border: '#e5e7eb',  color: '#374151', activeBg: '#eff6ff', activeColor: '#1e40af', activeBorder: '#bfdbfe' },
+              ]
+              const filtered = rangerAgentFilter === 'semua' ? rangerAgents : rangerAgents.filter(a => a.trend === rangerAgentFilter)
+              return (
+                <>
+                  <div style={{ display: 'flex', gap: '8px', marginBottom: '16px', flexWrap: 'wrap' }}>
+                    {chips.map(chip => {
+                      const isActive = rangerAgentFilter === chip.key
+                      return (
+                        <button key={chip.key} onClick={() => setRangerAgentFilter(chip.key)}
+                          style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 16px', borderRadius: '99px', border: `1px solid ${isActive ? chip.activeBorder : chip.border}`, backgroundColor: isActive ? chip.activeBg : chip.bg, color: isActive ? chip.activeColor : chip.color, fontSize: '13px', fontWeight: '600', cursor: 'pointer', transition: 'all 0.15s' }}>
+                          <span>{chip.icon} {chip.label}</span>
+                          <span style={{ backgroundColor: isActive ? 'rgba(0,0,0,0.1)' : '#e5e7eb', color: isActive ? chip.activeColor : '#6b7280', borderRadius: '99px', padding: '1px 8px', fontSize: '12px', fontWeight: '700' }}>{chip.count}</span>
+                        </button>
+                      )
+                    })}
+                  </div>
+
+                  <div style={{ fontSize: '11px', fontWeight: '700', color: '#9ca3af', letterSpacing: '0.08em', marginBottom: '12px' }}>
+                    DAFTAR AGEN ({formatNum(filtered.length)} agen) — klik untuk detail
+                  </div>
 
             {loadingRangerAgents ? (
               <div style={{ border: '1px solid #e5e7eb', borderRadius: '10px', overflow: 'hidden' }}>
@@ -560,7 +590,7 @@ export default function PicPage() {
                   </div>
                 ))}
               </div>
-            ) : rangerAgents.length > 0 ? (
+            ) : filtered.length > 0 ? (
               <div style={{ border: '1px solid #e5e7eb', borderRadius: '10px', overflow: 'hidden' }}>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 80px 70px 90px 100px 70px 80px', padding: '10px 16px', backgroundColor: '#f9fafb', borderBottom: '1px solid #e5e7eb', fontSize: '10px', fontWeight: '700', color: '#9ca3af', letterSpacing: '0.05em', gap: '12px' }}>
                   <div>AGEN</div>
@@ -571,9 +601,9 @@ export default function PicPage() {
                   <div style={{ textAlign: 'center' }}>BUCKET</div>
                   <div style={{ textAlign: 'center' }}>TREND</div>
                 </div>
-                {rangerAgents.map((a, i) => (
+                {filtered.map((a, i) => (
                   <div key={a.serial_number} onClick={() => openAgentDrawer(a)}
-                    style={{ display: 'grid', gridTemplateColumns: '1fr 80px 70px 90px 100px 70px 80px', padding: '11px 16px', borderBottom: i < rangerAgents.length - 1 ? '1px solid #f3f4f6' : 'none', alignItems: 'center', backgroundColor: '#fff', cursor: 'pointer', gap: '12px' }}
+                    style={{ display: 'grid', gridTemplateColumns: '1fr 80px 70px 90px 100px 70px 80px', padding: '11px 16px', borderBottom: i < filtered.length - 1 ? '1px solid #f3f4f6' : 'none', alignItems: 'center', backgroundColor: '#fff', cursor: 'pointer', gap: '12px' }}
                     onMouseEnter={e => e.currentTarget.style.backgroundColor = '#f9fafb'}
                     onMouseLeave={e => e.currentTarget.style.backgroundColor = '#fff'}>
                     <div>
@@ -594,6 +624,9 @@ export default function PicPage() {
                 Tidak ada agen
               </div>
             )}
+                </>
+              )
+            })()}
 
             {/* Agent Pagination */}
             {agentTotalPages > 1 && (
