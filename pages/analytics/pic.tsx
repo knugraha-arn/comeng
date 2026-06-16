@@ -316,24 +316,27 @@ export default function PicPage() {
     setAgentDetail([]); setLiquiditySummary(null); setLiquidityDetail([])
     setLoadingDrawer(true)
     try {
-      // Pastikan sinceDate dan lastDate sudah ada
-      let since = sinceDate
-      let last  = lastDate
-      if (!since || !last) {
-        const { data: prog } = await supabase.rpc('get_monthly_progress')
-        if (prog?.[0]) {
-          last  = prog[0].end_date ?? ''
-          since = last ? new Date(new Date(last).getTime() - 13 * 86400000).toISOString().split('T')[0] : ''
-          setSinceDate(since)
-          setLastDate(last)
-        }
-      }
+      // Selalu fetch date terbaru langsung dari DB
+      const { data: maxDateData } = await supabase
+        .from('am_transactions')
+        .select('transaction_date')
+        .order('transaction_date', { ascending: false })
+        .limit(1)
+        .single()
+
+      const last  = maxDateData?.transaction_date
+        ? new Date(maxDateData.transaction_date).toISOString().split('T')[0]
+        : new Date().toISOString().split('T')[0]
+      const since = new Date(new Date(last).getTime() - 13 * 86400000).toISOString().split('T')[0]
+
+      setSinceDate(since)
+      setLastDate(last)
+
       const [detailRes, liqRes] = await Promise.all([
         supabase.rpc('get_agent_detail', { p_serial: agent.serial_number, p_since: since, p_until: last }),
         supabase.rpc('get_agent_liquidity_summary', { p_serial: agent.serial_number }),
       ])
-      const detail = detailRes.data ?? []
-      setAgentDetail(detail)
+      setAgentDetail(detailRes.data ?? [])
       const liqData = liqRes.data ?? []
       if (liqData.length > 0) {
         setLiquiditySummary(liqData[0])
