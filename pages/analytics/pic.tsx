@@ -200,6 +200,7 @@ export default function PicPage() {
   const [lastDate, setLastDate]             = useState('')
 
   const [lastUploadDate, setLastUploadDate] = useState<string | null>(null)
+  const [rangerComparison, setRangerComparison] = useState<{ranger: any, nonRanger: any} | null>(null)
   const [tooltip, setTooltip] = useState<{ text: string, x: number, y: number } | null>(null)
   const debounceRef    = useRef<NodeJS.Timeout>()
   const debounceRgRef  = useRef<NodeJS.Timeout>()
@@ -288,7 +289,16 @@ export default function PicPage() {
   async function loadRangers(newPage: number, srch: string) {
     setLoadingRangers(true)
     try {
-      const { data } = await supabase.rpc('get_ranger_list')
+      const [listRes, compRes] = await Promise.all([
+        supabase.rpc('get_ranger_list'),
+        supabase.rpc('get_ranger_vs_nonranger_comparison'),
+      ])
+      const data = listRes.data
+      if (compRes.data) {
+        const ranger    = compRes.data.find((r: any) => r.kelompok === 'Ranger')
+        const nonRanger = compRes.data.find((r: any) => r.kelompok === 'Non-Ranger')
+        setRangerComparison({ ranger, nonRanger })
+      }
       let all: PicRow[] = (data ?? []).map((r: any) => ({
         pic:               r.ranger_name,
         mitra:             r.mitras?.join(', ') ?? '',
@@ -316,10 +326,11 @@ export default function PicPage() {
   function handleRangerSearchInput(val: string) {
     setRangerSearchInput(val)
     if (debounceRgRef.current) clearTimeout(debounceRgRef.current)
-    debounceRgRef.current = setTimeout(async () => {
-      setRangerSearch(val); setRangerPage(0)
-      await loadRangers(0, val)
-    }, 400)
+    debounceRgRef.current = setTimeout(() => {
+      setRangerSearch(val)
+      setRangerPage(0)
+      setRangerCluster('semua')
+    }, 300)
   }
 
   // ── Ranger Detail Tab ────────────────────────────────────────
@@ -459,17 +470,9 @@ export default function PicPage() {
       <div style={{ maxWidth: '1200px', margin: '0 auto', padding: '32px 24px' }}>
 
         {/* Header */}
-        <div style={{ marginBottom: '24px', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-          <div>
-            <div style={{ fontSize: '11px', fontWeight: '600', color: '#9ca3af', letterSpacing: '0.1em', marginBottom: '4px' }}>ANALITIK JARINGAN</div>
-            <h1 style={{ fontSize: '24px', fontWeight: '800', color: '#111827', margin: 0, letterSpacing: '-0.02em' }}>👤 Kekuatan PIC</h1>
-          </div>
-          {lastUploadDate && (
-            <div style={{ fontSize: '11px', color: '#9ca3af', backgroundColor: '#f9fafb', border: '1px solid #e5e7eb', borderRadius: '8px', padding: '6px 12px', textAlign: 'right' }}>
-              <div style={{ fontWeight: '600', color: '#374151', marginBottom: '1px' }}>Data terakhir diupload</div>
-              <div>{lastUploadDate}</div>
-            </div>
-          )}
+        <div style={{ marginBottom: '24px' }}>
+          <div style={{ fontSize: '11px', fontWeight: '600', color: '#9ca3af', letterSpacing: '0.1em', marginBottom: '4px' }}>ANALITIK JARINGAN</div>
+          <h1 style={{ fontSize: '24px', fontWeight: '800', color: '#111827', margin: 0, letterSpacing: '-0.02em' }}>👤 Kekuatan PIC</h1>
         </div>
 
         {/* Tabs */}
@@ -496,6 +499,14 @@ export default function PicPage() {
             </button>
           ))}
         </div>
+
+        {/* Date info strip */}
+        {lastUploadDate && (
+          <div style={{ marginBottom: '16px', padding: '8px 14px', backgroundColor: '#f9fafb', border: '1px solid #e5e7eb', borderRadius: '8px', display: 'flex', alignItems: 'center', gap: '8px', fontSize: '11px', color: '#6b7280' }}>
+            <span>🕐</span>
+            <span>Data berdasarkan upload terakhir: <strong style={{ color: '#374151' }}>{lastUploadDate}</strong></span>
+          </div>
+        )}
 
         {/* ── TAB 1: Semua PIC ── */}
         {activeTab === 'semua' && (
@@ -534,6 +545,35 @@ export default function PicPage() {
         {activeTab === 'ranger' && (
           <>
             {/* Summary Cards */}
+            {/* Ranger vs Non-Ranger Comparison */}
+            {rangerComparison && (
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '16px' }}>
+                {[
+                  { label: 'Jaringan Ranger', data: rangerComparison.ranger, color: '#0344D8', bg: '#eff6ff', border: '#bfdbfe',
+                    tip: 'Performa agregat seluruh Ranger — PIC dari mitra ARRANET, ARRANET ex Dinar, dan ARRANET ex SSDI.' },
+                  { label: 'Non-Ranger', data: rangerComparison.nonRanger, color: '#374151', bg: '#f9fafb', border: '#e5e7eb',
+                    tip: 'Performa agregat PIC dari mitra selain ARRANET — MAJU, SVD, ORDER KUOTA, dll. Karakteristik mitra berbeda sehingga perbandingan ini bersifat indikatif, bukan apple-to-apple.' },
+                ].map(s => (
+                  <div key={s.label} {...tip(s.tip)} style={{ backgroundColor: s.bg, border: `1px solid ${s.border}`, borderRadius: '12px', padding: '16px 20px', cursor: 'default' }}>
+                    <div style={{ fontSize: '11px', fontWeight: '700', color: s.color, letterSpacing: '0.05em', marginBottom: '12px' }}>{s.label.toUpperCase()}</div>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                      {[
+                        { label: 'Jumlah PIC',  value: formatNum(s.data?.jumlah_pic ?? 0),        tip2: 'Jumlah PIC unik yang aktif dalam 14 hari terakhir.' },
+                        { label: 'Total Agen',   value: formatNum(s.data?.total_agen ?? 0),         tip2: 'Jumlah agen unik yang dikelola dalam 14 hari terakhir.' },
+                        { label: 'Fee 14H',      value: formatFee(s.data?.total_fee ?? 0),          tip2: 'Total fee yang dihasilkan seluruh agen dalam 14 hari terakhir.' },
+                        { label: 'Avg Fee/Agen', value: formatFee(s.data?.avg_fee_per_agen ?? 0),   tip2: 'Rata-rata fee per agen. Indikator efisiensi — semakin tinggi, agen semakin produktif.' },
+                      ].map(m => (
+                        <div key={m.label} {...tip(m.tip2)} style={{ cursor: 'default' }}>
+                          <div style={{ fontSize: '14px', fontWeight: '700', color: s.color }}>{m.value}</div>
+                          <div style={{ fontSize: '10px', color: '#9ca3af', marginTop: '2px' }}>{m.label}</div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
             {!loadingRangers && allRangers.length > 0 && (() => {
               const totalRanger  = allRangers.length
               const totalAgents  = allRangers.reduce((s, r) => s + r.total_agents, 0)
@@ -608,15 +648,17 @@ export default function PicPage() {
 
               const CLUSTERS = [
                 { key: 'semua',        label: 'Semua',              icon: '📋', count: allRangers.length,          activeBg: '#1e40af', activeColor: '#fff',     activeBorder: '#1e40af', tip: 'Semua Ranger tanpa filter.' },
-                { key: 'elite',        label: 'Elite',              icon: '🏆', count: clusterCount.elite,         activeBg: '#dcfce7', activeColor: '#166534',  activeBorder: '#bbf7d0', tip: 'Top 25% Ranger berdasarkan Fee/Agen, dari Ranger yang mengelola lebih dari 20 agen. Fee/Agen = total fee ÷ jumlah agen — indikator seberapa produktif rata-rata agen yang dikelola.' },
-                { key: 'solid',        label: 'Solid',              icon: '⭐', count: clusterCount.solid,         activeBg: '#d1fae5', activeColor: '#065f46',  activeBorder: '#6ee7b7', tip: '25–50% terbaik dari Ranger yang mengelola lebih dari 20 agen. Performa di atas rata-rata jaringan.' },
-                { key: 'average',      label: 'Average',            icon: '📊', count: clusterCount.average,       activeBg: '#eff6ff', activeColor: '#1e40af',  activeBorder: '#bfdbfe', tip: '50–75% dari Ranger yang mengelola lebih dari 20 agen. Performa rata-rata jaringan — ada ruang untuk improvement.' },
-                { key: 'perhatian',    label: 'Perlu Perhatian',    icon: '⚠️', count: clusterCount.perhatian,    activeBg: '#fee2e2', activeColor: '#dc2626',  activeBorder: '#fecaca', tip: 'Bottom 25% dari Ranger yang mengelola lebih dari 20 agen. Fee/Agen terendah — perlu coaching intensif. Ini perbandingan relatif dalam jaringan, bukan nilai absolut.' },
-                { key: 'tidak_tumbuh', label: 'Ranger Tidak Tumbuh',icon: '🌱', count: clusterCount.tidak_tumbuh, activeBg: '#f5f3ff', activeColor: '#6b21a8',  activeBorder: '#e9d5ff', tip: 'Ranger dengan 20 agen atau kurang dalam 14 hari terakhir. Tidak diikutkan dalam klasifikasi karena data terlalu sedikit untuk perbandingan yang adil. Perlu evaluasi apakah agen baru sedang dalam proses akuisisi atau ada kendala di lapangan.' },
+                { key: 'elite',        label: 'Elite',              icon: '🏆', count: clusterCount.elite,         activeBg: '#dcfce7', activeColor: '#166534',  activeBorder: '#bbf7d0', tip: 'Ranger dengan Fee per Agen tertinggi dibanding sesama Ranger Arranet yang mengelola lebih dari 20 agen. Artinya rata-rata setiap agen yang dikelola menghasilkan fee paling besar di antara seluruh Ranger.' },
+                { key: 'solid',        label: 'Solid',              icon: '⭐', count: clusterCount.solid,         activeBg: '#d1fae5', activeColor: '#065f46',  activeBorder: '#6ee7b7', tip: 'Ranger dengan Fee per Agen di atas rata-rata sesama Ranger Arranet. Agen-agennya lebih produktif dari mayoritas Ranger lain.' },
+                { key: 'average',      label: 'Average',            icon: '📊', count: clusterCount.average,       activeBg: '#eff6ff', activeColor: '#1e40af',  activeBorder: '#bfdbfe', tip: 'Ranger dengan Fee per Agen setara rata-rata sesama Ranger Arranet. Tidak terlalu tinggi, tidak terlalu rendah — ada ruang untuk improvement dengan coaching yang tepat.' },
+                { key: 'perhatian',    label: 'Perlu Perhatian',    icon: '⚠️', count: clusterCount.perhatian,    activeBg: '#fee2e2', activeColor: '#dc2626',  activeBorder: '#fecaca', tip: 'Ranger dengan Fee per Agen terendah dibanding sesama Ranger Arranet yang memiliki lebih dari 20 agen. Agen-agennya rata-rata kurang produktif — perlu evaluasi coaching. Ini perbandingan relatif, bukan nilai absolut.' },
+                { key: 'tidak_tumbuh', label: 'Ranger Tidak Tumbuh',icon: '🌱', count: clusterCount.tidak_tumbuh, activeBg: '#f5f3ff', activeColor: '#6b21a8',  activeBorder: '#e9d5ff', tip: 'Ranger dengan 20 agen atau kurang dalam 14 hari terakhir. Belum cukup data untuk dibandingkan secara adil dengan Ranger lain. Fokus utama: tambah jumlah agen aktif terlebih dahulu.' },
               ]
 
               // Filter + sort allRangers
-              let filtered = rangerCluster === 'semua' ? allRangers : allRangers.filter(r => getCluster(r) === rangerCluster)
+              let filtered = allRangers
+              if (rangerSearch) filtered = filtered.filter(r => r.pic.toLowerCase().includes(rangerSearch.toLowerCase()))
+              if (rangerCluster !== 'semua') filtered = filtered.filter(r => getCluster(r) === rangerCluster)
               filtered = [...filtered].sort((a, b) => (b as any).fee_per_agent - (a as any).fee_per_agent)
               const paged = filtered.slice(rangerPage * PAGE_SIZE, (rangerPage + 1) * PAGE_SIZE)
               const totalPages = Math.ceil(filtered.length / PAGE_SIZE)
@@ -724,7 +766,16 @@ export default function PicPage() {
                 </>
               )
             })()}
-            {loadingRangers && <div style={{ textAlign: 'center', padding: '60px', color: '#9ca3af', fontSize: '13px' }}>Memuat data Ranger...</div>}
+            {loadingRangers && (
+              <div style={{ border: '1px solid #e5e7eb', borderRadius: '10px', overflow: 'hidden' }}>
+                {[1,2,3,4,5].map(i => (
+                  <div key={i} style={{ display: 'grid', gridTemplateColumns: '1fr 140px 60px 90px 110px 100px 80px 80px', padding: '13px 16px', borderBottom: '1px solid #f3f4f6', gap: '12px', alignItems: 'center' }}>
+                    <div><Skeleton width={140} height={13} /><div style={{ marginTop: '4px' }}><Skeleton width={60} height={10} /></div></div>
+                    {[100,40,70,90,80,60,60].map((w, j) => <Skeleton key={j} width={w} height={12} />)}
+                  </div>
+                ))}
+              </div>
+            )}
           </>
         )}
 
