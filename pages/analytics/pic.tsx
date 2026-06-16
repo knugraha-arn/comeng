@@ -830,7 +830,7 @@ export default function PicPage() {
               <div style={{ textAlign: 'center', padding: '40px', backgroundColor: '#f9fafb', borderRadius: '10px', border: '1px dashed #e5e7eb', color: '#9ca3af', fontSize: '13px' }}>
                 Tidak ada agen
               </div>
-
+            )}
                 </>
               )
             })()}
