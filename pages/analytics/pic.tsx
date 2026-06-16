@@ -264,19 +264,24 @@ export default function PicPage() {
   async function loadRangers(newPage: number, srch: string) {
     setLoadingRangers(true)
     try {
-      // Filter: hanya mitra Arranet/ex Dinar/ex SSDI
-      const allMitra = ['ARRANET', 'ARRANET ex Dinar', 'ARRANET ex SSDI']
-      let allRangers: PicRow[] = []
-      for (const m of allMitra) {
-        const { data } = await supabase.rpc('get_pic_list', { p_mitra: m, p_search: srch, p_limit: 999, p_offset: 0 })
-        if (data) allRangers = [...allRangers, ...data]
-      }
-      // Deduplicate by pic name
-      const seen = new Set<string>()
-      const unique = allRangers.filter(r => { if (seen.has(r.pic)) return false; seen.add(r.pic); return true })
-      unique.sort((a, b) => b.total_fee_14d - a.total_fee_14d)
-      setRangerTotal(unique.length)
-      setRangers(unique.slice(newPage * PAGE_SIZE, (newPage + 1) * PAGE_SIZE))
+      const { data } = await supabase.rpc('get_ranger_list')
+      let all: PicRow[] = (data ?? []).map((r: any) => ({
+        pic:              r.ranger_name,
+        mitra:            r.mitras?.join(', ') ?? '',
+        total_agents:     r.total_agents,
+        total_trx_14d:    r.total_trx_14d,
+        total_fee_14d:    r.total_fee_14d,
+        avg_trx_per_agent: r.avg_trx_per_agent,
+        growing_count:    r.growing_count,
+        declining_count:  r.declining_count,
+        consistent_count: r.consistent_count,
+        growing_pct:      r.growing_pct,
+        declining_pct:    r.declining_pct,
+        health_score:     r.health_score,
+      }))
+      if (srch) all = all.filter(r => r.pic.toLowerCase().includes(srch.toLowerCase()))
+      setRangerTotal(all.length)
+      setRangers(all.slice(newPage * PAGE_SIZE, (newPage + 1) * PAGE_SIZE))
     } finally { setLoadingRangers(false) }
   }
 
