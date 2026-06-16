@@ -314,8 +314,20 @@ export default function PicPage() {
     setAgentDetail([]); setLiquiditySummary(null); setLiquidityDetail([])
     setLoadingDrawer(true)
     try {
+      // Pastikan sinceDate dan lastDate sudah ada
+      let since = sinceDate
+      let last  = lastDate
+      if (!since || !last) {
+        const { data: prog } = await supabase.rpc('get_monthly_progress')
+        if (prog?.[0]) {
+          last  = prog[0].end_date ?? ''
+          since = last ? new Date(new Date(last).getTime() - 13 * 86400000).toISOString().split('T')[0] : ''
+          setSinceDate(since)
+          setLastDate(last)
+        }
+      }
       const [detailRes, liqRes] = await Promise.all([
-        supabase.rpc('get_agent_detail', { p_serial: agent.serial_number, p_since: sinceDate, p_until: lastDate }),
+        supabase.rpc('get_agent_detail', { p_serial: agent.serial_number, p_since: since, p_until: last }),
         supabase.rpc('get_agent_liquidity_summary', { p_serial: agent.serial_number }),
       ])
       const detail = detailRes.data ?? []
