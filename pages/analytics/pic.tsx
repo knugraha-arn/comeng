@@ -199,6 +199,7 @@ export default function PicPage() {
   const [sinceDate, setSinceDate]           = useState('')
   const [lastDate, setLastDate]             = useState('')
 
+  const [lastUploadDate, setLastUploadDate] = useState<string | null>(null)
   const [tooltip, setTooltip] = useState<{ text: string, x: number, y: number } | null>(null)
   const debounceRef    = useRef<NodeJS.Timeout>()
   const debounceRgRef  = useRef<NodeJS.Timeout>()
@@ -219,6 +220,16 @@ export default function PicPage() {
         setLastDate(prog[0].end_date ?? '')
       }
       await loadPics(0, '', '')
+    // Fetch tanggal upload terakhir
+    const { data: uploadData } = await supabase
+      .from('upload_sessions')
+      .select('created_at')
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+    if (uploadData?.created_at) {
+      setLastUploadDate(new Date(uploadData.created_at).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' }))
+    }
     } finally { setLoading(false) }
   }
 
@@ -252,6 +263,16 @@ export default function PicPage() {
   async function handleReset() {
     setFilterMitra(''); setSearch(''); setSearchInput(''); setPage(0)
     await loadPics(0, '', '')
+    // Fetch tanggal upload terakhir
+    const { data: uploadData } = await supabase
+      .from('upload_sessions')
+      .select('created_at')
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+    if (uploadData?.created_at) {
+      setLastUploadDate(new Date(uploadData.created_at).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' }))
+    }
   }
 
   async function handleExport() {
@@ -438,9 +459,17 @@ export default function PicPage() {
       <div style={{ maxWidth: '1200px', margin: '0 auto', padding: '32px 24px' }}>
 
         {/* Header */}
-        <div style={{ marginBottom: '24px' }}>
-          <div style={{ fontSize: '11px', fontWeight: '600', color: '#9ca3af', letterSpacing: '0.1em', marginBottom: '4px' }}>ANALITIK JARINGAN</div>
-          <h1 style={{ fontSize: '24px', fontWeight: '800', color: '#111827', margin: 0, letterSpacing: '-0.02em' }}>👤 Kekuatan PIC</h1>
+        <div style={{ marginBottom: '24px', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+          <div>
+            <div style={{ fontSize: '11px', fontWeight: '600', color: '#9ca3af', letterSpacing: '0.1em', marginBottom: '4px' }}>ANALITIK JARINGAN</div>
+            <h1 style={{ fontSize: '24px', fontWeight: '800', color: '#111827', margin: 0, letterSpacing: '-0.02em' }}>👤 Kekuatan PIC</h1>
+          </div>
+          {lastUploadDate && (
+            <div style={{ fontSize: '11px', color: '#9ca3af', backgroundColor: '#f9fafb', border: '1px solid #e5e7eb', borderRadius: '8px', padding: '6px 12px', textAlign: 'right' }}>
+              <div style={{ fontWeight: '600', color: '#374151', marginBottom: '1px' }}>Data terakhir diupload</div>
+              <div>{lastUploadDate}</div>
+            </div>
+          )}
         </div>
 
         {/* Tabs */}
@@ -559,27 +588,31 @@ export default function PicPage() {
 
             {/* Cluster chips + search + export */}
             {!loadingRangers && allRangers.length > 0 && (() => {
-              // Compute clusters by fee_per_agent percentile
-              const sorted = [...allRangers].sort((a, b) => (b as any).fee_per_agent - (a as any).fee_per_agent)
-              const n = sorted.length
+              // Pisahkan: <20 agen = "Tidak Tumbuh", sisanya di-cluster 4 tier
+              const THRESHOLD_AGEN = 20
+              const tidakTumbuh = allRangers.filter(r => r.total_agents <= THRESHOLD_AGEN)
+              const qualified   = allRangers.filter(r => r.total_agents > THRESHOLD_AGEN)
+
+              const sortedQ = [...qualified].sort((a, b) => (b as any).fee_per_agent - (a as any).fee_per_agent)
+              const nQ = sortedQ.length
               const getCluster = (r: any) => {
-                const rank = sorted.findIndex(s => s.pic === r.pic) / n
-                if (rank < 0.2)  return 'elite'
-                if (rank < 0.4)  return 'solid'
-                if (rank < 0.6)  return 'average'
-                if (rank < 0.8)  return 'below'
+                if (r.total_agents <= THRESHOLD_AGEN) return 'tidak_tumbuh'
+                const rank = sortedQ.findIndex(s => s.pic === r.pic) / Math.max(nQ, 1)
+                if (rank < 0.25) return 'elite'
+                if (rank < 0.5)  return 'solid'
+                if (rank < 0.75) return 'average'
                 return 'perhatian'
               }
-              const clusterCount = { elite: 0, solid: 0, average: 0, below: 0, perhatian: 0 }
+              const clusterCount = { elite: 0, solid: 0, average: 0, perhatian: 0, tidak_tumbuh: 0 }
               allRangers.forEach(r => { clusterCount[getCluster(r) as keyof typeof clusterCount]++ })
 
               const CLUSTERS = [
-                { key: 'semua',     label: 'Semua',          icon: '📋', count: allRangers.length, activeBg: '#1e40af', activeColor: '#fff', activeBorder: '#1e40af', tip: 'Semua Ranger.' },
-                { key: 'elite',     label: 'Elite',          icon: '🏆', count: clusterCount.elite,     activeBg: '#dcfce7', activeColor: '#166534', activeBorder: '#bbf7d0', tip: 'Top 20% Ranger berdasarkan Fee/Agen. Ranger paling efisien di jaringan.' },
-                { key: 'solid',     label: 'Solid',          icon: '⭐', count: clusterCount.solid,     activeBg: '#d1fae5', activeColor: '#065f46', activeBorder: '#6ee7b7', tip: '20–40% terbaik. Ranger dengan performa di atas rata-rata.' },
-                { key: 'average',   label: 'Average',        icon: '📊', count: clusterCount.average,   activeBg: '#eff6ff', activeColor: '#1e40af', activeBorder: '#bfdbfe', tip: '40–60%. Ranger dengan performa rata-rata jaringan.' },
-                { key: 'below',     label: 'Below Average',  icon: '📉', count: clusterCount.below,     activeBg: '#fffbeb', activeColor: '#92400e', activeBorder: '#fde68a', tip: '60–80%. Ranger dengan performa di bawah rata-rata — perlu coaching.' },
-                { key: 'perhatian', label: 'Perlu Perhatian',icon: '⚠️', count: clusterCount.perhatian, activeBg: '#fee2e2', activeColor: '#dc2626', activeBorder: '#fecaca', tip: 'Bottom 20%. Ranger dengan Fee/Agen terendah. Bukan berarti buruk secara absolut — ini perbandingan relatif dalam jaringan.' },
+                { key: 'semua',        label: 'Semua',              icon: '📋', count: allRangers.length,          activeBg: '#1e40af', activeColor: '#fff',     activeBorder: '#1e40af', tip: 'Semua Ranger tanpa filter.' },
+                { key: 'elite',        label: 'Elite',              icon: '🏆', count: clusterCount.elite,         activeBg: '#dcfce7', activeColor: '#166534',  activeBorder: '#bbf7d0', tip: 'Top 25% Ranger berdasarkan Fee/Agen, dari Ranger yang mengelola lebih dari 20 agen. Fee/Agen = total fee ÷ jumlah agen — indikator seberapa produktif rata-rata agen yang dikelola.' },
+                { key: 'solid',        label: 'Solid',              icon: '⭐', count: clusterCount.solid,         activeBg: '#d1fae5', activeColor: '#065f46',  activeBorder: '#6ee7b7', tip: '25–50% terbaik dari Ranger yang mengelola lebih dari 20 agen. Performa di atas rata-rata jaringan.' },
+                { key: 'average',      label: 'Average',            icon: '📊', count: clusterCount.average,       activeBg: '#eff6ff', activeColor: '#1e40af',  activeBorder: '#bfdbfe', tip: '50–75% dari Ranger yang mengelola lebih dari 20 agen. Performa rata-rata jaringan — ada ruang untuk improvement.' },
+                { key: 'perhatian',    label: 'Perlu Perhatian',    icon: '⚠️', count: clusterCount.perhatian,    activeBg: '#fee2e2', activeColor: '#dc2626',  activeBorder: '#fecaca', tip: 'Bottom 25% dari Ranger yang mengelola lebih dari 20 agen. Fee/Agen terendah — perlu coaching intensif. Ini perbandingan relatif dalam jaringan, bukan nilai absolut.' },
+                { key: 'tidak_tumbuh', label: 'Ranger Tidak Tumbuh',icon: '🌱', count: clusterCount.tidak_tumbuh, activeBg: '#f5f3ff', activeColor: '#6b21a8',  activeBorder: '#e9d5ff', tip: 'Ranger dengan 20 agen atau kurang dalam 14 hari terakhir. Tidak diikutkan dalam klasifikasi karena data terlalu sedikit untuk perbandingan yang adil. Perlu evaluasi apakah agen baru sedang dalam proses akuisisi atau ada kendala di lapangan.' },
               ]
 
               // Filter + sort allRangers
@@ -734,36 +767,25 @@ export default function PicPage() {
             </div>
 
             {/* Agent List */}
-            {/* Trend filter chips */}
             {(() => {
-              const all       = rangerAgents
-              const growing   = all.filter(a => a.trend === 'growing').length
-              const declining = all.filter(a => a.trend === 'declining').length
-              const consistent = all.filter(a => a.trend === 'consistent').length
-              const chips = [
-                { key: 'semua',      label: 'Semua',     count: rangerAgentTotal, icon: '📋',  bg: '#f9fafb',  border: '#e5e7eb',  color: '#374151', activeBg: '#1e40af', activeColor: '#fff', activeBorder: '#1e40af' },
-                { key: 'growing',    label: 'Growing',   count: growing,          icon: '💎',  bg: '#f9fafb',  border: '#e5e7eb',  color: '#374151', activeBg: '#dcfce7', activeColor: '#166534', activeBorder: '#bbf7d0' },
-                { key: 'declining',  label: 'Declining', count: declining,        icon: '⚠️',  bg: '#f9fafb',  border: '#e5e7eb',  color: '#374151', activeBg: '#fef9c3', activeColor: '#92400e', activeBorder: '#fde68a' },
-                { key: 'consistent', label: 'Konsisten', count: consistent,       icon: '✅',  bg: '#f9fafb',  border: '#e5e7eb',  color: '#374151', activeBg: '#eff6ff', activeColor: '#1e40af', activeBorder: '#bfdbfe' },
-              ]
-              const filtered = rangerAgentFilter === 'semua' ? rangerAgents : rangerAgents.filter(a => a.trend === rangerAgentFilter)
+              const filtered = rangerAgents
+              const handleExportAgents = () => {
+                exportCSV(
+                  `agen_${selectedRanger.pic.replace(/\s+/g, '_')}_${new Date().toISOString().split('T')[0]}.csv`,
+                  ['Serial Number','Merchant Name','Mitra','Hari Aktif 14H','TRX 14H','Fee 14H','Avg TRX/Hari','Trend','Bucket'],
+                  filtered.map(a => [a.serial_number, a.merchant_name ?? '', a.mitra ?? '', a.active_days_14, a.total_trx_14d, a.total_fee_14d, a.avg_trx_14, a.trend, a.bucket])
+                )
+              }
               return (
                 <>
-                  <div style={{ display: 'flex', gap: '8px', marginBottom: '16px', flexWrap: 'wrap' }}>
-                    {chips.map(chip => {
-                      const isActive = rangerAgentFilter === chip.key
-                      return (
-                        <button key={chip.key} onClick={() => setRangerAgentFilter(chip.key)}
-                          style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 16px', borderRadius: '99px', border: `1px solid ${isActive ? chip.activeBorder : chip.border}`, backgroundColor: isActive ? chip.activeBg : chip.bg, color: isActive ? chip.activeColor : chip.color, fontSize: '13px', fontWeight: '600', cursor: 'pointer', transition: 'all 0.15s' }}>
-                          <span>{chip.icon} {chip.label}</span>
-                          <span style={{ backgroundColor: isActive ? 'rgba(0,0,0,0.1)' : '#e5e7eb', color: isActive ? chip.activeColor : '#6b7280', borderRadius: '99px', padding: '1px 8px', fontSize: '12px', fontWeight: '700' }}>{chip.count}</span>
-                        </button>
-                      )
-                    })}
-                  </div>
-
-                  <div style={{ fontSize: '11px', fontWeight: '700', color: '#9ca3af', letterSpacing: '0.08em', marginBottom: '12px' }}>
-                    DAFTAR AGEN ({formatNum(filtered.length)} agen) — klik untuk detail
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
+                    <div style={{ fontSize: '11px', fontWeight: '700', color: '#9ca3af', letterSpacing: '0.08em' }}>
+                      DAFTAR AGEN ({formatNum(rangerAgentTotal)} agen) — klik untuk detail
+                    </div>
+                    <button onClick={handleExportAgents}
+                      style={{ padding: '6px 12px', borderRadius: '8px', border: '1px solid #e5e7eb', backgroundColor: '#fff', color: '#374151', fontSize: '12px', cursor: 'pointer' }}>
+                      ⬇ Export CSV
+                    </button>
                   </div>
 
             {loadingRangerAgents ? (
@@ -808,7 +830,7 @@ export default function PicPage() {
               <div style={{ textAlign: 'center', padding: '40px', backgroundColor: '#f9fafb', borderRadius: '10px', border: '1px dashed #e5e7eb', color: '#9ca3af', fontSize: '13px' }}>
                 Tidak ada agen
               </div>
-            )}
+
                 </>
               )
             })()}
@@ -843,7 +865,18 @@ export default function PicPage() {
             </div>
 
             {loadingDrawer ? (
-              <div style={{ padding: '40px', textAlign: 'center', color: '#9ca3af', fontSize: '13px' }}>Memuat data...</div>
+              <div style={{ padding: '20px 24px' }}>
+                {[1,2,3,4,5,6].map(i => (
+                  <div key={i} style={{ marginBottom: '20px' }}>
+                    <Skeleton width={100} height={10} radius={4} />
+                    <div style={{ marginTop: '10px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                      <Skeleton width="100%" height={14} />
+                      <Skeleton width="80%" height={14} />
+                      <Skeleton width="60%" height={14} />
+                    </div>
+                  </div>
+                ))}
+              </div>
             ) : agentDetail.length > 0 ? (
               <div style={{ padding: '20px 24px' }}>
 
