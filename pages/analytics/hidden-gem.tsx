@@ -417,7 +417,7 @@ export default function ProductivityPage() {
       <Head><title>Produktifitas Agen — AMARIS</title></Head>
 
       {tooltip && (
-        <div style={{ position: 'fixed', left: Math.min(tooltip.x + 12, window.innerWidth - 260), top: tooltip.y - 8, zIndex: 9999, backgroundColor: '#1f2937', color: '#f9fafb', fontSize: '11px', padding: '8px 12px', borderRadius: '8px', maxWidth: '240px', lineHeight: '1.5', pointerEvents: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.3)' }}>
+        <div style={{ position: 'fixed', left: Math.min(tooltip.x + 12, window.innerWidth - 340), top: tooltip.y - 8, zIndex: 9999, backgroundColor: '#1f2937', color: '#f9fafb', fontSize: '11px', padding: '8px 12px', borderRadius: '8px', maxWidth: '320px', lineHeight: '1.6', pointerEvents: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.3)', whiteSpace: 'pre-line' }}>
           {tooltip.text}
         </div>
       )}
@@ -426,15 +426,18 @@ export default function ProductivityPage() {
 
         <div style={{ marginBottom: '24px' }}>
           <div style={{ fontSize: '11px', fontWeight: '600', color: '#9ca3af', letterSpacing: '0.1em', marginBottom: '4px' }}>ANALITIK AGEN</div>
-          <h1 style={{ fontSize: '24px', fontWeight: '800', color: '#111827', margin: 0, letterSpacing: '-0.02em' }}>📈 Produktifitas Agen</h1>
+          <h1
+            style={{ fontSize: '24px', fontWeight: '800', color: '#111827', margin: 0, letterSpacing: '-0.02em', cursor: 'default' }}
+            onMouseEnter={e => setTooltip({ text: 'Produktifitas agen diukur dengan membandingkan W1 (7 hari pertama) vs W2 (7 hari terakhir) dalam window 14 hari terakhir.\n\n💎 Growing — Avg TRX/hari W2 lebih dari 120% W1. Agen tumbuh.\n⚠️ Declining — Avg TRX/hari W2 kurang dari 80% W1. Agen menurun.\n✅ Konsisten — Avg TRX/hari W2 antara 80–120% W1. Agen stabil.', x: e.clientX, y: e.clientY })}
+            onMouseMove={e => setTooltip({ text: 'Produktifitas agen diukur dengan membandingkan W1 (7 hari pertama) vs W2 (7 hari terakhir) dalam window 14 hari terakhir.\n\n💎 Growing — Avg TRX/hari W2 lebih dari 120% W1. Agen tumbuh.\n⚠️ Declining — Avg TRX/hari W2 kurang dari 80% W1. Agen menurun.\n✅ Konsisten — Avg TRX/hari W2 antara 80–120% W1. Agen stabil.', x: e.clientX, y: e.clientY })}
+            onMouseLeave={() => setTooltip(null)}
+          >📈 Produktifitas Agen ⓘ</h1>
           <p style={{ fontSize: '13px', color: '#6b7280', marginTop: '4px' }}>
             {sinceDate && lastDate ? (() => {
-              const start = new Date(sinceDate)
-              const end = new Date(lastDate)
-              const fmt = (d: Date) => d.toLocaleDateString('id-ID', { day: 'numeric', month: 'short' })
-              const fmtFull = (d: Date) => d.toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })
-              return `Data transaksi 14 hari dari tanggal ${fmt(start)} sampai ${fmtFull(end)}`
-            })() : 'Perbandingan 7 hari pertama (W1) vs 7 hari terakhir (W2) dalam window 14 hari — siapa yang tumbuh, menurun, dan konsisten.'}
+              const fmtNoYear = (d: string) => new Date(d).toLocaleDateString('id-ID', { day: 'numeric', month: 'short' })
+              const fmtFull   = (d: string) => new Date(d).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })
+              return `Data transaksi 14 hari dari tanggal ${fmtNoYear(sinceDate)} sampai ${fmtFull(lastDate)}`
+            })() : ''}
           </p>
         </div>
 
