@@ -230,9 +230,9 @@ export default function MitraPage() {
               <div style={{ textAlign: 'right' }}>AGEN</div>
               <div style={{ textAlign: 'right' }}>FEE (14H)</div>
               <div style={{ textAlign: 'right' }}><span {...tip('Fee dibagi jumlah agen aktif 14H — ukuran efisiensi mitra.')}>FEE/AGEN ⓘ</span></div>
-              <div style={{ textAlign: 'right' }}><span {...tip('% agen yang avg TRX/hari bulan ini > 120% vs 14H.')}>GROWING ⓘ</span></div>
-              <div style={{ textAlign: 'right' }}><span {...tip('% agen yang avg TRX/hari bulan ini < 80% vs 14H.')}>DECLINING ⓘ</span></div>
-              <div style={{ textAlign: 'right' }}><span {...tip('% agen yang avg amount/hari MTD < 50% dari avg 14H. Indikasi float menipis.')}>LIQ. LEMAH ⓘ</span></div>
+              <div style={{ textAlign: 'right' }}><span {...tip('% agen yang avg TRX/hari W2 (8–14) > 120% vs W1 (1–7).')}>GROWING ⓘ</span></div>
+              <div style={{ textAlign: 'right' }}><span {...tip('% agen yang avg TRX/hari W2 (8–14) < 80% vs W1 (1–7).')}>DECLINING ⓘ</span></div>
+              <div style={{ textAlign: 'right' }}><span {...tip('% agen yang avg amount/hari W2 < 50% dari W1. Indikasi float menipis.')}>LIQ. LEMAH ⓘ</span></div>
               <div><span {...tip('Composite score 0–100. Komponen: % Productive (30%), % Growing (25%), % rendah Declining (25%), % rendah Liquidity Lemah (20%).')}>HEALTH ⓘ</span></div>
               <div style={{ textAlign: 'right' }}>TRX 14H</div>
             </div>
