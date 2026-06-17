@@ -200,7 +200,9 @@ export default function PicPage() {
   const [sinceDate, setSinceDate]           = useState('')
   const [lastDate, setLastDate]             = useState('')
 
-  const [lastUploadDate, setLastUploadDate] = useState<string | null>(null)
+  const [lastTrxDate, setLastTrxDate]       = useState<string | null>(null)
+  const [sinceTrxDate, setSinceTrxDate]     = useState<string | null>(null)
+  const [totalDays, setTotalDays]           = useState<number>(14)
   const [rangerComparison, setRangerComparison] = useState<{ranger: any, nonRanger: any} | null>(null)
   const [tooltip, setTooltip] = useState<{ text: string, x: number, y: number } | null>(null)
   const debounceRef    = useRef<NodeJS.Timeout>()
@@ -223,15 +225,17 @@ export default function PicPage() {
       }
       await loadPics(0, '', '')
 
-      // Fetch tanggal upload terakhir
-      const { data: uploadData } = await supabase
-        .from('am_upload_sessions')
-        .select('created_at')
-        .order('created_at', { ascending: false })
-        .limit(1)
-        .maybeSingle()
-      if (uploadData?.created_at) {
-        setLastUploadDate(new Date(uploadData.created_at).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' }))
+      // Set tanggal dari MAX(transaction_date) via get_monthly_progress
+      if (prog?.[0]?.end_date) {
+        const MONTHS_ID = ['Januari','Februari','Maret','April','Mei','Juni','Juli','Agustus','September','Oktober','November','Desember']
+        const [ey, em, ed] = (prog[0].end_date as string).split('-')
+        const endStr = `${parseInt(ed)} ${MONTHS_ID[parseInt(em)-1]} ${ey}`
+        const startDate = new Date(new Date(prog[0].end_date).getTime() - 13 * 86400000)
+        const [sy, sm, sd2] = startDate.toISOString().split('T')[0].split('-')
+        const startStr = `${parseInt(sd2)} ${MONTHS_ID[parseInt(sm)-1]} ${sy}`
+        setLastTrxDate(endStr)
+        setSinceTrxDate(startStr)
+        setTotalDays(14)
       }
     } finally { setLoading(false) }
   }
@@ -493,10 +497,10 @@ export default function PicPage() {
         </div>
 
         {/* Date info strip */}
-        {lastUploadDate && (
+        {lastTrxDate && (
           <div style={{ marginBottom: '16px', padding: '8px 14px', backgroundColor: '#f9fafb', border: '1px solid #e5e7eb', borderRadius: '8px', display: 'flex', alignItems: 'center', gap: '8px', fontSize: '11px', color: '#6b7280' }}>
-            <span>🕐</span>
-            <span>Data berdasarkan upload terakhir: <strong style={{ color: '#374151' }}>{lastUploadDate}</strong></span>
+            <span>📅</span>
+            <span>Data transaksi <strong style={{ color: '#374151' }}>{totalDays} hari</strong> dari tanggal <strong style={{ color: '#374151' }}>{sinceTrxDate}</strong> sampai <strong style={{ color: '#374151' }}>{lastTrxDate}</strong></span>
           </div>
         )}
 
@@ -563,58 +567,6 @@ export default function PicPage() {
                 ))}
               </div>
             )}
-
-            {!loadingRangers && allRangers.length > 0 && (() => {
-              const totalRanger  = allRangers.length
-              const totalAgents  = allRangers.reduce((s, r) => s + r.total_agents, 0)
-              const totalFee     = allRangers.reduce((s, r) => s + r.total_fee_14d, 0)
-              const avgFeePerAgen = totalAgents > 0 ? Math.round(totalFee / totalAgents) : 0
-              const topRanger    = [...allRangers].sort((a, b) => (b as any).fee_per_agent - (a as any).fee_per_agent)[0]
-              const bottomRanger = [...allRangers].sort((a, b) => (a as any).fee_per_agent - (b as any).fee_per_agent)[0]
-              return (
-                <>
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '12px', marginBottom: '16px' }}>
-                    {[
-                      { label: 'Total Ranger', value: formatNum(totalRanger), tip: 'Jumlah Ranger aktif dari mitra ARRANET, ARRANET ex Dinar, dan ARRANET ex SSDI.' },
-                      { label: 'Total Agen', value: formatNum(totalAgents), tip: 'Total agen yang dikelola oleh seluruh Ranger dalam 14 hari terakhir.' },
-                      { label: 'Total Fee 14H', value: formatFee(totalFee), tip: 'Total fee yang dihasilkan oleh seluruh jaringan Ranger dalam 14 hari terakhir.', highlight: true },
-                      { label: 'Avg Fee/Agen', value: formatFee(avgFeePerAgen), tip: 'Rata-rata fee per agen dari seluruh jaringan Ranger. Indikator efisiensi coaching secara keseluruhan.' },
-                    ].map(s => (
-                      <div key={s.label} {...tip(s.tip)} style={{ backgroundColor: s.highlight ? '#eff6ff' : '#fff', border: `1px solid ${s.highlight ? '#bfdbfe' : '#e5e7eb'}`, borderRadius: '10px', padding: '14px 16px', textAlign: 'center', cursor: 'default' }}>
-                        <div style={{ fontSize: '18px', fontWeight: '800', color: s.highlight ? '#1e40af' : '#111827' }}>{s.value}</div>
-                        <div style={{ fontSize: '11px', color: '#9ca3af', marginTop: '4px' }}>{s.label}</div>
-                      </div>
-                    ))}
-                  </div>
-
-                  {/* Top & Bottom highlight */}
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '16px' }}>
-                    <div {...tip('Ranger dengan Fee/Agen tertinggi — paling efisien dalam menghasilkan pendapatan per agen yang dikelola.')}
-                      style={{ padding: '10px 14px', backgroundColor: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: '10px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'default' }}>
-                      <div>
-                        <div style={{ fontSize: '10px', color: '#166534', fontWeight: '700', marginBottom: '2px' }}>🏆 TOP PERFORMER</div>
-                        <div style={{ fontSize: '13px', fontWeight: '700', color: '#111827' }}>{topRanger.pic}</div>
-                      </div>
-                      <div style={{ textAlign: 'right' }}>
-                        <div style={{ fontSize: '14px', fontWeight: '800', color: '#166534' }}>{formatFee((topRanger as any).fee_per_agent)}</div>
-                        <div style={{ fontSize: '10px', color: '#9ca3af' }}>per agen</div>
-                      </div>
-                    </div>
-                    <div {...tip('Ranger dengan Fee/Agen terendah dibanding sesama Ranger. Bukan berarti buruk secara absolut — ini perbandingan relatif dalam jaringan.')}
-                      style={{ padding: '10px 14px', backgroundColor: '#fef2f2', border: '1px solid #fecaca', borderRadius: '10px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'default' }}>
-                      <div>
-                        <div style={{ fontSize: '10px', color: '#dc2626', fontWeight: '700', marginBottom: '2px' }}>⚠️ PERLU PERHATIAN</div>
-                        <div style={{ fontSize: '13px', fontWeight: '700', color: '#111827' }}>{bottomRanger.pic}</div>
-                      </div>
-                      <div style={{ textAlign: 'right' }}>
-                        <div style={{ fontSize: '14px', fontWeight: '800', color: '#dc2626' }}>{formatFee((bottomRanger as any).fee_per_agent)}</div>
-                        <div style={{ fontSize: '10px', color: '#9ca3af' }}>per agen</div>
-                      </div>
-                    </div>
-                  </div>
-                </>
-              )
-            })()}
 
             {/* Cluster chips + search + export */}
             {!loadingRangers && allRangers.length > 0 && (() => {
