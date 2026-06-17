@@ -297,7 +297,15 @@ export default function Dashboard3500Page() {
         <div style={{ marginBottom: '24px' }}>
           <div style={{ fontSize: '11px', fontWeight: '600', color: '#9ca3af', letterSpacing: '0.1em', marginBottom: '4px' }}>ANALITIK AGEN</div>
           <h1 style={{ fontSize: '24px', fontWeight: '800', color: '#111827', margin: 0, letterSpacing: '-0.02em' }}>💰 Dashboard Lite dan Plus</h1>
-          <p style={{ fontSize: '13px', color: '#6b7280', marginTop: '4px' }}>Agen dengan transaksi fee Rp 3.500 — Lite dan Plus</p>
+          <p style={{ fontSize: '13px', color: '#6b7280', marginTop: '4px' }}>
+            {sinceDate && lastDate ? (() => {
+              const start = new Date(sinceDate)
+              const end = new Date(lastDate)
+              const fmt = (d: Date) => d.toLocaleDateString('id-ID', { day: 'numeric', month: 'short' })
+              const fmtFull = (d: Date) => d.toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })
+              return `Data transaksi 14 hari dari tanggal ${fmt(start)} sampai ${fmtFull(end)}`
+            })() : 'Agen dengan transaksi fee Rp 3.500 — Lite dan Plus'}
+          </p>
         </div>
 
         {progress && (
@@ -305,7 +313,15 @@ export default function Dashboard3500Page() {
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '16px' }}>
               <div>
                 <div style={{ fontSize: '12px', fontWeight: '700', color: '#374151', letterSpacing: '0.05em' }}>TARGET {currentMonth.toUpperCase()} {currentYear}</div>
-                <div style={{ fontSize: '11px', color: '#9ca3af', marginTop: '2px' }}>Hari ke-{progress.days_elapsed} dari {progress.days_in_month}</div>
+                <div style={{ fontSize: '11px', color: '#9ca3af', marginTop: '2px' }}>
+                  {sinceDate && lastDate ? (() => {
+                    const start = new Date(sinceDate)
+                    const end = new Date(lastDate)
+                    const fmt = (d: Date) => d.toLocaleDateString('id-ID', { day: 'numeric', month: 'short' })
+                    const fmtFull = (d: Date) => d.toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })
+                    return `Data transaksi 14 hari dari tanggal ${fmt(start)} sampai ${fmtFull(end)}`
+                  })() : `Hari ke-${progress.days_elapsed} dari ${progress.days_in_month}`}
+                </div>
               </div>
               {projectedFee && monthlyTarget && (
                 <div style={{ padding: '6px 14px', borderRadius: '99px', fontSize: '12px', fontWeight: '700', backgroundColor: projectedFee >= monthlyTarget ? '#dcfce7' : '#fee2e2', color: projectedFee >= monthlyTarget ? '#166534' : '#dc2626' }}>
