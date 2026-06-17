@@ -105,10 +105,10 @@ export default function UploadCenter() {
     e.preventDefault()
     setIsDragging(false)
     const dropped = e.dataTransfer.files[0]
-    if (dropped && (dropped.name.endsWith('.xlsx') || dropped.name.endsWith('.csv'))) {
+    if (dropped && dropped.name.endsWith('.xlsx')) {
       setFile(dropped)
     } else {
-      setErrorMsg('Hanya file .xlsx atau .csv yang diterima')
+      setErrorMsg('Hanya file .xlsx yang diterima')
       setStage('error')
     }
   }, [])
@@ -118,19 +118,14 @@ export default function UploadCenter() {
     const rows: TransactionRow[] = []
     const dateSet = new Set<string>()
 
-    const buffer = await f.arrayBuffer()
-    const isCSV = f.name.endsWith('.csv')
-
-    let raw: Record<string, unknown>[]
-
-    if (isCSV) {
-      const text = new TextDecoder().decode(buffer)
-      const wb = XLSX.read(text, { type: 'string', cellDates: false })
-      raw = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { defval: null })
-    } else {
-      const wb = XLSX.read(buffer, { type: 'array', cellDates: false })
-      raw = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { defval: null })
+    if (!f.name.endsWith('.xlsx')) {
+      errors.push('Hanya file .xlsx yang diterima')
+      return { rows, dates: [], errors }
     }
+
+    const buffer = await f.arrayBuffer()
+    const wb = XLSX.read(buffer, { type: 'array', cellDates: false })
+    const raw: Record<string, unknown>[] = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { defval: null })
 
     if (raw.length === 0) {
       errors.push('File tidak mengandung data')
@@ -240,25 +235,86 @@ export default function UploadCenter() {
         return
       }
 
+      // === VALIDASI 1: Window 14 hari dari MAX tanggal di file ===
+      setProgress(18)
+      setProgressLabel('Memvalidasi window tanggal...')
+
+      const maxDateStr = dates[dates.length - 1] // dates sudah sorted asc
+      const maxDate = new Date(maxDateStr)
+      const minDate = new Date(maxDate)
+      minDate.setDate(minDate.getDate() - 13)
+      const minDateStr = minDate.toISOString().split('T')[0]
+
+      const outOfWindow = dates.filter(d => d < minDateStr || d > maxDateStr)
+      if (outOfWindow.length > 0) {
+        const fmt = (d: string) => new Date(d).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })
+        setStage('error')
+        setErrorMsg(
+          `File ditolak — terdapat data di luar window 14 hari (${fmt(minDateStr)} – ${fmt(maxDateStr)}). ` +
+          `Tanggal tidak valid: ${outOfWindow.map(fmt).join(', ')}.`
+        )
+        return
+      }
+
+      // === VALIDASI 2: Cek tanggal sudah ada di DB (status = completed) ===
       setProgress(20)
+      setProgressLabel('Memeriksa data existing di database...')
+
+      const { data: existingSessions } = await supabase
+        .from('am_upload_sessions')
+        .select('upload_date, status')
+        .in('upload_date', dates)
+
+      const completedDates = (existingSessions ?? [])
+        .filter(s => s.status === 'completed')
+        .map(s => s.upload_date as string)
+
+      if (completedDates.length > 0) {
+        const fmt = (d: string) => new Date(d).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })
+        setStage('error')
+        setErrorMsg(
+          `File ditolak — tanggal berikut sudah ada di database: ${completedDates.map(fmt).join(', ')}. ` +
+          `Hapus data tersebut terlebih dahulu sebelum upload ulang.`
+        )
+        return
+      }
+
+      // Warning untuk tanggal processing (upload sebelumnya gagal)
+      const processingDates = (existingSessions ?? [])
+        .filter(s => s.status === 'processing')
+        .map(s => s.upload_date as string)
+
+      if (processingDates.length > 0) {
+        const fmt = (d: string) => new Date(d).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })
+        errors.push(
+          `⚠️ Tanggal ${processingDates.map(fmt).join(', ')} sebelumnya pernah diupload tapi gagal (incomplete). Data lama akan ditimpa.`
+        )
+      }
+
+      // === Buat / update upload sessions ===
+      setProgress(22)
       setProgressLabel(`Mempersiapkan ${dates.length} tanggal...`)
 
       const sessionIds: Record<string, string> = {}
       for (const date of dates) {
         const rowCount = rows.filter(r => r.transaction_date === date).length
-        const { data: existing } = await supabase
-          .from('am_upload_sessions')
-          .select('id')
-          .eq('upload_date', date)
-          .single()
+        const existingSession = (existingSessions ?? []).find(s => s.upload_date === date)
 
-        if (existing) {
-          sessionIds[date] = existing.id
-          await supabase.from('am_upload_sessions').update({
-            status: 'processing',
-            row_count: rowCount,
-            uploaded_by: session.user.id,
-          }).eq('id', existing.id)
+        if (existingSession) {
+          const { data: sessionRow } = await supabase
+            .from('am_upload_sessions')
+            .select('id')
+            .eq('upload_date', date)
+            .single()
+          if (sessionRow) {
+            sessionIds[date] = sessionRow.id
+            await supabase.from('am_upload_sessions').update({
+              status: 'processing',
+              row_count: rowCount,
+              uploaded_by: session.user.id,
+              error_message: null,
+            }).eq('id', sessionRow.id)
+          }
         } else {
           const { data: newSession } = await supabase
             .from('am_upload_sessions')
