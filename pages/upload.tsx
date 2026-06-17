@@ -1,7 +1,7 @@
 import { useState, useRef, useCallback } from 'react'
 import { useRouter } from 'next/router'
 import Head from 'next/head'
-import Layout from '../../components/Layout'
+import Layout from '../components/Layout'
 import { createBrowserClient } from '@supabase/ssr'
 import * as XLSX from 'xlsx'
 
