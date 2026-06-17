@@ -239,7 +239,7 @@ export default function AgentLiquidityPage() {
           <div style={{ fontSize: '11px', fontWeight: '600', color: '#9ca3af', letterSpacing: '0.1em', marginBottom: '4px' }}>ANALITIK AGEN</div>
           <h1 style={{ fontSize: '24px', fontWeight: '800', color: '#111827', margin: 0, letterSpacing: '-0.02em' }}>💧 Agent Liquidity</h1>
           <p style={{ fontSize: '13px', color: '#6b7280', marginTop: '4px' }}>
-            Estimasi kekuatan float agen — perbandingan avg nominal transaksi harian bulan ini vs 14 hari terakhir.
+            Estimasi kekuatan float agen — perbandingan avg nominal transaksi harian W2 (7 hari terakhir) vs W1 (7 hari pertama).
             {!loading && <span style={{ marginLeft: '8px', color: '#9ca3af' }}>{totalCount.toLocaleString('id')} agen</span>}
           </p>
         </div>
