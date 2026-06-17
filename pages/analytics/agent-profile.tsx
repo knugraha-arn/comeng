@@ -314,8 +314,11 @@ export default function AgentProfilePage() {
                   </div>
                 </div>
                 <div style={{ textAlign: 'right', fontSize: '11px', color: '#9ca3af' }}>
-                  <div>Data per {new Date(profile.end_date).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })}</div>
-                  <div>14H: {new Date(profile.start_date_14).toLocaleDateString('id-ID', { day: 'numeric', month: 'short' })} – {new Date(profile.end_date).toLocaleDateString('id-ID', { day: 'numeric', month: 'short' })}</div>
+                  <div>{(() => {
+                    const fmtNoYear = (d: string) => new Date(d).toLocaleDateString('id-ID', { day: 'numeric', month: 'short' })
+                    const fmtFull   = (d: string) => new Date(d).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })
+                    return `Data transaksi 14 hari dari tanggal ${fmtNoYear(profile.start_date_14)} sampai ${fmtFull(profile.end_date)}`
+                  })()}</div>
                 </div>
               </div>
 
