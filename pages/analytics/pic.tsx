@@ -983,13 +983,13 @@ export default function PicPage() {
 
                 {/* PERBANDINGAN PERFORMA */}
                 <div style={{ marginBottom: '24px' }}>
-                  <div style={{ fontSize: '11px', fontWeight: '700', color: '#9ca3af', letterSpacing: '0.08em', marginBottom: '12px' }}>PERBANDINGAN PERFORMA</div>
+                  <div style={{ fontSize: '11px', fontWeight: '700', color: '#9ca3af', letterSpacing: '0.08em', marginBottom: '12px' }}>PERBANDINGAN PERFORMA (W1 vs W2)</div>
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
                     {[
-                      { label: 'Avg TRX/hari (14H)',    value: String(selectedAgent.avg_trx_14) },
-                      { label: 'Avg TRX/hari (MTD)',    value: String(selectedAgent.avg_trx_mtd), highlight: true },
-                      { label: 'Total TRX 14H',          value: formatNum(selectedAgent.total_trx_14d) },
-                      { label: 'Growth',                 value: `${selectedAgent.trx_change_pct > 0 ? '+' : ''}${selectedAgent.trx_change_pct}%`, highlight: true },
+                      { label: 'Avg TRX/hari W1 (1–7)',  value: String(selectedAgent.avg_w1 > 0 ? selectedAgent.avg_w1 : '—') },
+                      { label: 'Avg TRX/hari W2 (8–14)', value: String(selectedAgent.avg_w2 > 0 ? selectedAgent.avg_w2 : '—'), highlight: true },
+                      { label: 'Total TRX 14H',           value: formatNum(selectedAgent.tot_trx_14) },
+                      { label: 'Perubahan W1→W2',         value: `${selectedAgent.chg_pct > 0 ? '+' : ''}${selectedAgent.chg_pct}%`, highlight: true },
                     ].map(s => {
                       const cfg = TREND_CONFIG[selectedAgent.trnd as keyof typeof TREND_CONFIG] ?? TREND_CONFIG.consistent
                       return (
