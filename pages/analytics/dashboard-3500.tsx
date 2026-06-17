@@ -11,9 +11,12 @@ interface Agent3500 {
   pic: string | null
   active_days_14: number
   avg_trx_14: number
-  active_days_month: number
-  total_trx_month: number
-  avg_trx_month: number
+  active_days_w1: number
+  total_trx_w1: number
+  avg_trx_w1: number
+  active_days_w2: number
+  total_trx_w2: number
+  avg_trx_w2: number
   trx_change_pct: number
   trend: 'growing' | 'declining' | 'consistent'
   bucket: string
@@ -48,9 +51,9 @@ interface MonthlyProgress {
 }
 
 const TREND_CONFIG = {
-  growing:    { label: 'Growing',   icon: '💎', color: '#166534', bg: '#dcfce7', border: '#bbf7d0', tooltip: 'Avg TRX/hari bulan ini > 120% vs 14 hari terakhir. Agen sedang tumbuh.' },
-  declining:  { label: 'Declining', icon: '⚠️', color: '#92400e', bg: '#fef9c3', border: '#fde68a', tooltip: 'Avg TRX/hari bulan ini < 80% vs 14 hari terakhir. Agen sedang menurun, perlu perhatian.' },
-  consistent: { label: 'Konsisten', icon: '✅', color: '#1e40af', bg: '#eff6ff', border: '#bfdbfe', tooltip: 'Avg TRX/hari bulan ini antara 80–120% vs 14 hari terakhir. Agen stabil.' },
+  growing:    { label: 'Growing',   icon: '💎', color: '#166534', bg: '#dcfce7', border: '#bbf7d0', tooltip: 'Avg TRX/hari W2 (8–14) > 120% vs W1 (1–7). Agen sedang tumbuh.' },
+  declining:  { label: 'Declining', icon: '⚠️', color: '#92400e', bg: '#fef9c3', border: '#fde68a', tooltip: 'Avg TRX/hari W2 (8–14) < 80% vs W1 (1–7). Agen sedang menurun, perlu perhatian.' },
+  consistent: { label: 'Konsisten', icon: '✅', color: '#1e40af', bg: '#eff6ff', border: '#bfdbfe', tooltip: 'Avg TRX/hari W2 (8–14) antara 80–120% vs W1 (1–7). Agen stabil.' },
 }
 
 const BUCKET_CONFIG: Record<string, { label: string, color: string, bg: string, border: string }> = {
@@ -163,7 +166,7 @@ export default function Dashboard3500Page() {
   }
 
   async function loadTrendCounts(mitra: string, pic: string) {
-    const params = { p_min_active_days_month: 2, p_min_trx_month: 5, p_min_avg_trx_14: 1, p_trend: '', p_mitra: mitra, p_pic: pic }
+    const params = { p_min_active_days_w2: 2, p_min_trx_w2: 5, p_min_avg_trx_14: 1, p_trend: '', p_mitra: mitra, p_pic: pic }
     const [g, d, c] = await Promise.all([
       supabase.rpc('get_hidden_gem_agents_3500_count', { ...params, p_trend: 'growing' }),
       supabase.rpc('get_hidden_gem_agents_3500_count', { ...params, p_trend: 'declining' }),
@@ -179,9 +182,9 @@ export default function Dashboard3500Page() {
   function getMinParams(tab: string) {
     const isAll = tab === 'all'
     return {
-      p_min_active_days_month: isAll ? 0 : 2,
-      p_min_trx_month:         isAll ? 0 : 5,
-      p_min_avg_trx_14:        isAll ? 0 : 1,
+      p_min_active_days_w2: isAll ? 0 : 2,
+      p_min_trx_w2:         isAll ? 0 : 5,
+      p_min_avg_trx_14:     isAll ? 0 : 1,
     }
   }
 
@@ -416,14 +419,14 @@ export default function Dashboard3500Page() {
               </div>
               <div style={{ textAlign: 'right' }}>
                 <span
-                  onMouseEnter={e => setTooltip({ text: 'Rata-rata TRX fee Rp 3.500 per hari bulan berjalan.', x: e.clientX, y: e.clientY })}
-                  onMouseMove={e => setTooltip({ text: 'Rata-rata TRX fee Rp 3.500 per hari bulan berjalan.', x: e.clientX, y: e.clientY })}
-                  onMouseLeave={() => setTooltip(null)}>TRX/HARI (BLN) ⓘ</span>
+                  onMouseEnter={e => setTooltip({ text: 'Rata-rata TRX fee Rp 3.500 per hari di W2 (8–14).', x: e.clientX, y: e.clientY })}
+                  onMouseMove={e => setTooltip({ text: 'Rata-rata TRX fee Rp 3.500 per hari di W2 (8–14).', x: e.clientX, y: e.clientY })}
+                  onMouseLeave={() => setTooltip(null)}>TRX/HARI (W2) ⓘ</span>
               </div>
               <div style={{ textAlign: 'right' }}>
                 <span
-                  onMouseEnter={e => setTooltip({ text: 'Perubahan avg TRX/hari bulan ini vs 14H. Hijau = naik, merah = turun.', x: e.clientX, y: e.clientY })}
-                  onMouseMove={e => setTooltip({ text: 'Perubahan avg TRX/hari bulan ini vs 14H. Hijau = naik, merah = turun.', x: e.clientX, y: e.clientY })}
+                  onMouseEnter={e => setTooltip({ text: 'Perubahan avg TRX/hari W2 vs W1. Hijau = naik, merah = turun.', x: e.clientX, y: e.clientY })}
+                  onMouseMove={e => setTooltip({ text: 'Perubahan avg TRX/hari W2 vs W1. Hijau = naik, merah = turun.', x: e.clientX, y: e.clientY })}
                   onMouseLeave={() => setTooltip(null)}>GROWTH ⓘ</span>
               </div>
             </div>
@@ -443,7 +446,7 @@ export default function Dashboard3500Page() {
                 <div style={{ fontSize: '12px', color: '#374151', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{agent.pic ?? '—'}</div>
                 <div style={{ fontSize: '13px', fontWeight: '700', textAlign: 'center', color: agent.active_days_14 >= 8 ? '#166534' : agent.active_days_14 >= 5 ? '#ca8a04' : '#dc2626' }}>{agent.active_days_14}</div>
                 <div style={{ fontSize: '12px', color: '#374151', textAlign: 'right' }}>{Number(agent.avg_trx_14).toLocaleString('id')}</div>
-                <div style={{ fontSize: '12px', color: '#374151', textAlign: 'right' }}>{Number(agent.avg_trx_month).toLocaleString('id')}</div>
+                <div style={{ fontSize: '12px', color: '#374151', textAlign: 'right' }}>{Number(agent.avg_trx_w2).toLocaleString('id')}</div>
                 <div style={{ textAlign: 'right' }}>
                   <span style={{ padding: '2px 8px', borderRadius: '99px', fontSize: '11px', fontWeight: '700', backgroundColor: agent.trx_change_pct > 0 ? '#dcfce7' : '#fee2e2', color: agent.trx_change_pct > 0 ? '#166534' : '#dc2626' }}>
                     {agent.trx_change_pct > 0 ? '↑' : '↓'} {Math.abs(agent.trx_change_pct)}%
@@ -484,20 +487,20 @@ export default function Dashboard3500Page() {
             ) : agentDetail.length > 0 ? (
               <div style={{ padding: '20px 24px' }}>
                 <div style={{ marginBottom: '24px' }}>
-                  <div style={{ fontSize: '11px', fontWeight: '700', color: '#9ca3af', letterSpacing: '0.08em', marginBottom: '12px' }}>PERBANDINGAN PERFORMA</div>
+                  <div style={{ fontSize: '11px', fontWeight: '700', color: '#9ca3af', letterSpacing: '0.08em', marginBottom: '12px' }}>PERBANDINGAN PERFORMA (W1 vs W2)</div>
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
                     {[
-                      { label: 'Avg TRX/hari (14 hari)',   value: String(selectedAgent.avg_trx_14),    highlight: true },
-                      { label: 'Avg TRX/hari (bulan ini)', value: String(selectedAgent.avg_trx_month), highlight: true },
-                      { label: 'Hari aktif (14 hari)',      value: `${selectedAgent.active_days_14} hari` },
-                      { label: 'Hari aktif (bulan ini)',    value: `${selectedAgent.active_days_month} hari` },
-                      { label: 'TRX Fee 3500 (14H)',        value: agentDetail.reduce((s, d) => s + Number(d.total_trx), 0).toLocaleString('id') + ' trx', highlight: true },
-                      { label: 'TRX Fee 3500 (Bln)',        value: Number(selectedAgent.total_trx_month).toLocaleString('id') + ' trx', highlight: true },
-                      { label: 'Total TRX bulan ini',       value: Number(selectedAgent.total_trx_month).toLocaleString('id') },
-                      { label: 'Growth',                    value: `${selectedAgent.trx_change_pct > 0 ? '+' : ''}${selectedAgent.trx_change_pct}%` },
+                      { label: 'Avg TRX/hari W1 (1–7)',   value: String(selectedAgent.avg_trx_w1 > 0 ? selectedAgent.avg_trx_w1 : '—'), highlight: true },
+                      { label: 'Avg TRX/hari W2 (8–14)',  value: String(selectedAgent.avg_trx_w2 > 0 ? selectedAgent.avg_trx_w2 : '—'), highlight: true },
+                      { label: 'Hari aktif W1',            value: `${selectedAgent.active_days_w1} hari` },
+                      { label: 'Hari aktif W2',            value: `${selectedAgent.active_days_w2} hari` },
+                      { label: 'TRX Fee 3500 W1',          value: Number(selectedAgent.total_trx_w1).toLocaleString('id') + ' trx', highlight: true },
+                      { label: 'TRX Fee 3500 W2',          value: Number(selectedAgent.total_trx_w2).toLocaleString('id') + ' trx', highlight: true },
+                      { label: 'Hari aktif 14H',           value: `${selectedAgent.active_days_14} hari` },
+                      { label: 'Perubahan W1→W2',          value: `${selectedAgent.trx_change_pct > 0 ? '+' : ''}${selectedAgent.trx_change_pct}%` },
                     ].map(s => (
-                      <div key={s.label} style={{ padding: '10px 12px', backgroundColor: s.highlight ? TREND_CONFIG[selectedAgent.trend].bg : '#f9fafb', borderRadius: '8px', textAlign: 'center', border: s.highlight ? `1px solid ${TREND_CONFIG[selectedAgent.trend].border}` : 'none' }}>
-                        <div style={{ fontSize: '14px', fontWeight: '700', color: s.highlight ? TREND_CONFIG[selectedAgent.trend].color : '#111827' }}>{s.value}</div>
+                      <div key={s.label} style={{ padding: '10px 12px', backgroundColor: (s as any).highlight ? TREND_CONFIG[selectedAgent.trend].bg : '#f9fafb', borderRadius: '8px', textAlign: 'center', border: (s as any).highlight ? `1px solid ${TREND_CONFIG[selectedAgent.trend].border}` : 'none' }}>
+                        <div style={{ fontSize: '14px', fontWeight: '700', color: (s as any).highlight ? TREND_CONFIG[selectedAgent.trend].color : '#111827' }}>{s.value}</div>
                         <div style={{ fontSize: '10px', color: '#9ca3af', marginTop: '2px' }}>{s.label}</div>
                       </div>
                     ))}
@@ -552,16 +555,17 @@ export default function Dashboard3500Page() {
                     {(() => {
                       const maxTrx = Math.max(...agentDetail.map(d => Number(d.total_trx)), 1)
                       const sd = new Date(sinceDate)
-                      const monthStart = progress?.month_start ?? ''
+                      const w2Start = new Date(sd); w2Start.setDate(sd.getDate() + 7)
+                      const w2StartStr = w2Start.toISOString().split('T')[0]
                       return Array.from({ length: 14 }, (_, i) => {
                         const d = new Date(sd); d.setDate(sd.getDate() + i)
                         const dateStr = d.toISOString().split('T')[0]
                         const found = agentDetail.find(a => a.transaction_date === dateStr)
                         const trx = found ? Number(found.total_trx) : 0
-                        const isThisMonth = dateStr >= monthStart
+                        const isW2 = dateStr >= w2StartStr
                         return (
                           <div key={dateStr} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px' }} title={`${dateStr}: ${trx} trx`}>
-                            <div style={{ width: '100%', height: `${Math.max(4, (trx / maxTrx) * 64)}px`, backgroundColor: trx > 0 ? (isThisMonth ? TREND_CONFIG[selectedAgent.trend].color : '#94a3b8') : '#f3f4f6', borderRadius: '3px 3px 0 0', transition: 'height 0.3s' }} />
+                            <div style={{ width: '100%', height: `${Math.max(4, (trx / maxTrx) * 64)}px`, backgroundColor: trx > 0 ? (isW2 ? TREND_CONFIG[selectedAgent.trend].color : '#94a3b8') : '#f3f4f6', borderRadius: '3px 3px 0 0', transition: 'height 0.3s' }} />
                             <div style={{ fontSize: '8px', color: '#d1d5db', writingMode: 'vertical-rl', transform: 'rotate(180deg)' }}>
                               {new Date(dateStr).toLocaleDateString('id-ID', { day: 'numeric', month: 'short' })}
                             </div>
@@ -571,8 +575,8 @@ export default function Dashboard3500Page() {
                     })()}
                   </div>
                   <div style={{ display: 'flex', gap: '12px', marginTop: '8px', fontSize: '10px', color: '#9ca3af' }}>
-                    <span>▪ <span style={{ color: '#94a3b8' }}>Bulan lalu</span></span>
-                    <span>▪ <span style={{ color: TREND_CONFIG[selectedAgent.trend].color }}>Bulan ini</span></span>
+                    <span>▪ <span style={{ color: '#94a3b8' }}>W1 (1–7)</span></span>
+                    <span>▪ <span style={{ color: TREND_CONFIG[selectedAgent.trend].color }}>W2 (8–14)</span></span>
                   </div>
                 </div>
               </div>
