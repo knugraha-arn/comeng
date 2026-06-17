@@ -1,330 +1,660 @@
-import { useState, useEffect, useRef } from 'react'
-import Layout from '@/components/Layout'
-import { supabase } from '@/lib/supabase'
+import { useState, useRef, useCallback } from 'react'
+import { useRouter } from 'next/router'
+import Head from 'next/head'
+import Layout from '../../components/Layout'
+import { createBrowserClient } from '@supabase/ssr'
+import * as XLSX from 'xlsx'
 
-type Wag = { id: string; name: string }
-type UploadRecord = {
-  id: string
-  filename: string
-  file_size_kb: number
-  messages_parsed: number
-  messages_skipped: number
-  status: string
-  uploaded_at: string
-  wags: { name: string }
+interface TransactionRow {
+  transaction_date:      string
+  datetime_tran:         string
+  refnum:                string
+  trntype:               string | null
+  jenis_transaksi:       string | null
+  tipe_penggunaan_kartu: string | null
+  amount:                number
+  sharing_fee:           number
+  qris_amount:           number
+  serial_number:         string
+  merchant_name:         string | null
+  alamat_struk:          string | null
+  brand:                 string | null
+  tipe_mesin:            string | null
+  source_app:            string | null
+  terminal_data_source:  string | null
+  mitra:                 string | null
+  pic:                   string | null
+  from_account:          string | null
+  to_account:            string | null
+  private_data:          string | null
+  upload_session_id?:    string | null
 }
 
-type ProgressStep = 'idle' | 'uploading' | 'parsing' | 'done' | 'error'
+interface UploadSummary {
+  dates_processed: string[]
+  total_rows: number
+  warnings?: string[]
+}
 
-export default function UploadPage() {
-  const [wags, setWags] = useState<Wag[]>([])
-  const [selectedWagId, setSelectedWagId] = useState('')
+interface ComputeResult {
+  from: string
+  to: string
+}
+
+// Kolom wajib — semua lowercase untuk matching case-insensitive
+const REQUIRED_COLUMNS = ['refnum', 'datetime_tran', 'serial_number', 'trntype', 'sharing_fee', 'mitra']
+const CHUNK_SIZE = 500
+
+type Stage = 'idle' | 'reading' | 'parsing' | 'inserting' | 'computing' | 'success' | 'error'
+
+function str(val: unknown): string | null {
+  if (val === null || val === undefined || val === '') return null
+  if (val instanceof Date) return val.toISOString()
+  return String(val).trim() || null
+}
+
+function num(val: unknown): number {
+  const n = Number(val)
+  return isNaN(n) ? 0 : n
+}
+
+function toISODatetime(val: unknown): string | null {
+  if (val === null || val === undefined || val === '') return null
+  if (val instanceof Date && !isNaN(val.getTime())) return val.toISOString()
+  if (typeof val === 'number' && val > 1000) {
+    return new Date(Date.UTC(1899, 11, 30) + val * 86400000).toISOString()
+  }
+  if (typeof val === 'string') {
+    const d = new Date(val.trim())
+    if (!isNaN(d.getTime())) return d.toISOString()
+  }
+  return null
+}
+
+// Normalize row keys ke lowercase
+function normalizeRow(row: Record<string, unknown>): Record<string, unknown> {
+  const normalized: Record<string, unknown> = {}
+  for (const key of Object.keys(row)) {
+    normalized[key.toLowerCase().trim()] = row[key]
+  }
+  return normalized
+}
+
+export default function UploadCenter() {
+  const router = useRouter()
+  const supabase = createBrowserClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+  )
+
   const [file, setFile] = useState<File | null>(null)
-  const [dragging, setDragging] = useState(false)
-  const [step, setStep] = useState<ProgressStep>('idle')
+  const [stage, setStage] = useState<Stage>('idle')
   const [progress, setProgress] = useState(0)
-  const [message, setMessage] = useState('')
-  const [history, setHistory] = useState<UploadRecord[]>([])
-  const fileInputRef = useRef<HTMLInputElement>(null)
+  const [progressLabel, setProgressLabel] = useState('')
+  const [summary, setSummary] = useState<UploadSummary | null>(null)
+  const [errorMsg, setErrorMsg] = useState('')
+  const [isDragging, setIsDragging] = useState(false)
+  const [computeState, setComputeState] = useState<'idle' | 'loading' | 'done' | 'error'>('idle')
+  const [computeResult, setComputeResult] = useState<ComputeResult | null>(null)
+  const [computeError, setComputeError] = useState('')
+  const inputRef = useRef<HTMLInputElement>(null)
 
-  useEffect(() => {
-    fetchWags()
-    fetchHistory()
+  const isBusy = !['idle', 'success', 'error'].includes(stage)
+
+  const onDrop = useCallback((e: React.DragEvent) => {
+    e.preventDefault()
+    setIsDragging(false)
+    const dropped = e.dataTransfer.files[0]
+    if (dropped && (dropped.name.endsWith('.xlsx') || dropped.name.endsWith('.csv'))) {
+      setFile(dropped)
+    } else {
+      setErrorMsg('Hanya file .xlsx atau .csv yang diterima')
+      setStage('error')
+    }
   }, [])
 
-  const fetchWags = async () => {
-    const { data } = await supabase.from('wags').select('id, name').eq('status', 'active').order('name')
-    if (data) setWags(data)
+  async function parseFile(f: File): Promise<{ rows: TransactionRow[], dates: string[], errors: string[] }> {
+    const errors: string[] = []
+    const rows: TransactionRow[] = []
+    const dateSet = new Set<string>()
+
+    const buffer = await f.arrayBuffer()
+    const isCSV = f.name.endsWith('.csv')
+
+    let raw: Record<string, unknown>[]
+
+    if (isCSV) {
+      const text = new TextDecoder().decode(buffer)
+      const wb = XLSX.read(text, { type: 'string', cellDates: false })
+      raw = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { defval: null })
+    } else {
+      const wb = XLSX.read(buffer, { type: 'array', cellDates: false })
+      raw = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { defval: null })
+    }
+
+    if (raw.length === 0) {
+      errors.push('File tidak mengandung data')
+      return { rows, dates: [], errors }
+    }
+
+    // Normalize semua header ke lowercase
+    const normalizedRaw = raw.map(normalizeRow)
+
+    // Validasi kolom wajib (semua lowercase)
+    const headers = Object.keys(normalizedRaw[0])
+    const missing = REQUIRED_COLUMNS.filter(c => !headers.includes(c))
+    if (missing.length > 0) {
+      errors.push(`Kolom wajib tidak ditemukan: ${missing.join(', ')}`)
+      return { rows, dates: [], errors }
+    }
+
+    if (normalizedRaw.length < 10) {
+      errors.push(`File hanya berisi ${normalizedRaw.length} baris — kemungkinan file salah`)
+      return { rows, dates: [], errors }
+    }
+
+    for (const row of normalizedRaw) {
+      const refnum = str(row['refnum'])
+      const serial_number = str(row['serial_number'])
+      if (!refnum || !serial_number) continue
+
+      const datetime_tran = toISODatetime(row['datetime_tran'])
+      if (!datetime_tran) continue
+
+      const transaction_date = datetime_tran.split('T')[0]
+      dateSet.add(transaction_date)
+
+      rows.push({
+        transaction_date,
+        datetime_tran,
+        refnum,
+        trntype:               str(row['trntype']),
+        jenis_transaksi:       str(row['jenistransaksi']) ?? str(row['jenis_transaksi']),
+        tipe_penggunaan_kartu: str(row['tipe_penggunaan_kartu']),
+        amount:                num(row['amount']),
+        sharing_fee:           num(row['sharing_fee']),
+        qris_amount:           0,
+        serial_number:         serial_number.toUpperCase().trim(),
+        merchant_name:         str(row['merchant_name']),
+        alamat_struk:          str(row['alamat_struk']),
+        brand:                 str(row['brand']),
+        tipe_mesin:            str(row['tipe_mesin']),
+        source_app:            str(row['source_app']),
+        terminal_data_source:  str(row['terminal_data_source']),
+        mitra:                 str(row['mitra']),
+        pic:                   str(row['pic'])?.toUpperCase().trim() ?? null,
+        from_account:          str(row['from_account']),
+        to_account:            str(row['to_account']),
+        private_data:          str(row['private_data']),
+      })
+    }
+
+    // Deduplicate
+    const seen = new Set<string>()
+    const uniqueRows = rows.filter(r => {
+      const key = `${r.refnum}__${r.transaction_date}`
+      if (seen.has(key)) return false
+      seen.add(key)
+      return true
+    })
+
+    return { rows: uniqueRows, dates: Array.from(dateSet).sort(), errors }
   }
 
-  const fetchHistory = async () => {
-    const { data } = await supabase
-      .from('uploads')
-      .select('id, filename, file_size_kb, messages_parsed, messages_skipped, status, uploaded_at, wags(name)')
-      .order('uploaded_at', { ascending: false })
-      .limit(10)
-    if (data) setHistory(data as unknown as UploadRecord[])
-  }
+  async function handleUpload() {
+    if (!file) return
 
-  const handleFile = (f: File) => {
-    if (!f.name.endsWith('.txt')) { setMessage('File harus berformat .txt'); return }
-    if (f.size > 10 * 1024 * 1024) { setMessage('Ukuran file maksimal 10MB'); return }
-    setFile(f)
-    setMessage('')
-    setStep('idle')
-    setProgress(0)
-  }
-
-  const handleDrop = (e: React.DragEvent) => {
-    e.preventDefault()
-    setDragging(false)
-    const f = e.dataTransfer.files[0]
-    if (f) handleFile(f)
-  }
-
-  const handleUpload = async () => {
-    if (!file) { setMessage('Pilih file terlebih dahulu'); return }
-    if (!selectedWagId) { setMessage('Pilih WAG tujuan terlebih dahulu'); return }
-
-    setStep('uploading')
-    setProgress(10)
-    setMessage('Mengupload file...')
+    setErrorMsg('')
+    setSummary(null)
 
     try {
-      // Step 1: Upload ke Storage
-      const filename = `${selectedWagId}/${Date.now()}_${file.name}`
-      const { error: storageError } = await supabase.storage
-        .from('wag-exports')
-        .upload(filename, file)
-      if (storageError) throw storageError
-
-      setProgress(35)
-      setMessage('File terupload — menyimpan record...')
-
-      // Step 2: Simpan record
       const { data: { session } } = await supabase.auth.getSession()
-      if (!session) throw new Error('Session tidak ditemukan')
+      if (!session) { router.push('/login'); return }
 
-      const { data: uploadData, error: dbError } = await supabase
-        .from('uploads')
-        .insert({
-          wag_id: selectedWagId,
-          uploaded_by: session.user.id,
-          filename: file.name,
-          file_path: filename,
-          file_size_kb: Math.round(file.size / 1024),
-          status: 'pending',
-        })
-        .select('id')
+      // Role check — hanya admin dan ceo yang bisa upload
+      const { data: userData } = await supabase
+        .from('users')
+        .select('role')
+        .eq('id', session.user.id)
         .single()
-      if (dbError) throw dbError
+      const allowedRoles = ['admin']
+      if (!allowedRoles.includes(userData?.role ?? '')) {
+        setStage('error')
+        setErrorMsg('Akses ditolak — hanya Admin yang dapat mengupload data.')
+        return
+      }
 
-      setProgress(50)
-      setStep('parsing')
-      setMessage('Memproses pesan...')
+      setStage('reading')
+      setProgress(5)
+      setProgressLabel('Membaca file...')
+      await new Promise(r => setTimeout(r, 100))
 
-      // Step 3: Parse
-      const parseRes = await fetch('/api/parse-upload', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ upload_id: uploadData.id }),
-      })
+      setStage('parsing')
+      setProgress(15)
+      setProgressLabel('Mengurai data...')
+      const { rows, dates, errors } = await parseFile(file)
 
-      setProgress(85)
-      setMessage('Menghitung metrik...')
+      if (rows.length === 0) {
+        setStage('error')
+        setErrorMsg(errors[0] ?? 'File tidak menghasilkan data valid')
+        return
+      }
 
-      const parseResult = await parseRes.json()
-      if (!parseRes.ok) throw new Error(parseResult.error || 'Gagal memproses file')
+      setProgress(20)
+      setProgressLabel(`Mempersiapkan ${dates.length} tanggal...`)
+
+      const sessionIds: Record<string, string> = {}
+      for (const date of dates) {
+        const rowCount = rows.filter(r => r.transaction_date === date).length
+        const { data: existing } = await supabase
+          .from('am_upload_sessions')
+          .select('id')
+          .eq('upload_date', date)
+          .single()
+
+        if (existing) {
+          sessionIds[date] = existing.id
+          await supabase.from('am_upload_sessions').update({
+            status: 'processing',
+            row_count: rowCount,
+            uploaded_by: session.user.id,
+          }).eq('id', existing.id)
+        } else {
+          const { data: newSession } = await supabase
+            .from('am_upload_sessions')
+            .insert({
+              upload_date: date,
+              uploaded_by: session.user.id,
+              status: 'processing',
+              row_count: rowCount,
+            })
+            .select('id')
+            .single()
+          if (newSession) sessionIds[date] = newSession.id
+        }
+      }
+
+      setStage('inserting')
+      const totalChunks = Math.ceil(rows.length / CHUNK_SIZE)
+      let chunksInserted = 0
+
+      for (const date of dates) {
+        const dateRows = rows
+          .filter(r => r.transaction_date === date)
+          .map(r => ({ ...r, upload_session_id: sessionIds[date] ?? null }))
+
+        for (let i = 0; i < dateRows.length; i += CHUNK_SIZE) {
+          const batch = dateRows.slice(i, i + CHUNK_SIZE)
+          const { error } = await supabase
+            .from('am_transactions')
+            .upsert(batch, { onConflict: 'refnum,transaction_date' })
+
+          if (error) throw new Error(`Insert gagal: ${error.message}`)
+
+          chunksInserted++
+          const pct = 20 + Math.round((chunksInserted / totalChunks) * 65)
+          setProgress(pct)
+          setProgressLabel(
+            `Menyimpan data... ${Math.min(chunksInserted * CHUNK_SIZE, rows.length).toLocaleString('id')} / ${rows.length.toLocaleString('id')} baris`
+          )
+        }
+      }
+
+      for (const date of dates) {
+        if (sessionIds[date]) {
+          await supabase.from('am_upload_sessions').update({
+            status: 'completed',
+            completed_at: new Date().toISOString(),
+          }).eq('id', sessionIds[date])
+        }
+      }
+
+      setStage('computing')
+      setProgress(90)
+      setProgressLabel('Membersihkan data lama...')
+
+      try { await supabase.rpc('am_purge_old_data') } catch {}
 
       setProgress(100)
-      setStep('done')
-      setMessage(`Selesai — ${parseResult.messages_parsed} pesan baru, ${parseResult.messages_skipped} dilewati.`)
-      setFile(null)
-      setSelectedWagId('')
-      fetchHistory()
+      setStage('success')
+      setSummary({
+        dates_processed: dates,
+        total_rows: rows.length,
+        warnings: errors.length > 0 ? errors : undefined,
+      })
 
-    } catch (err: unknown) {
-      setStep('error')
-      setProgress(0)
-      setMessage(err instanceof Error ? err.message : 'Terjadi kesalahan')
+    } catch (err) {
+      setStage('error')
+      setErrorMsg(err instanceof Error ? err.message : 'Terjadi kesalahan')
     }
   }
 
-  const formatDateTime = (iso: string) => {
-    const d = new Date(iso)
-    const dd = String(d.getDate()).padStart(2, '0')
-    const mm = String(d.getMonth() + 1).padStart(2, '0')
-    const yy = String(d.getFullYear()).slice(2)
-    const hh = String(d.getHours()).padStart(2, '0')
-    const min = String(d.getMinutes()).padStart(2, '0')
-    return `${dd}/${mm}/${yy} ${hh}:${min}`
+  async function handleCompute() {
+    setComputeState('loading')
+    setComputeError('')
+    setComputeResult(null)
+    try {
+      const res = await fetch('/api/compute-metrics', { method: 'POST' })
+      const json = await res.json()
+      if (!res.ok) throw new Error(json.error ?? 'Gagal menghitung metrics')
+      setComputeResult(json.window)
+      setComputeState('done')
+    } catch (err) {
+      setComputeError(err instanceof Error ? err.message : 'Error')
+      setComputeState('error')
+    }
   }
 
-  const stepLabels: Record<ProgressStep, string> = {
-    idle: '',
-    uploading: 'Mengupload file',
-    parsing: 'Memproses pesan',
-    done: 'Selesai',
-    error: 'Error',
+  function resetForm() {
+    setFile(null)
+    setStage('idle')
+    setSummary(null)
+    setErrorMsg('')
+    setProgress(0)
+    setProgressLabel('')
+    setComputeState('idle')
+    setComputeResult(null)
+    setComputeError('')
+    if (inputRef.current) inputRef.current.value = ''
   }
 
-  const msgColor = step === 'done' ? '#27500A' : step === 'error' ? '#B00020' : '#856404'
-  const msgBg = step === 'done' ? '#EAF3DE' : step === 'error' ? '#FDECEA' : '#FFF3CD'
+  const stageLabels: Record<Stage, string> = {
+    idle:      '',
+    reading:   'Membaca file',
+    parsing:   'Mengurai data',
+    inserting: 'Menyimpan ke database',
+    computing: 'Menghitung metrics',
+    success:   'Selesai',
+    error:     'Error',
+  }
 
   return (
-    <Layout title="Upload WAG">
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', alignItems: 'start' }}>
+    <Layout>
+      <Head><title>Upload Data — AMARIS</title></Head>
 
-        {/* Upload form */}
-        <div style={{ background: '#FFFFFF', border: '1px solid #e5e5e5', borderRadius: '10px', padding: '24px' }}>
-          <div style={{ fontSize: '13px', fontWeight: '500', marginBottom: '16px' }}>Upload file export WAG</div>
+      <div style={{ maxWidth: '520px', margin: '0 auto', padding: '32px 24px' }}>
 
-          {/* Pilih WAG */}
-          <div style={{ marginBottom: '16px' }}>
-            <div style={{ fontSize: '11px', color: '#999', marginBottom: '8px' }}>Pilih WAG tujuan</div>
-            {wags.length === 0 ? (
-              <div style={{ fontSize: '12px', color: '#999' }}>Belum ada WAG — tambahkan di Konfigurasi</div>
-            ) : (
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
-                {wags.map(w => (
-                  <button
-                    key={w.id}
-                    onClick={() => setSelectedWagId(w.id)}
-                    style={{
-                      padding: '7px 16px', borderRadius: '999px', border: '1px solid',
-                      borderColor: selectedWagId === w.id ? '#0344D8' : '#e5e5e5',
-                      background: selectedWagId === w.id ? '#0344D8' : '#FFFFFF',
-                      color: selectedWagId === w.id ? '#FFFFFF' : '#555',
-                      fontSize: '12px', cursor: 'pointer',
-                      fontWeight: selectedWagId === w.id ? '500' : '400',
-                    }}
-                  >
-                    {w.name}
+        <div style={{ marginBottom: '28px' }}>
+          <div style={{ fontSize: '11px', fontWeight: '600', color: '#9ca3af', letterSpacing: '0.1em', marginBottom: '4px' }}>
+            UPLOAD DATA
+          </div>
+          <h1 style={{ fontSize: '24px', fontWeight: '800', color: '#111827', margin: 0, letterSpacing: '-0.02em' }}>
+            Upload Data Harian
+          </h1>
+          <p style={{ fontSize: '13px', color: '#6b7280', marginTop: '6px' }}>
+            Upload 1 file per hari. Format: <strong>.xlsx</strong> atau <strong>.csv</strong>
+          </p>
+        </div>
+
+        {stage !== 'success' && (
+          <>
+            {!isBusy && (
+              <div
+                onClick={() => inputRef.current?.click()}
+                onDragOver={e => { e.preventDefault(); setIsDragging(true) }}
+                onDragLeave={() => setIsDragging(false)}
+                onDrop={onDrop}
+                style={{
+                  border: `2px dashed ${isDragging ? '#0344D8' : file ? '#22c55e' : '#d1d5db'}`,
+                  borderRadius: '12px',
+                  padding: '48px 24px',
+                  cursor: 'pointer',
+                  backgroundColor: isDragging ? '#eff6ff' : file ? '#f0fdf4' : '#fafafa',
+                  textAlign: 'center',
+                  marginBottom: '20px',
+                  transition: 'all 0.2s',
+                }}
+              >
+                <input
+                  ref={inputRef}
+                  type="file"
+                  accept=".xlsx,.csv"
+                  style={{ display: 'none' }}
+                  onChange={e => {
+                    const f = e.target.files?.[0]
+                    if (f) { setFile(f); setStage('idle'); setErrorMsg('') }
+                  }}
+                />
+                <div style={{ fontSize: '36px', marginBottom: '12px' }}>
+                  {isDragging ? '📥' : file ? '✅' : '📂'}
+                </div>
+                <div style={{ fontSize: '14px', fontWeight: '600', color: file ? '#166534' : '#374151', marginBottom: '4px' }}>
+                  {isDragging ? 'Lepaskan file di sini' : file ? file.name : 'Drag & drop atau klik untuk pilih file'}
+                </div>
+                {file && (
+                  <div style={{ fontSize: '12px', color: '#6b7280', marginTop: '4px' }}>
+                    {(file.size / 1024 / 1024).toFixed(1)} MB
+                  </div>
+                )}
+                {!file && (
+                  <div style={{ fontSize: '12px', color: '#9ca3af', marginTop: '4px' }}>
+                    .xlsx atau .csv
+                  </div>
+                )}
+              </div>
+            )}
+
+            {isBusy && (
+              <div style={{ marginBottom: '20px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
+                  {(['reading', 'parsing', 'inserting', 'computing'] as Stage[]).map(s => (
+                    <div key={s} style={{
+                      fontSize: '10px', fontWeight: '600',
+                      color: stage === s ? '#0344D8' :
+                             ['success'].includes(stage) ? '#22c55e' :
+                             ['reading', 'parsing', 'inserting', 'computing'].indexOf(s) <
+                             ['reading', 'parsing', 'inserting', 'computing'].indexOf(stage) ? '#22c55e' : '#d1d5db',
+                      letterSpacing: '0.04em',
+                    }}>
+                      {stageLabels[s].toUpperCase()}
+                    </div>
+                  ))}
+                </div>
+
+                <div style={{ height: '8px', backgroundColor: '#f3f4f6', borderRadius: '99px', overflow: 'hidden', marginBottom: '10px' }}>
+                  <div style={{
+                    height: '100%',
+                    width: `${progress}%`,
+                    backgroundColor: '#0344D8',
+                    borderRadius: '99px',
+                    transition: 'width 0.4s ease',
+                  }} />
+                </div>
+
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span style={{ fontSize: '12px', color: '#6b7280' }}>{progressLabel}</span>
+                  <span style={{ fontSize: '12px', fontWeight: '700', color: '#0344D8' }}>{progress}%</span>
+                </div>
+              </div>
+            )}
+
+            {!isBusy && (
+              <button
+                onClick={handleUpload}
+                disabled={!file}
+                style={{
+                  width: '100%', padding: '13px', borderRadius: '8px', border: 'none',
+                  backgroundColor: file ? '#0344D8' : '#e5e7eb',
+                  color: file ? '#fff' : '#9ca3af',
+                  fontSize: '14px', fontWeight: '700',
+                  cursor: file ? 'pointer' : 'not-allowed',
+                  transition: 'all 0.2s',
+                }}
+              >
+                Upload & Proses Data
+              </button>
+            )}
+
+            {stage === 'error' && (
+              <div style={{
+                marginTop: '16px', padding: '14px', borderRadius: '8px',
+                backgroundColor: '#fef2f2', border: '1px solid #fecaca',
+                color: '#dc2626', fontSize: '13px',
+              }}>
+                ❌ {errorMsg}
+                <div style={{ marginTop: '10px' }}>
+                  <button onClick={resetForm} style={{
+                    fontSize: '12px', color: '#dc2626', background: 'none',
+                    border: '1px solid #fecaca', borderRadius: '6px',
+                    padding: '4px 12px', cursor: 'pointer',
+                  }}>
+                    Coba Lagi
                   </button>
+                </div>
+              </div>
+            )}
+          </>
+        )}
+
+        {stage === 'success' && summary && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+            <div style={{
+              padding: '24px', backgroundColor: '#f0fdf4',
+              border: '1px solid #bbf7d0', borderRadius: '12px',
+            }}>
+              <div style={{ fontSize: '16px', fontWeight: '700', color: '#166534', marginBottom: '16px' }}>
+                ✅ Upload berhasil
+              </div>
+
+              <div style={{ marginBottom: '14px' }}>
+                <div style={{ fontSize: '11px', color: '#6b7280', marginBottom: '6px', fontWeight: '600' }}>
+                  TANGGAL DIPROSES
+                </div>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                  {summary.dates_processed.map(d => (
+                    <span key={d} style={{
+                      padding: '4px 12px', backgroundColor: '#dcfce7',
+                      borderRadius: '99px', fontSize: '12px',
+                      color: '#166534', fontWeight: '600',
+                    }}>
+                      {new Date(d).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })}
+                    </span>
+                  ))}
+                </div>
+              </div>
+
+              <div style={{
+                padding: '12px 16px', backgroundColor: '#fff',
+                border: '1px solid #bbf7d0', borderRadius: '8px',
+                display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+              }}>
+                <span style={{ fontSize: '13px', color: '#374151' }}>Total transaksi</span>
+                <span style={{ fontSize: '20px', fontWeight: '800', color: '#111827' }}>
+                  {summary.total_rows.toLocaleString('id')}
+                </span>
+              </div>
+            </div>
+
+            {summary.warnings && summary.warnings.length > 0 && (
+              <div style={{
+                padding: '14px', backgroundColor: '#fffbeb',
+                border: '1px solid #fde68a', borderRadius: '8px',
+              }}>
+                <div style={{ fontSize: '12px', color: '#854d0e', fontWeight: '600', marginBottom: '8px' }}>⚠️ Peringatan</div>
+                {summary.warnings.slice(0, 5).map((w, i) => (
+                  <div key={i} style={{ fontSize: '12px', color: '#854d0e', marginBottom: '4px' }}>• {w}</div>
                 ))}
               </div>
             )}
-          </div>
 
-          {/* Drop zone */}
-          <div
-            onDragOver={(e) => { e.preventDefault(); setDragging(true) }}
-            onDragLeave={() => setDragging(false)}
-            onDrop={handleDrop}
-            onClick={() => fileInputRef.current?.click()}
-            style={{
-              border: '1.5px dashed',
-              borderColor: dragging ? '#0344D8' : file ? '#0344D8' : '#e5e5e5',
-              borderRadius: '10px', padding: '28px', textAlign: 'center', cursor: 'pointer',
-              background: dragging ? '#EEF4FF' : file ? '#F0F5FF' : '#F8F9FB',
-              marginBottom: '16px', transition: 'all 0.15s',
-            }}
-          >
-            <input ref={fileInputRef} type="file" accept=".txt"
-              onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFile(f) }}
-              style={{ display: 'none' }} />
-            <div style={{ fontSize: '24px', marginBottom: '8px' }}>
-              {dragging ? '📂' : file ? '📄' : '📁'}
-            </div>
-            {file ? (
-              <>
-                <div style={{ fontSize: '13px', fontWeight: '500', color: '#0344D8' }}>{file.name}</div>
-                <div style={{ fontSize: '11px', color: '#999', marginTop: '4px' }}>
-                  {Math.round(file.size / 1024)} KB · Klik untuk ganti
-                </div>
-              </>
-            ) : (
-              <>
-                <div style={{ fontSize: '13px', fontWeight: '500', marginBottom: '4px' }}>
-                  {dragging ? 'Lepaskan di sini' : 'Drag & drop atau klik untuk pilih'}
-                </div>
-                <div style={{ fontSize: '11px', color: '#999' }}>Export WhatsApp (.txt) · Maks 10MB</div>
-              </>
-            )}
-          </div>
-
-          {/* Progress bar */}
-          {step !== 'idle' && (
-            <div style={{ marginBottom: '14px' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px', color: '#999', marginBottom: '6px' }}>
-                <span>{stepLabels[step]}</span>
-                <span>{progress}%</span>
-              </div>
-              <div style={{ height: '6px', background: '#F8F9FB', borderRadius: '3px', overflow: 'hidden' }}>
-                <div style={{
-                  height: '100%', borderRadius: '3px',
-                  width: `${progress}%`,
-                  background: step === 'done' ? '#27500A' : step === 'error' ? '#B00020' : '#0344D8',
-                  transition: 'width 0.4s ease',
-                }} />
-              </div>
-            </div>
-          )}
-
-          {/* Message */}
-          {message && (
+            {/* Compute Metrics Section */}
             <div style={{
-              padding: '10px 14px', borderRadius: '8px', fontSize: '12px',
-              marginBottom: '16px', background: msgBg, color: msgColor,
+              padding: '16px',
+              backgroundColor: computeState === 'done' ? '#f0fdf4' : '#f8fafc',
+              border: `1px solid ${computeState === 'done' ? '#bbf7d0' : computeState === 'error' ? '#fecaca' : '#e2e8f0'}`,
+              borderRadius: '10px',
             }}>
-              {message}
-            </div>
-          )}
-
-          {/* Button */}
-          <button
-            onClick={handleUpload}
-            disabled={step === 'uploading' || step === 'parsing'}
-            style={{
-              width: '100%', padding: '12px',
-              background: (step === 'uploading' || step === 'parsing') ? '#999' : '#0344D8',
-              color: '#FFFFFF', border: 'none', borderRadius: '8px',
-              fontSize: '13px', fontWeight: '500',
-              cursor: (step === 'uploading' || step === 'parsing') ? 'not-allowed' : 'pointer',
-            }}
-          >
-            {step === 'uploading' ? 'Mengupload...' : step === 'parsing' ? 'Memproses...' : 'Upload & Proses File'}
-          </button>
-        </div>
-
-        {/* Right column */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-
-          {/* Panduan */}
-          <div style={{ background: '#F8F9FB', border: '1px solid #e5e5e5', borderRadius: '10px', padding: '16px' }}>
-            <div style={{ fontSize: '12px', fontWeight: '500', marginBottom: '8px' }}>Cara export chat WAG</div>
-            {[
-              'Buka WAG → ketuk ⋮ → More → Export Chat',
-              'Pilih Without Media',
-              'Download file .txt',
-              'Drag & drop atau klik upload di sebelah kiri',
-            ].map((s, i) => (
-              <div key={i} style={{ display: 'flex', gap: '10px', marginBottom: '6px', fontSize: '12px', color: '#555' }}>
-                <span style={{ color: '#0344D8', fontWeight: '600', minWidth: '16px' }}>{i + 1}.</span>
-                <span>{s}</span>
+              <div style={{ fontSize: '12px', fontWeight: '700', color: '#374151', marginBottom: '10px', letterSpacing: '0.04em' }}>
+                HITUNG ULANG METRICS
               </div>
-            ))}
-          </div>
 
-          {/* Riwayat */}
-          <div style={{ background: '#FFFFFF', border: '1px solid #e5e5e5', borderRadius: '10px', overflow: 'hidden' }}>
-            <div style={{ padding: '14px 16px', borderBottom: '1px solid #e5e5e5', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <span style={{ fontSize: '13px', fontWeight: '500' }}>Riwayat upload</span>
-              <button onClick={fetchHistory} style={{ fontSize: '11px', color: '#0344D8', background: 'none', border: 'none', cursor: 'pointer' }}>Refresh</button>
-            </div>
-            {history.length === 0 ? (
-              <div style={{ padding: '20px', textAlign: 'center', fontSize: '12px', color: '#999' }}>Belum ada upload</div>
-            ) : (
-              history.map(h => (
-                <div key={h.id} style={{ padding: '10px 16px', borderBottom: '1px solid #f5f5f5', fontSize: '12px' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <div style={{ fontWeight: '500', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '160px' }}>
-                      {h.filename}
-                    </div>
-                    <span style={{
-                      fontSize: '10px', padding: '2px 8px', borderRadius: '999px',
-                      background: h.status === 'done' ? '#EAF3DE' : h.status === 'error' ? '#FDECEA' : h.status === 'processing' ? '#E8F0FE' : '#FFF3CD',
-                      color: h.status === 'done' ? '#27500A' : h.status === 'error' ? '#B00020' : h.status === 'processing' ? '#0344D8' : '#856404',
-                    }}>
-                      {h.status === 'done' ? 'Selesai' : h.status === 'error' ? 'Error' : h.status === 'processing' ? 'Diproses' : 'Pending'}
-                    </span>
+              {computeState === 'idle' && (
+                <>
+                  <div style={{ fontSize: '12px', color: '#6b7280', marginBottom: '12px' }}>
+                    Perbarui bucket dan statistik agen berdasarkan data yang baru diupload.
                   </div>
-                  <div style={{ color: '#999', marginTop: '3px' }}>
-                    {h.wags?.name} · {h.file_size_kb} KB
-                  </div>
-                  <div style={{ color: '#bbb', marginTop: '2px', fontSize: '11px' }}>
-                    {formatDateTime(h.uploaded_at)}
-                  </div>
-                  {h.messages_parsed > 0 && (
-                    <div style={{ color: '#27500A', marginTop: '2px' }}>
-                      {h.messages_parsed} pesan baru · {h.messages_skipped} dilewati
-                    </div>
-                  )}
+                  <button
+                    onClick={handleCompute}
+                    style={{
+                      width: '100%', padding: '11px', borderRadius: '8px', border: 'none',
+                      backgroundColor: '#0344D8', color: '#fff',
+                      fontSize: '13px', fontWeight: '700', cursor: 'pointer',
+                    }}
+                  >
+                    Hitung Ulang Metrics Agen
+                  </button>
+                </>
+              )}
+
+              {computeState === 'loading' && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '4px 0' }}>
+                  <div style={{
+                    width: '16px', height: '16px', borderRadius: '50%',
+                    border: '2px solid #e5e7eb', borderTopColor: '#0344D8',
+                    animation: 'spin 0.8s linear infinite',
+                    flexShrink: 0,
+                  }} />
+                  <span style={{ fontSize: '13px', color: '#374151' }}>Menghitung metrics... (maks 60 detik)</span>
+                  <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
                 </div>
-              ))
-            )}
+              )}
+
+              {computeState === 'done' && computeResult && (
+                <div>
+                  <div style={{ fontSize: '13px', color: '#166534', fontWeight: '600', marginBottom: '6px' }}>
+                    ✅ Metrics berhasil diperbarui
+                  </div>
+                  <div style={{
+                    fontSize: '12px', color: '#374151',
+                    backgroundColor: '#dcfce7', borderRadius: '6px',
+                    padding: '8px 12px', display: 'inline-block',
+                  }}>
+                    📅 Periode data:{' '}
+                    <strong>
+                      {new Date(computeResult.from).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })}
+                      {' – '}
+                      {new Date(computeResult.to).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })}
+                    </strong>
+                    {' '}(14 hari)
+                  </div>
+                </div>
+              )}
+
+              {computeState === 'error' && (
+                <div>
+                  <div style={{ fontSize: '12px', color: '#dc2626', marginBottom: '8px' }}>❌ {computeError}</div>
+                  <button
+                    onClick={handleCompute}
+                    style={{
+                      fontSize: '12px', color: '#dc2626', background: 'none',
+                      border: '1px solid #fecaca', borderRadius: '6px',
+                      padding: '4px 12px', cursor: 'pointer',
+                    }}
+                  >
+                    Coba Lagi
+                  </button>
+                </div>
+              )}
+            </div>
+
+            <div style={{ display: 'flex', gap: '10px' }}>
+              <button onClick={() => router.push('/analytics')} style={{
+                flex: 1, padding: '12px', borderRadius: '8px', border: 'none',
+                backgroundColor: '#0344D8', color: '#fff',
+                fontSize: '13px', fontWeight: '700', cursor: 'pointer',
+              }}>
+                Lihat Morning Brief
+              </button>
+              <button onClick={resetForm} style={{
+                flex: 1, padding: '12px', borderRadius: '8px',
+                border: '1px solid #e5e7eb', backgroundColor: '#fff',
+                color: '#374151', fontSize: '13px', cursor: 'pointer',
+              }}>
+                Upload Lagi
+              </button>
+            </div>
           </div>
-        </div>
+        )}
       </div>
     </Layout>
   )
