@@ -12,7 +12,8 @@ interface AgentLiquidityRow {
   active_days_14: number
   total_trx_14: number
   avg_daily_amount_14d: number
-  avg_daily_amount_mtd: number
+  avg_daily_amount_w1: number
+  avg_daily_amount_w2: number
   liquidity_ratio: number
   liquidity_status: 'kuat' | 'menurun' | 'lemah' | 'no_data'
 }
@@ -22,7 +23,8 @@ interface AgentLiquidityDetail {
   daily_amount: number
   daily_trx: number
   avg_daily_amount_14d: number
-  avg_daily_amount_mtd: number
+  avg_daily_amount_w1: number
+  avg_daily_amount_w2: number
   liquidity_ratio: number
   liquidity_status: 'kuat' | 'menurun' | 'lemah' | 'no_data'
 }
@@ -47,10 +49,10 @@ interface AgentDayDetail {
 }
 
 const LIQUIDITY_CONFIG = {
-  kuat:    { label: 'Kuat',    color: '#166534', bg: '#dcfce7', border: '#bbf7d0', sublabel: 'Float kemungkinan aman',    tooltip: 'Avg amount/hari bulan ini ≥ 80% dari avg 14 hari. Agen kemungkinan masih punya float yang cukup.' },
-  menurun: { label: 'Menurun', color: '#92400e', bg: '#fef9c3', border: '#fde68a', sublabel: 'Perlu perhatian',           tooltip: 'Avg amount/hari bulan ini 50–80% dari avg 14 hari. Ada penurunan signifikan, perlu dipantau.' },
-  lemah:   { label: 'Lemah',   color: '#dc2626', bg: '#fee2e2', border: '#fecaca', sublabel: 'Kemungkinan float menipis', tooltip: 'Avg amount/hari bulan ini < 50% dari avg 14 hari. Kemungkinan float agen sudah sangat menipis.' },
-  no_data: { label: '—',       color: '#9ca3af', bg: '#f9fafb', border: '#e5e7eb', sublabel: 'Tidak ada data MTD',       tooltip: 'Tidak ada transaksi di bulan berjalan.' },
+  kuat:    { label: 'Kuat',    color: '#166534', bg: '#dcfce7', border: '#bbf7d0', sublabel: 'Float kemungkinan aman',    tooltip: 'Avg amount/hari W2 ≥ 80% dari W1. Agen kemungkinan masih punya float yang cukup.' },
+  menurun: { label: 'Menurun', color: '#92400e', bg: '#fef9c3', border: '#fde68a', sublabel: 'Perlu perhatian',           tooltip: 'Avg amount/hari W2 50–80% dari W1. Ada penurunan signifikan, perlu dipantau.' },
+  lemah:   { label: 'Lemah',   color: '#dc2626', bg: '#fee2e2', border: '#fecaca', sublabel: 'Kemungkinan float menipis', tooltip: 'Avg amount/hari W2 < 50% dari W1. Kemungkinan float agen sudah sangat menipis.' },
+  no_data: { label: '—',       color: '#9ca3af', bg: '#f9fafb', border: '#e5e7eb', sublabel: 'Tidak ada data W1',        tooltip: 'Tidak ada transaksi di W1 (7 hari pertama).' },
 }
 
 const PAGE_SIZE = 25
@@ -296,8 +298,8 @@ export default function AgentLiquidityPage() {
           <div style={{ border: '1px solid #e5e7eb', borderRadius: '10px', overflow: 'hidden' }}>
             <div style={{ display: 'grid', gridTemplateColumns: '90px 1fr 150px 150px 130px 130px 70px', padding: '10px 16px', backgroundColor: '#f9fafb', borderBottom: '1px solid #e5e7eb', fontSize: '11px', fontWeight: '700', color: '#9ca3af', letterSpacing: '0.05em' }}>
               <div>STATUS</div><div>AGEN</div><div>MITRA</div><div>PIC</div>
-              <div style={{ textAlign: 'right' }}>AVG AMOUNT/HARI (14H)</div>
-              <div style={{ textAlign: 'right' }}>AVG AMOUNT/HARI (MTD)</div>
+              <div style={{ textAlign: 'right' }}>AVG AMOUNT/HARI (W1)</div>
+              <div style={{ textAlign: 'right' }}>AVG AMOUNT/HARI (W2)</div>
               <div style={{ textAlign: 'right' }}>RATIO</div>
             </div>
             {agents.map((agent, i) => {
@@ -314,8 +316,8 @@ export default function AgentLiquidityPage() {
                   </div>
                   <div style={{ fontSize: '12px', color: '#374151', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{agent.mitra ?? '—'}</div>
                   <div style={{ fontSize: '12px', color: '#374151', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{agent.pic ?? '—'}</div>
-                  <div style={{ fontSize: '12px', fontWeight: '600', color: '#374151', textAlign: 'right' }}>{formatAmount(agent.avg_daily_amount_14d)}</div>
-                  <div style={{ fontSize: '12px', color: '#374151', textAlign: 'right' }}>{formatAmount(agent.avg_daily_amount_mtd)}</div>
+                  <div style={{ fontSize: '12px', fontWeight: '600', color: '#374151', textAlign: 'right' }}>{formatAmount(agent.avg_daily_amount_w1)}</div>
+                  <div style={{ fontSize: '12px', color: '#374151', textAlign: 'right' }}>{formatAmount(agent.avg_daily_amount_w2)}</div>
                   <div style={{ textAlign: 'right', fontSize: '12px', fontWeight: '700', color: cfg.color }}>{agent.liquidity_ratio?.toFixed(2)}x</div>
                 </div>
               )
@@ -381,8 +383,8 @@ export default function AgentLiquidityPage() {
                   <div style={{ fontSize: '11px', fontWeight: '700', color: '#9ca3af', letterSpacing: '0.08em', marginBottom: '12px' }}>LIKUIDITAS</div>
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
                     <div style={{ padding: '14px 16px', backgroundColor: '#f9fafb', borderRadius: '8px', textAlign: 'center' }}>
-                      <div style={{ fontSize: '16px', fontWeight: '800', color: '#111827' }}>{formatAmount(selectedAgent.avg_daily_amount_14d)}</div>
-                      <div style={{ fontSize: '10px', color: '#9ca3af', marginTop: '4px' }}>Avg Amount/Hari (14H)</div>
+                      <div style={{ fontSize: '16px', fontWeight: '800', color: '#111827' }}>{formatAmount(selectedAgent.avg_daily_amount_w1)}</div>
+                      <div style={{ fontSize: '10px', color: '#9ca3af', marginTop: '4px' }}>Avg Amount/Hari W1</div>
                     </div>
                     {(() => {
                       const cfg = LIQUIDITY_CONFIG[selectedAgent.liquidity_status] ?? LIQUIDITY_CONFIG.no_data
@@ -396,8 +398,8 @@ export default function AgentLiquidityPage() {
                     })()}
                   </div>
                   <div style={{ marginTop: '10px', padding: '10px 16px', backgroundColor: '#f9fafb', borderRadius: '8px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <span style={{ fontSize: '12px', color: '#6b7280' }}>Avg Amount/Hari (MTD)</span>
-                    <span style={{ fontSize: '13px', fontWeight: '700', color: '#111827' }}>{formatAmount(selectedAgent.avg_daily_amount_mtd)}</span>
+                    <span style={{ fontSize: '12px', color: '#6b7280' }}>Avg Amount/Hari W2</span>
+                    <span style={{ fontSize: '13px', fontWeight: '700', color: '#111827' }}>{formatAmount(selectedAgent.avg_daily_amount_w2)}</span>
                   </div>
                 </div>
 
