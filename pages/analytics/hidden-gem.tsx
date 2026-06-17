@@ -11,14 +11,18 @@ interface ProductivityAgent {
   pic: string | null
   active_days_14: number
   avg_trx_14: number
-  active_days_month: number
-  total_trx_month: number
-  avg_trx_month: number
+  active_days_w1: number
+  total_trx_w1: number
+  avg_trx_w1: number
+  active_days_w2: number
+  total_trx_w2: number
+  avg_trx_w2: number
   trx_change_pct: number
   trend: 'growing' | 'declining' | 'consistent'
   bucket: string
   avg_daily_amount_14d: number
-  avg_daily_amount_mtd: number
+  avg_daily_amount_w1: number
+  avg_daily_amount_w2: number
   liquidity_ratio: number
   liquidity_status: 'kuat' | 'menurun' | 'lemah' | 'no_data'
 }
@@ -63,7 +67,8 @@ interface AgentLiquidityDetail {
   daily_amount: number
   daily_trx: number
   avg_daily_amount_14d: number
-  avg_daily_amount_mtd: number
+  avg_daily_amount_w1: number
+  avg_daily_amount_w2: number
   liquidity_ratio: number
   liquidity_status: 'kuat' | 'menurun' | 'lemah' | 'no_data'
 }
@@ -78,9 +83,9 @@ interface MonthlyProgress {
 }
 
 const TREND_CONFIG = {
-  growing:    { label: 'Growing',   icon: '💎', color: '#166534', bg: '#dcfce7', border: '#bbf7d0', tooltip: 'Avg TRX/hari bulan ini > 120% vs 14 hari terakhir. Agen sedang tumbuh.' },
-  declining:  { label: 'Declining', icon: '⚠️', color: '#92400e', bg: '#fef9c3', border: '#fde68a', tooltip: 'Avg TRX/hari bulan ini < 80% vs 14 hari terakhir. Agen sedang menurun, perlu perhatian.' },
-  consistent: { label: 'Konsisten', icon: '✅', color: '#1e40af', bg: '#eff6ff', border: '#bfdbfe', tooltip: 'Avg TRX/hari bulan ini antara 80–120% vs 14 hari terakhir. Agen stabil.' },
+  growing:    { label: 'Growing',   icon: '💎', color: '#166534', bg: '#dcfce7', border: '#bbf7d0', tooltip: 'Avg TRX/hari W2 (8–14) > 120% vs W1 (1–7). Agen sedang tumbuh.' },
+  declining:  { label: 'Declining', icon: '⚠️', color: '#92400e', bg: '#fef9c3', border: '#fde68a', tooltip: 'Avg TRX/hari W2 (8–14) < 80% vs W1 (1–7). Agen sedang menurun, perlu perhatian.' },
+  consistent: { label: 'Konsisten', icon: '✅', color: '#1e40af', bg: '#eff6ff', border: '#bfdbfe', tooltip: 'Avg TRX/hari W2 (8–14) antara 80–120% vs W1 (1–7). Agen stabil.' },
 }
 
 const BUCKET_CONFIG: Record<string, { label: string, color: string, bg: string, border: string }> = {
@@ -238,7 +243,7 @@ export default function ProductivityPage() {
   }
 
   async function loadTrendCounts(mitra: string, pic: string) {
-    const base = { p_min_active_days_month: 2, p_min_trx_month: 10, p_min_avg_trx_14: 3, p_mitra: mitra, p_pic: pic }
+    const base = { p_min_active_days_w2: 2, p_min_trx_w2: 10, p_min_avg_trx_14: 3, p_mitra: mitra, p_pic: pic }
     const [g, d, c] = await Promise.all([
       supabase.rpc('get_hidden_gem_agents_count', { ...base, p_trend: 'growing' }),
       supabase.rpc('get_hidden_gem_agents_count', { ...base, p_trend: 'declining' }),
@@ -250,7 +255,7 @@ export default function ProductivityPage() {
   async function loadAgents(newPage: number, trend: string, mitra: string, pic: string) {
     setLoading(true)
     try {
-      const params = { p_min_active_days_month: 2, p_min_trx_month: 10, p_min_avg_trx_14: 3, p_trend: trend, p_mitra: mitra, p_pic: pic }
+      const params = { p_min_active_days_w2: 2, p_min_trx_w2: 10, p_min_avg_trx_14: 3, p_trend: trend, p_mitra: mitra, p_pic: pic }
       const [dataRes, countRes] = await Promise.all([
         supabase.rpc('get_hidden_gem_agents', { ...params, p_limit: PAGE_SIZE, p_offset: newPage * PAGE_SIZE }),
         supabase.rpc('get_hidden_gem_agents_count', params),
@@ -514,8 +519,8 @@ export default function ProductivityPage() {
                 {currentTotal.toLocaleString('id')} agen
                 {activeTab !== 'returning' && (
                   <span
-                    onMouseEnter={e => setTooltip({ text: 'Hanya agen dengan aktif ≥2 hari bulan ini, total TRX ≥10, dan avg TRX/hari ≥3 dalam 14 hari terakhir yang ditampilkan.', x: e.clientX, y: e.clientY })}
-                    onMouseMove={e => setTooltip({ text: 'Hanya agen dengan aktif ≥2 hari bulan ini, total TRX ≥10, dan avg TRX/hari ≥3 dalam 14 hari terakhir yang ditampilkan.', x: e.clientX, y: e.clientY })}
+                    onMouseEnter={e => setTooltip({ text: 'Hanya agen dengan aktif ≥2 hari di W2, total TRX ≥10 di W2, dan avg TRX/hari ≥3 dalam 14 hari terakhir yang ditampilkan.', x: e.clientX, y: e.clientY })}
+                    onMouseMove={e => setTooltip({ text: 'Hanya agen dengan aktif ≥2 hari di W2, total TRX ≥10 di W2, dan avg TRX/hari ≥3 dalam 14 hari terakhir yang ditampilkan.', x: e.clientX, y: e.clientY })}
                     onMouseLeave={() => setTooltip(null)}
                     style={{ fontSize: '11px', color: '#9ca3af', cursor: 'default', opacity: 0.7 }}>ⓘ</span>
                 )}
@@ -618,7 +623,7 @@ export default function ProductivityPage() {
                   <div style={{ fontSize: '12px', color: '#374151', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{agent.pic ?? '—'}</div>
                   <div style={{ fontSize: '13px', fontWeight: '700', textAlign: 'center', color: agent.active_days_14 >= 8 ? '#166534' : agent.active_days_14 >= 5 ? '#ca8a04' : '#dc2626' }}>{agent.active_days_14}</div>
                   <div style={{ fontSize: '12px', color: '#374151', textAlign: 'right' }}>{Number(agent.avg_trx_14).toLocaleString('id')}</div>
-                  <div style={{ fontSize: '12px', color: '#374151', textAlign: 'right' }}>{Number(agent.avg_trx_month).toLocaleString('id')}</div>
+                  <div style={{ fontSize: '12px', color: '#374151', textAlign: 'right' }}>{Number(agent.avg_trx_w2).toLocaleString('id')}</div>
                   <div style={{ textAlign: 'right' }}>
                     <span style={{ padding: '2px 8px', borderRadius: '99px', fontSize: '11px', fontWeight: '700', backgroundColor: agent.trx_change_pct > 0 ? '#dcfce7' : '#fee2e2', color: agent.trx_change_pct > 0 ? '#166534' : '#dc2626' }}>
                       {agent.trx_change_pct > 0 ? '↑' : '↓'} {Math.abs(agent.trx_change_pct)}%
@@ -678,18 +683,18 @@ export default function ProductivityPage() {
                   )
                 })()}
                 <div style={{ marginBottom: '24px' }}>
-                  <div style={{ fontSize: '11px', fontWeight: '700', color: '#9ca3af', letterSpacing: '0.08em', marginBottom: '12px' }}>PERBANDINGAN PERFORMA</div>
+                  <div style={{ fontSize: '11px', fontWeight: '700', color: '#9ca3af', letterSpacing: '0.08em', marginBottom: '12px' }}>PERBANDINGAN PERFORMA (W1 vs W2)</div>
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
                     {[
-                      { label: 'Avg TRX/hari (14 hari)',   value: String(selectedAgent.avg_trx_14) },
-                      { label: 'Avg TRX/hari (bulan ini)', value: String(selectedAgent.avg_trx_month), highlight: true },
-                      { label: 'Hari aktif (14 hari)',      value: `${selectedAgent.active_days_14} hari` },
-                      { label: 'Hari aktif (bulan ini)',    value: `${selectedAgent.active_days_month} hari` },
-                      { label: 'Total TRX bulan ini',       value: Number(selectedAgent.total_trx_month).toLocaleString('id') },
-                      { label: 'Growth', value: `${selectedAgent.trx_change_pct > 0 ? '+' : ''}${selectedAgent.trx_change_pct}%`, highlight: true },
+                      { label: 'Avg TRX/hari W1 (1–7)',   value: String(selectedAgent.avg_trx_w1 > 0 ? selectedAgent.avg_trx_w1 : '—') },
+                      { label: 'Avg TRX/hari W2 (8–14)', value: String(selectedAgent.avg_trx_w2 > 0 ? selectedAgent.avg_trx_w2 : '—'), highlight: true },
+                      { label: 'Hari aktif W1',            value: `${selectedAgent.active_days_w1} hari` },
+                      { label: 'Hari aktif W2',            value: `${selectedAgent.active_days_w2} hari` },
+                      { label: 'Total TRX W2',             value: Number(selectedAgent.total_trx_w2).toLocaleString('id') },
+                      { label: 'Perubahan W1→W2',          value: `${selectedAgent.trx_change_pct > 0 ? '+' : ''}${selectedAgent.trx_change_pct}%`, highlight: true },
                     ].map(s => (
-                      <div key={s.label} style={{ padding: '10px 12px', backgroundColor: s.highlight ? TREND_CONFIG[selectedAgent.trend].bg : '#f9fafb', borderRadius: '8px', textAlign: 'center', border: s.highlight ? `1px solid ${TREND_CONFIG[selectedAgent.trend].border}` : 'none' }}>
-                        <div style={{ fontSize: '14px', fontWeight: '700', color: s.highlight ? TREND_CONFIG[selectedAgent.trend].color : '#111827' }}>{s.value}</div>
+                      <div key={s.label} style={{ padding: '10px 12px', backgroundColor: (s as any).highlight ? TREND_CONFIG[selectedAgent.trend].bg : '#f9fafb', borderRadius: '8px', textAlign: 'center', border: (s as any).highlight ? `1px solid ${TREND_CONFIG[selectedAgent.trend].border}` : 'none' }}>
+                        <div style={{ fontSize: '14px', fontWeight: '700', color: (s as any).highlight ? TREND_CONFIG[selectedAgent.trend].color : '#111827' }}>{s.value}</div>
                         <div style={{ fontSize: '10px', color: '#9ca3af', marginTop: '2px' }}>{s.label}</div>
                       </div>
                     ))}
@@ -718,8 +723,8 @@ export default function ProductivityPage() {
                     <div style={{ fontSize: '11px', fontWeight: '700', color: '#9ca3af', letterSpacing: '0.08em', marginBottom: '12px' }}>LIKUIDITAS AGEN</div>
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
                       <div style={{ padding: '10px 12px', backgroundColor: '#f9fafb', borderRadius: '8px', textAlign: 'center' }}>
-                        <div style={{ fontSize: '14px', fontWeight: '700', color: '#111827' }}>{formatAmount(liquiditySummary.avg_daily_amount_14d)}</div>
-                        <div style={{ fontSize: '10px', color: '#9ca3af', marginTop: '2px' }}>Avg Amount/Hari (14H)</div>
+                        <div style={{ fontSize: '14px', fontWeight: '700', color: '#111827' }}>{formatAmount(liquiditySummary.avg_daily_amount_w1)}</div>
+                        <div style={{ fontSize: '10px', color: '#9ca3af', marginTop: '2px' }}>Avg Amount/Hari W1</div>
                       </div>
                       {(() => {
                         const cfg = LIQUIDITY_CONFIG[liquiditySummary.liquidity_status] ?? LIQUIDITY_CONFIG.no_data
@@ -740,16 +745,17 @@ export default function ProductivityPage() {
                     {(() => {
                       const maxTrx = Math.max(...agentDetail.map(d => Number(d.total_trx)), 1)
                       const sd = new Date(sinceDate)
-                      const monthStart = progress?.month_start ?? ''
+                      const w2Start = new Date(sd); w2Start.setDate(sd.getDate() + 7)
+                      const w2StartStr = w2Start.toISOString().split('T')[0]
                       return Array.from({ length: 14 }, (_, i) => {
                         const d = new Date(sd); d.setDate(sd.getDate() + i)
                         const dateStr = d.toISOString().split('T')[0]
                         const found = agentDetail.find(a => a.transaction_date === dateStr)
                         const trx = found ? Number(found.total_trx) : 0
-                        const isThisMonth = dateStr >= monthStart
+                        const isW2 = dateStr >= w2StartStr
                         return (
                           <div key={dateStr} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px' }} title={`${dateStr}: ${trx} trx`}>
-                            <div style={{ width: '100%', height: `${Math.max(4, (trx / maxTrx) * 64)}px`, backgroundColor: trx > 0 ? (isThisMonth ? TREND_CONFIG[selectedAgent.trend].color : '#94a3b8') : '#f3f4f6', borderRadius: '3px 3px 0 0', transition: 'height 0.3s' }} />
+                            <div style={{ width: '100%', height: `${Math.max(4, (trx / maxTrx) * 64)}px`, backgroundColor: trx > 0 ? (isW2 ? TREND_CONFIG[selectedAgent.trend].color : '#94a3b8') : '#f3f4f6', borderRadius: '3px 3px 0 0', transition: 'height 0.3s' }} />
                             <div style={{ fontSize: '8px', color: '#d1d5db', writingMode: 'vertical-rl', transform: 'rotate(180deg)' }}>
                               {new Date(dateStr).toLocaleDateString('id-ID', { day: 'numeric', month: 'short' })}
                             </div>
@@ -759,8 +765,8 @@ export default function ProductivityPage() {
                     })()}
                   </div>
                   <div style={{ display: 'flex', gap: '12px', marginTop: '8px', fontSize: '10px', color: '#9ca3af' }}>
-                    <span>▪ <span style={{ color: '#94a3b8' }}>Bulan lalu</span></span>
-                    <span>▪ <span style={{ color: TREND_CONFIG[selectedAgent.trend].color }}>Bulan ini</span></span>
+                    <span>▪ <span style={{ color: '#94a3b8' }}>W1 (1–7)</span></span>
+                    <span>▪ <span style={{ color: TREND_CONFIG[selectedAgent.trend].color }}>W2 (8–14)</span></span>
                   </div>
                 </div>
                 {liquidityDetail.length > 0 && (
@@ -769,7 +775,7 @@ export default function ProductivityPage() {
                     <div style={{ display: 'flex', alignItems: 'flex-end', gap: '3px', height: '80px' }}>
                       {(() => {
                         const maxAmount = Math.max(...liquidityDetail.map(d => Number(d.daily_amount)), 1)
-                        const avgAmount = liquiditySummary?.avg_daily_amount_14d ?? 0
+                        const avgAmount = liquiditySummary?.avg_daily_amount_w2 ?? 0
                         const sd = new Date(sinceDate)
                         return Array.from({ length: 14 }, (_, i) => {
                           const d = new Date(sd); d.setDate(sd.getDate() + i)
@@ -793,7 +799,7 @@ export default function ProductivityPage() {
                       <span>▪ <span style={{ color: '#eab308' }}>50–80% avg</span></span>
                       <span>▪ <span style={{ color: '#ef4444' }}>&lt; 50% avg</span></span>
                     </div>
-                    <div style={{ marginTop: '6px', fontSize: '10px', color: '#9ca3af' }}>Avg: {formatAmount(liquiditySummary?.avg_daily_amount_14d ?? 0)}/hari</div>
+                    <div style={{ marginTop: '6px', fontSize: '10px', color: '#9ca3af' }}>Avg W2: {formatAmount(liquiditySummary?.avg_daily_amount_w2 ?? 0)}/hari</div>
                   </div>
                 )}
               </div>
