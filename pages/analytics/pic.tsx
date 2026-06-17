@@ -416,8 +416,8 @@ export default function PicPage() {
           <div style={{ textAlign: 'right' }}>TRX (14H)</div>
           <div style={{ textAlign: 'right' }}>FEE (14H)</div>
           <div style={{ textAlign: 'right' }}><span {...tip('Rata-rata TRX per agen dalam 14H.')}>TRX/AGEN ⓘ</span></div>
-          <div style={{ textAlign: 'right' }}><span {...tip('% agen growing MTD vs 14H.')}>GROWING ⓘ</span></div>
-          <div style={{ textAlign: 'right' }}><span {...tip('% agen declining MTD vs 14H.')}>DECLINING ⓘ</span></div>
+          <div style={{ textAlign: 'right' }}><span {...tip('% agen growing — W2 (8–14) > 120% vs W1 (1–7).')}>GROWING ⓘ</span></div>
+          <div style={{ textAlign: 'right' }}><span {...tip('% agen declining — W2 (8–14) < 80% vs W1 (1–7).')}>DECLINING ⓘ</span></div>
           <div><span {...tip('Composite score 0–100.')}>HEALTH ⓘ</span></div>
         </div>
         {data.map((p, i) => (
