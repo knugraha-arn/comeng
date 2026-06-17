@@ -182,7 +182,14 @@ export default function PulsePage() {
             <div style={{ fontSize: '11px', fontWeight: '600', color: '#9ca3af', letterSpacing: '0.1em', marginBottom: '4px' }}>ANALITIK JARINGAN</div>
             <h1 style={{ fontSize: '24px', fontWeight: '800', color: '#111827', margin: 0, letterSpacing: '-0.02em' }}>⚡ Pulse</h1>
             <p style={{ fontSize: '13px', color: '#6b7280', marginTop: '4px' }}>
-              {currentMonth} {currentYear} — Hari ke-{summary?.days_elapsed ?? '—'} dari {summary?.days_in_month ?? '—'}
+              {summary ? (() => {
+                const end = summary.end_date
+                const start = new Date(end); start.setDate(start.getDate() - 13)
+                const startStr = start.toISOString().split('T')[0]
+                const fmtNoYear = (d: string) => new Date(d).toLocaleDateString('id-ID', { day: 'numeric', month: 'short' })
+                const fmtFull   = (d: string) => new Date(d).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })
+                return `Data transaksi 14 hari dari tanggal ${fmtNoYear(startStr)} sampai ${fmtFull(end)}`
+              })() : '—'}
             </p>
           </div>
           <button onClick={loadAll} style={{ padding: '8px 16px', borderRadius: '8px', border: '1px solid #e5e7eb', backgroundColor: '#fff', color: '#374151', fontSize: '12px', cursor: 'pointer' }}>
