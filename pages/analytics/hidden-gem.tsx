@@ -428,7 +428,13 @@ export default function ProductivityPage() {
           <div style={{ fontSize: '11px', fontWeight: '600', color: '#9ca3af', letterSpacing: '0.1em', marginBottom: '4px' }}>ANALITIK AGEN</div>
           <h1 style={{ fontSize: '24px', fontWeight: '800', color: '#111827', margin: 0, letterSpacing: '-0.02em' }}>📈 Produktifitas Agen</h1>
           <p style={{ fontSize: '13px', color: '#6b7280', marginTop: '4px' }}>
-            Perbandingan 7 hari pertama (W1) vs 7 hari terakhir (W2) dalam window 14 hari — siapa yang tumbuh, menurun, dan konsisten.
+            {sinceDate && lastDate ? (() => {
+              const start = new Date(sinceDate)
+              const end = new Date(lastDate)
+              const fmt = (d: Date) => d.toLocaleDateString('id-ID', { day: 'numeric', month: 'short' })
+              const fmtFull = (d: Date) => d.toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })
+              return `Data transaksi 14 hari dari tanggal ${fmt(start)} sampai ${fmtFull(end)}`
+            })() : 'Perbandingan 7 hari pertama (W1) vs 7 hari terakhir (W2) dalam window 14 hari — siapa yang tumbuh, menurun, dan konsisten.'}
           </p>
         </div>
 
