@@ -219,18 +219,19 @@ export default function PicPage() {
 
       // Get date range
       const { data: prog } = await supabase.rpc('get_monthly_progress')
-      if (prog?.[0]) {
-        setSinceDate(prog[0].end_date ? new Date(new Date(prog[0].end_date).getTime() - 13 * 86400000).toISOString().split('T')[0] : '')
-        setLastDate(prog[0].end_date ?? '')
+      const progData = Array.isArray(prog) ? prog[0] : prog
+      if (progData) {
+        setSinceDate(progData.end_date ? new Date(new Date(progData.end_date).getTime() - 13 * 86400000).toISOString().split('T')[0] : '')
+        setLastDate(progData.end_date ?? '')
       }
       await loadPics(0, '', '')
 
-      // Set tanggal dari MAX(transaction_date) via get_monthly_progress
-      if (prog?.[0]?.end_date) {
+      // Set tanggal dari MAX(transaction_date)
+      if (progData?.end_date) {
         const MONTHS_ID = ['Januari','Februari','Maret','April','Mei','Juni','Juli','Agustus','September','Oktober','November','Desember']
-        const [ey, em, ed] = (prog[0].end_date as string).split('-')
+        const [ey, em, ed] = (progData.end_date as string).split('-')
         const endStr = `${parseInt(ed)} ${MONTHS_ID[parseInt(em)-1]} ${ey}`
-        const startDate = new Date(new Date(prog[0].end_date).getTime() - 13 * 86400000)
+        const startDate = new Date(new Date(progData.end_date).getTime() - 13 * 86400000)
         const [sy, sm, sd2] = startDate.toISOString().split('T')[0].split('-')
         const startStr = `${parseInt(sd2)} ${MONTHS_ID[parseInt(sm)-1]} ${sy}`
         setLastTrxDate(endStr)
