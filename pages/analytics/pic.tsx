@@ -21,17 +21,18 @@ interface PicRow {
 }
 
 interface RangerAgent {
-  serial_number: string
-  merchant_name: string | null
-  mitra: string | null
-  active_days_14: number
-  total_trx_14d: number
-  total_fee_14d: number
+  sn: string
+  mer_name: string | null
+  mtr: string | null
+  act_days_14: number
+  tot_trx_14: number
+  tot_fee_14: number
   avg_trx_14: number
-  avg_trx_mtd: number
-  trend: string
-  trx_change_pct: number
-  bucket: string
+  avg_w1: number
+  avg_w2: number
+  trnd: string
+  chg_pct: number
+  bkt: string
 }
 
 interface AgentDayDetail {
@@ -221,16 +222,17 @@ export default function PicPage() {
         setLastDate(prog[0].end_date ?? '')
       }
       await loadPics(0, '', '')
-    // Fetch tanggal upload terakhir
-    const { data: uploadData } = await supabase
-      .from('upload_sessions')
-      .select('created_at')
-      .order('created_at', { ascending: false })
-      .limit(1)
-      .maybeSingle()
-    if (uploadData?.created_at) {
-      setLastUploadDate(new Date(uploadData.created_at).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' }))
-    }
+
+      // Fetch tanggal upload terakhir
+      const { data: uploadData } = await supabase
+        .from('am_upload_sessions')
+        .select('created_at')
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle()
+      if (uploadData?.created_at) {
+        setLastUploadDate(new Date(uploadData.created_at).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' }))
+      }
     } finally { setLoading(false) }
   }
 
@@ -264,16 +266,6 @@ export default function PicPage() {
   async function handleReset() {
     setFilterMitra(''); setSearch(''); setSearchInput(''); setPage(0)
     await loadPics(0, '', '')
-    // Fetch tanggal upload terakhir
-    const { data: uploadData } = await supabase
-      .from('upload_sessions')
-      .select('created_at')
-      .order('created_at', { ascending: false })
-      .limit(1)
-      .maybeSingle()
-    if (uploadData?.created_at) {
-      setLastUploadDate(new Date(uploadData.created_at).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' }))
-    }
   }
 
   async function handleExport() {
@@ -377,8 +369,8 @@ export default function PicPage() {
       setLastDate(last)
 
       const [detailRes, liqRes] = await Promise.all([
-        supabase.rpc('get_agent_detail', { p_serial: agent.serial_number, p_since: since, p_until: last }),
-        supabase.rpc('get_agent_liquidity_summary', { p_serial: agent.serial_number }),
+        supabase.rpc('get_agent_detail', { p_serial: agent.sn, p_since: since, p_until: last }),
+        supabase.rpc('get_agent_liquidity_summary', { p_serial: agent.sn }),
       ])
       setAgentDetail(detailRes.data ?? [])
       const liqData = liqRes.data ?? []
@@ -547,28 +539,26 @@ export default function PicPage() {
             {/* Summary Cards */}
             {/* Ranger vs Non-Ranger Comparison */}
             {rangerComparison && (
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '16px' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginBottom: '16px' }}>
                 {[
-                  { label: 'Jaringan Ranger', data: rangerComparison.ranger, color: '#0344D8', bg: '#eff6ff', border: '#bfdbfe',
-                    tip: 'Performa agregat seluruh Ranger — PIC dari mitra ARRANET, ARRANET ex Dinar, dan ARRANET ex SSDI.' },
-                  { label: 'Non-Ranger', data: rangerComparison.nonRanger, color: '#374151', bg: '#f9fafb', border: '#e5e7eb',
-                    tip: 'Performa agregat PIC dari mitra selain ARRANET — MAJU, SVD, ORDER KUOTA, dll. Karakteristik mitra berbeda sehingga perbandingan ini bersifat indikatif, bukan apple-to-apple.' },
+                  { label: 'Jaringan Ranger', icon: '⚡', data: rangerComparison.ranger,    color: '#0344D8', bg: '#eff6ff', border: '#bfdbfe',
+                    tip: 'Performa agregat seluruh Ranger — PIC dari mitra ARRANET, ARRANET ex Dinar, dan ARRANET ex SSDI dalam 14 hari terakhir.' },
+                  { label: 'Non-Ranger',       icon: '👤', data: rangerComparison.nonRanger, color: '#374151', bg: '#f9fafb', border: '#e5e7eb',
+                    tip: 'Performa agregat PIC dari mitra selain Arranet dalam 14 hari terakhir. Bersifat indikatif — karakteristik mitra berbeda sehingga tidak apple-to-apple.' },
                 ].map(s => (
-                  <div key={s.label} {...tip(s.tip)} style={{ backgroundColor: s.bg, border: `1px solid ${s.border}`, borderRadius: '12px', padding: '16px 20px', cursor: 'default' }}>
-                    <div style={{ fontSize: '11px', fontWeight: '700', color: s.color, letterSpacing: '0.05em', marginBottom: '12px' }}>{s.label.toUpperCase()}</div>
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
-                      {[
-                        { label: 'Jumlah PIC',  value: formatNum(s.data?.jumlah_pic ?? 0),        tip2: 'Jumlah PIC unik yang aktif dalam 14 hari terakhir.' },
-                        { label: 'Total Agen',   value: formatNum(s.data?.total_agen ?? 0),         tip2: 'Jumlah agen unik yang dikelola dalam 14 hari terakhir.' },
-                        { label: 'Fee 14H',      value: formatFee(s.data?.total_fee ?? 0),          tip2: 'Total fee yang dihasilkan seluruh agen dalam 14 hari terakhir.' },
-                        { label: 'Avg Fee/Agen', value: formatFee(s.data?.avg_fee_per_agen ?? 0),   tip2: 'Rata-rata fee per agen. Indikator efisiensi — semakin tinggi, agen semakin produktif.' },
-                      ].map(m => (
-                        <div key={m.label} {...tip(m.tip2)} style={{ cursor: 'default' }}>
-                          <div style={{ fontSize: '14px', fontWeight: '700', color: s.color }}>{m.value}</div>
-                          <div style={{ fontSize: '10px', color: '#9ca3af', marginTop: '2px' }}>{m.label}</div>
-                        </div>
-                      ))}
-                    </div>
+                  <div key={s.label} {...tip(s.tip)} style={{ backgroundColor: s.bg, border: `1px solid ${s.border}`, borderRadius: '10px', padding: '14px 20px', display: 'grid', gridTemplateColumns: '180px 1fr 1fr 1fr 1fr', alignItems: 'center', gap: '0', cursor: 'default' }}>
+                    <div style={{ fontSize: '13px', fontWeight: '800', color: s.color }}>{s.icon} {s.label}</div>
+                    {[
+                      { label: 'Jumlah PIC',      value: formatNum(s.data?.jumlah_pic ?? 0),      tip2: 'Jumlah PIC unik aktif dalam 14 hari terakhir.' },
+                      { label: 'Total Agen (14H)', value: formatNum(s.data?.total_agen ?? 0),       tip2: 'Jumlah agen unik yang dikelola dalam 14 hari terakhir.' },
+                      { label: 'Fee (14H)',         value: formatFee(s.data?.total_fee ?? 0),        tip2: 'Total fee yang dihasilkan seluruh agen dalam 14 hari terakhir.' },
+                      { label: 'Avg Fee/Agen (14H)',value: formatFee(s.data?.avg_fee_per_agen ?? 0), tip2: 'Rata-rata fee per agen dalam 14 hari terakhir. Indikator efisiensi coaching — semakin tinggi, agen semakin produktif.', highlight: true },
+                    ].map(m => (
+                      <div key={m.label} {...tip(m.tip2)} style={{ textAlign: 'center', borderLeft: '1px solid rgba(0,0,0,0.06)', padding: '0 16px', cursor: 'default' }}>
+                        <div style={{ fontSize: '16px', fontWeight: '800', color: (m as any).highlight ? s.color : '#111827' }}>{m.value}</div>
+                        <div style={{ fontSize: '10px', color: '#9ca3af', marginTop: '2px' }}>{m.label}</div>
+                      </div>
+                    ))}
                   </div>
                 ))}
               </div>
@@ -788,50 +778,80 @@ export default function PicPage() {
               ← Kembali ke Ranger
             </button>
 
-            {/* Ranger Header */}
-            <div style={{ backgroundColor: '#fff', border: '1px solid #e5e7eb', borderRadius: '12px', padding: '20px 24px', marginBottom: '16px' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                <div>
-                  <div style={{ fontSize: '20px', fontWeight: '800', color: '#111827', marginBottom: '4px' }}>⚡ {selectedRanger.pic}</div>
-                  <div style={{ fontSize: '12px', color: '#9ca3af', marginBottom: '10px' }}>{selectedRanger.mitra}</div>
-                </div>
-                <div style={{ textAlign: 'right' }}>
-                  <div style={{ fontSize: '11px', color: '#9ca3af', marginBottom: '4px' }}>Health Score</div>
-                  <div style={{ fontSize: '20px', fontWeight: '800', color: selectedRanger.health_score >= 65 ? '#166534' : selectedRanger.health_score >= 50 ? '#ca8a04' : '#dc2626' }}>{selectedRanger.health_score}</div>
-                </div>
+            {/* Ranger Header — row style seperti Tab 2 */}
+            <div style={{ backgroundColor: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: '10px', padding: '14px 20px', display: 'grid', gridTemplateColumns: '200px 1fr 1fr 1fr 1fr 1fr', alignItems: 'center', gap: '0', marginBottom: '16px' }}>
+              <div>
+                <div style={{ fontSize: '14px', fontWeight: '800', color: '#0344D8' }}>⚡ {selectedRanger.pic}</div>
+                <div style={{ fontSize: '11px', color: '#9ca3af', marginTop: '2px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{selectedRanger.mitra}</div>
               </div>
-              {/* Summary cards */}
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '10px', marginTop: '16px', paddingTop: '16px', borderTop: '1px solid #f3f4f6' }}>
-                {[
-                  { label: 'Total Agen',   value: formatNum(selectedRanger.total_agents) },
-                  { label: 'Fee 14H',      value: formatFee(selectedRanger.total_fee_14d), highlight: true },
-                  { label: 'TRX/Agen',     value: String(selectedRanger.avg_trx_per_agent) },
-                  { label: 'Growing',      value: `${selectedRanger.growing_pct}%`,   color: '#166534' },
-                  { label: 'Declining',    value: `${selectedRanger.declining_pct}%`, color: selectedRanger.declining_pct > 15 ? '#dc2626' : '#374151' },
-                ].map(s => (
-                  <div key={s.label} style={{ padding: '10px 12px', backgroundColor: (s as any).highlight ? '#eff6ff' : '#f9fafb', borderRadius: '8px', textAlign: 'center', border: (s as any).highlight ? '1px solid #bfdbfe' : 'none' }}>
-                    <div style={{ fontSize: '16px', fontWeight: '700', color: (s as any).color ?? ((s as any).highlight ? '#1e40af' : '#111827') }}>{s.value}</div>
-                    <div style={{ fontSize: '10px', color: '#9ca3af', marginTop: '2px' }}>{s.label}</div>
-                  </div>
-                ))}
-              </div>
+              {[
+                { label: 'Total Agen',    value: formatNum(selectedRanger.total_agents),                                                                       tip: 'Jumlah agen yang dikelola Ranger ini dalam 14 hari terakhir.' },
+                { label: 'Fee (14H)',     value: formatFee(selectedRanger.total_fee_14d),                                                                      tip: 'Total fee yang dihasilkan seluruh agen Ranger ini dalam 14 hari terakhir.', highlight: true },
+                { label: 'Fee/Agen',     value: formatFee(Math.round(selectedRanger.total_fee_14d / Math.max(selectedRanger.total_agents, 1))),                tip: 'Rata-rata fee per agen. Indikator efisiensi Ranger — dibandingkan sesama Ranger Arranet.' },
+                { label: 'TRX/Agen',     value: String(selectedRanger.avg_trx_per_agent),                                                                     tip: 'Rata-rata transaksi per agen dalam 14 hari terakhir.' },
+                { label: 'Health Score', value: String(selectedRanger.health_score),                                                                           tip: 'Composite score 0–100 berdasarkan % Productive, % Growing, % rendah Declining.', color: selectedRanger.health_score >= 65 ? '#166534' : selectedRanger.health_score >= 50 ? '#ca8a04' : '#dc2626' },
+              ].map(m => (
+                <div key={m.label} {...tip(m.tip)} style={{ textAlign: 'center', borderLeft: '1px solid rgba(3,68,216,0.15)', padding: '0 12px', cursor: 'default' }}>
+                  <div style={{ fontSize: '15px', fontWeight: '800', color: (m as any).color ?? ((m as any).highlight ? '#1e40af' : '#111827') }}>{m.value}</div>
+                  <div style={{ fontSize: '10px', color: '#9ca3af', marginTop: '2px' }}>{m.label}</div>
+                </div>
+              ))}
             </div>
 
             {/* Agent List */}
             {(() => {
-              const filtered = rangerAgents
+              // Count per trend dari semua agen yang di-load
+              const growingList   = rangerAgents.filter(a => a.trnd === 'growing')
+              const decliningList = rangerAgents.filter(a => a.trnd === 'declining')
+              const consistentList= rangerAgents.filter(a => a.trnd === 'consistent')
+              const baruList      = rangerAgents.filter(a => a.trnd === 'baru')
+              const hilangList    = rangerAgents.filter(a => a.trnd === 'hilang')
+
+              const filtered = rangerAgentFilter === 'semua'      ? rangerAgents
+                             : rangerAgentFilter === 'growing'    ? growingList
+                             : rangerAgentFilter === 'declining'  ? decliningList
+                             : rangerAgentFilter === 'consistent' ? consistentList
+                             : rangerAgentFilter === 'baru'       ? baruList
+                             : rangerAgentFilter === 'hilang'     ? hilangList
+                             : rangerAgents
+
               const handleExportAgents = () => {
                 exportCSV(
-                  `agen_${selectedRanger.pic.replace(/\s+/g, '_')}_${new Date().toISOString().split('T')[0]}.csv`,
-                  ['Serial Number','Merchant Name','Mitra','Hari Aktif 14H','TRX 14H','Fee 14H','Avg TRX/Hari','Trend','Bucket'],
-                  filtered.map(a => [a.serial_number, a.merchant_name ?? '', a.mitra ?? '', a.active_days_14, a.total_trx_14d, a.total_fee_14d, a.avg_trx_14, a.trend, a.bucket])
+                  `agen_${selectedRanger.pic.replace(/[^a-zA-Z0-9]/g, '_')}_${new Date().toISOString().split('T')[0]}.csv`,
+                  ['Serial Number','Merchant Name','Mitra','Hari Aktif 14H','TRX 14H','Fee 14H','Avg TRX/Hari 14H','Avg W1','Avg W2','Trend','% Change','Bucket'],
+                  filtered.map(a => [a.sn, a.mer_name ?? '', a.mtr ?? '', a.act_days_14, a.tot_trx_14, a.tot_fee_14, a.avg_trx_14, a.avg_w1, a.avg_w2, a.trnd, a.chg_pct, a.bkt])
                 )
               }
+
+              const TREND_CHIPS = [
+                { key: 'semua',      label: 'Semua',      icon: '📋', count: rangerAgentTotal, activeBg: '#1e40af',  activeColor: '#fff',     activeBorder: '#1e40af',  tip: 'Semua agen Ranger ini dalam 14 hari terakhir.' },
+                { key: 'growing',    label: 'Growing',    icon: '💎', count: growingList.length,   activeBg: '#dcfce7', activeColor: '#166534',  activeBorder: '#bbf7d0',  tip: 'Agen yang TRX/hari di 7 hari kedua (W2) lebih dari 120% dibanding 7 hari pertama (W1). Tren meningkat signifikan.' },
+                { key: 'declining',  label: 'Declining',  icon: '⚠️', count: decliningList.length, activeBg: '#fee2e2', activeColor: '#dc2626',  activeBorder: '#fecaca',  tip: 'Agen yang TRX/hari di W2 kurang dari 80% dibanding W1. Tren menurun — perlu follow up Ranger.' },
+                { key: 'consistent', label: 'Konsisten',  icon: '✅', count: consistentList.length,activeBg: '#eff6ff', activeColor: '#1e40af',  activeBorder: '#bfdbfe',  tip: 'Agen yang TRX/hari di W2 antara 80–120% dibanding W1. Performa stabil.' },
+                { key: 'baru',       label: 'Baru W2',    icon: '🆕', count: baruList.length,      activeBg: '#f5f3ff', activeColor: '#6b21a8',  activeBorder: '#e9d5ff',  tip: 'Agen yang tidak ada transaksi di W1 tapi muncul di W2. Bisa agen yang baru aktif kembali atau agen baru.' },
+                { key: 'hilang',     label: 'Hilang W2',  icon: '👻', count: hilangList.length,    activeBg: '#fff7ed', activeColor: '#c2410c',  activeBorder: '#fed7aa',  tip: 'Agen yang aktif di W1 tapi tidak ada transaksi di W2. Perlu dicek — mungkin berhenti atau ada masalah.' },
+              ]
+
               return (
                 <>
+                  {/* Chips */}
+                  <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginBottom: '12px' }}>
+                    {TREND_CHIPS.map(c => {
+                      const isActive = rangerAgentFilter === c.key
+                      return (
+                        <button key={c.key} onClick={() => setRangerAgentFilter(c.key)}
+                          {...tip(c.tip)}
+                          style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '6px 12px', borderRadius: '99px', border: `1px solid ${isActive ? c.activeBorder : '#e5e7eb'}`, backgroundColor: isActive ? c.activeBg : '#f9fafb', color: isActive ? c.activeColor : '#374151', fontSize: '12px', fontWeight: '600', cursor: 'pointer', transition: 'all 0.15s' }}>
+                          <span>{c.icon} {c.label}</span>
+                          <span style={{ backgroundColor: 'rgba(0,0,0,0.08)', borderRadius: '99px', padding: '1px 7px', fontSize: '11px', fontWeight: '700' }}>{c.count}</span>
+                        </button>
+                      )
+                    })}
+                  </div>
+
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
                     <div style={{ fontSize: '11px', fontWeight: '700', color: '#9ca3af', letterSpacing: '0.08em' }}>
-                      DAFTAR AGEN ({formatNum(rangerAgentTotal)} agen) — klik untuk detail
+                      {filtered.length < rangerAgentTotal ? `${formatNum(filtered.length)} dari ${formatNum(rangerAgentTotal)} agen` : `${formatNum(rangerAgentTotal)} agen`} — klik untuk detail
                     </div>
                     <button onClick={handleExportAgents}
                       style={{ padding: '6px 12px', borderRadius: '8px', border: '1px solid #e5e7eb', backgroundColor: '#fff', color: '#374151', fontSize: '12px', cursor: 'pointer' }}>
@@ -842,40 +862,49 @@ export default function PicPage() {
             {loadingRangerAgents ? (
               <div style={{ border: '1px solid #e5e7eb', borderRadius: '10px', overflow: 'hidden' }}>
                 {[1,2,3,4,5].map(i => (
-                  <div key={i} style={{ display: 'grid', gridTemplateColumns: '1fr 80px 70px 90px 100px 70px 80px', padding: '12px 16px', borderBottom: '1px solid #f3f4f6', gap: '12px' }}>
+                  <div key={i} style={{ display: 'grid', gridTemplateColumns: '1fr 60px 70px 90px 70px 70px 70px 80px', padding: '12px 16px', borderBottom: '1px solid #f3f4f6', gap: '12px' }}>
                     <Skeleton width={160} height={13} />
-                    {[60,60,70,80,60,70].map((w,j) => <Skeleton key={j} width={w} height={12} />)}
+                    {[40,60,80,60,55,55,65].map((w,j) => <Skeleton key={j} width={w} height={12} />)}
                   </div>
                 ))}
               </div>
             ) : filtered.length > 0 ? (
               <div style={{ border: '1px solid #e5e7eb', borderRadius: '10px', overflow: 'hidden' }}>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 80px 70px 90px 100px 70px 80px', padding: '10px 16px', backgroundColor: '#f9fafb', borderBottom: '1px solid #e5e7eb', fontSize: '10px', fontWeight: '700', color: '#9ca3af', letterSpacing: '0.05em', gap: '12px' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 60px 70px 90px 70px 70px 70px 80px', padding: '10px 16px', backgroundColor: '#f9fafb', borderBottom: '1px solid #e5e7eb', fontSize: '10px', fontWeight: '700', color: '#9ca3af', letterSpacing: '0.05em', gap: '12px' }}>
                   <div>AGEN</div>
-                  <div style={{ textAlign: 'right' }}>HARI AKTIF</div>
+                  <div style={{ textAlign: 'right' }}><span {...tip('Jumlah hari aktif dalam 14 hari terakhir.')}>HARI ⓘ</span></div>
                   <div style={{ textAlign: 'right' }}>TRX 14H</div>
                   <div style={{ textAlign: 'right' }}>FEE 14H</div>
-                  <div style={{ textAlign: 'right' }}>AVG TRX/HARI</div>
+                  <div style={{ textAlign: 'right' }}><span {...tip('Rata-rata TRX/hari di 7 hari pertama (1–7).')}>AVG W1 ⓘ</span></div>
+                  <div style={{ textAlign: 'right' }}><span {...tip('Rata-rata TRX/hari di 7 hari kedua (8–14). Dibandingkan W1 untuk menentukan tren.')}>AVG W2 ⓘ</span></div>
                   <div style={{ textAlign: 'center' }}>BUCKET</div>
-                  <div style={{ textAlign: 'center' }}>TREND</div>
+                  <div style={{ textAlign: 'center' }}><span {...tip('Tren berdasarkan W1 vs W2. Growing = W2 > 120% W1. Declining = W2 < 80% W1. Baru = tidak ada di W1. Hilang = tidak ada di W2.')}>TREND ⓘ</span></div>
                 </div>
-                {filtered.map((a, i) => (
-                  <div key={a.serial_number} onClick={() => openAgentDrawer(a)}
-                    style={{ display: 'grid', gridTemplateColumns: '1fr 80px 70px 90px 100px 70px 80px', padding: '11px 16px', borderBottom: i < filtered.length - 1 ? '1px solid #f3f4f6' : 'none', alignItems: 'center', backgroundColor: '#fff', cursor: 'pointer', gap: '12px' }}
-                    onMouseEnter={e => e.currentTarget.style.backgroundColor = '#f9fafb'}
-                    onMouseLeave={e => e.currentTarget.style.backgroundColor = '#fff'}>
-                    <div>
-                      <div style={{ fontSize: '13px', fontWeight: '600', color: '#111827', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{a.merchant_name ?? a.serial_number}</div>
-                      <div style={{ fontSize: '10px', color: '#d1d5db' }}>{a.serial_number}</div>
+                {filtered.map((a, i) => {
+                  const trendCfg = TREND_CONFIG[a.trnd as keyof typeof TREND_CONFIG] ?? TREND_CONFIG.consistent
+                  return (
+                    <div key={a.sn} onClick={() => openAgentDrawer(a)}
+                      style={{ display: 'grid', gridTemplateColumns: '1fr 60px 70px 90px 70px 70px 70px 80px', padding: '11px 16px', borderBottom: i < filtered.length - 1 ? '1px solid #f3f4f6' : 'none', alignItems: 'center', backgroundColor: '#fff', cursor: 'pointer', gap: '12px' }}
+                      onMouseEnter={e => e.currentTarget.style.backgroundColor = '#f9fafb'}
+                      onMouseLeave={e => e.currentTarget.style.backgroundColor = '#fff'}>
+                      <div>
+                        <div style={{ fontSize: '13px', fontWeight: '600', color: '#111827', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{a.mer_name ?? a.sn}</div>
+                        <div style={{ fontSize: '10px', color: '#d1d5db' }}>{a.sn}</div>
+                      </div>
+                      <div style={{ fontSize: '12px', fontWeight: '700', color: a.act_days_14 >= 8 ? '#166534' : a.act_days_14 >= 5 ? '#ca8a04' : '#dc2626', textAlign: 'right' }}>{a.act_days_14}</div>
+                      <div style={{ fontSize: '12px', color: '#374151', textAlign: 'right' }}>{formatNum(a.tot_trx_14)}</div>
+                      <div style={{ fontSize: '12px', color: '#374151', textAlign: 'right' }}>{formatFee(a.tot_fee_14)}</div>
+                      <div style={{ fontSize: '12px', color: '#6b7280', textAlign: 'right' }}>{a.avg_w1 > 0 ? a.avg_w1 : '—'}</div>
+                      <div style={{ fontSize: '12px', fontWeight: '600', color: a.avg_w2 > a.avg_w1 * 1.2 ? '#166534' : a.avg_w2 < a.avg_w1 * 0.8 ? '#dc2626' : '#374151', textAlign: 'right' }}>{a.avg_w2 > 0 ? a.avg_w2 : '—'}</div>
+                      <div style={{ textAlign: 'center' }}><BucketChip b={a.bkt} /></div>
+                      <div style={{ textAlign: 'center' }}>
+                        <span style={{ padding: '1px 7px', borderRadius: '99px', fontSize: '10px', fontWeight: '700', backgroundColor: trendCfg?.bg ?? '#f9fafb', color: trendCfg?.color ?? '#374151', border: `1px solid ${trendCfg?.border ?? '#e5e7eb'}` }}>
+                          {a.trnd === 'baru' ? '🆕 Baru' : a.trnd === 'hilang' ? '👻 Hilang' : `${trendCfg?.icon} ${trendCfg?.label}`}
+                        </span>
+                      </div>
                     </div>
-                    <div style={{ fontSize: '12px', fontWeight: '700', color: a.active_days_14 >= 8 ? '#166534' : a.active_days_14 >= 5 ? '#ca8a04' : '#dc2626', textAlign: 'right' }}>{a.active_days_14}</div>
-                    <div style={{ fontSize: '12px', color: '#374151', textAlign: 'right' }}>{formatNum(a.total_trx_14d)}</div>
-                    <div style={{ fontSize: '12px', color: '#374151', textAlign: 'right' }}>{formatFee(a.total_fee_14d)}</div>
-                    <div style={{ fontSize: '12px', fontWeight: '700', color: '#1e40af', textAlign: 'right' }}>{a.avg_trx_14}</div>
-                    <div style={{ textAlign: 'center' }}><BucketChip b={a.bucket} /></div>
-                    <div style={{ textAlign: 'center' }}><TrendChip trend={a.trend} /></div>
-                  </div>
-                ))}
+                  )
+                })}
               </div>
             ) : (
               <div style={{ textAlign: 'center', padding: '40px', backgroundColor: '#f9fafb', borderRadius: '10px', border: '1px dashed #e5e7eb', color: '#9ca3af', fontSize: '13px' }}>
@@ -908,9 +937,9 @@ export default function PicPage() {
           <div style={{ position: 'relative', width: '480px', height: '100%', backgroundColor: '#fff', boxShadow: '-4px 0 24px rgba(0,0,0,0.12)', display: 'flex', flexDirection: 'column', overflowY: 'auto' }}>
             <div style={{ padding: '20px 24px', borderBottom: '1px solid #f3f4f6', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', position: 'sticky', top: 0, backgroundColor: '#fff', zIndex: 1 }}>
               <div>
-                <div style={{ fontSize: '18px', fontWeight: '800', color: '#111827', marginBottom: '4px' }}>{selectedAgent.merchant_name ?? selectedAgent.serial_number}</div>
-                <div style={{ fontSize: '11px', color: '#9ca3af', marginBottom: '6px' }}>{selectedAgent.serial_number}</div>
-                <div style={{ display: 'flex', gap: '6px' }}><TrendChip trend={selectedAgent.trend} /><BucketChip b={selectedAgent.bucket} /></div>
+                <div style={{ fontSize: '18px', fontWeight: '800', color: '#111827', marginBottom: '4px' }}>{selectedAgent.mer_name ?? selectedAgent.sn}</div>
+                <div style={{ fontSize: '11px', color: '#9ca3af', marginBottom: '6px' }}>{selectedAgent.sn}</div>
+                <div style={{ display: 'flex', gap: '6px' }}><TrendChip trend={selectedAgent.trnd} /><BucketChip b={selectedAgent.bkt} /></div>
               </div>
               <button onClick={() => setSelectedAgent(null)} style={{ padding: '6px 10px', borderRadius: '8px', border: '1px solid #e5e7eb', backgroundColor: '#fff', color: '#6b7280', fontSize: '18px', cursor: 'pointer', lineHeight: 1 }}>✕</button>
             </div>
@@ -962,7 +991,7 @@ export default function PicPage() {
                       { label: 'Total TRX 14H',          value: formatNum(selectedAgent.total_trx_14d) },
                       { label: 'Growth',                 value: `${selectedAgent.trx_change_pct > 0 ? '+' : ''}${selectedAgent.trx_change_pct}%`, highlight: true },
                     ].map(s => {
-                      const cfg = TREND_CONFIG[selectedAgent.trend as keyof typeof TREND_CONFIG] ?? TREND_CONFIG.consistent
+                      const cfg = TREND_CONFIG[selectedAgent.trnd as keyof typeof TREND_CONFIG] ?? TREND_CONFIG.consistent
                       return (
                         <div key={s.label} style={{ padding: '10px 12px', backgroundColor: s.highlight ? cfg.bg : '#f9fafb', borderRadius: '8px', textAlign: 'center', border: s.highlight ? `1px solid ${cfg.border}` : 'none' }}>
                           <div style={{ fontSize: '14px', fontWeight: '700', color: s.highlight ? cfg.color : '#111827' }}>{s.value}</div>
@@ -1021,7 +1050,7 @@ export default function PicPage() {
                   <div style={{ fontSize: '11px', fontWeight: '700', color: '#9ca3af', letterSpacing: '0.08em', marginBottom: '12px' }}>TRANSAKSI PER HARI</div>
                   <div style={{ display: 'flex', alignItems: 'flex-end', gap: '3px', height: '80px' }}>
                     {(() => {
-                      const cfg = TREND_CONFIG[selectedAgent.trend as keyof typeof TREND_CONFIG] ?? TREND_CONFIG.consistent
+                      const cfg = TREND_CONFIG[selectedAgent.trnd as keyof typeof TREND_CONFIG] ?? TREND_CONFIG.consistent
                       const maxTrx = Math.max(...agentDetail.map(d => Number(d.total_trx)), 1)
                       const sd = new Date(sinceDate)
                       return Array.from({ length: 14 }, (_, i) => {
@@ -1043,7 +1072,7 @@ export default function PicPage() {
                   </div>
                   <div style={{ display: 'flex', gap: '12px', marginTop: '8px', fontSize: '10px', color: '#9ca3af' }}>
                     <span>▪ <span style={{ color: '#94a3b8' }}>Bulan lalu</span></span>
-                    <span>▪ <span style={{ color: (TREND_CONFIG[selectedAgent.trend as keyof typeof TREND_CONFIG] ?? TREND_CONFIG.consistent).color }}>Bulan ini</span></span>
+                    <span>▪ <span style={{ color: (TREND_CONFIG[selectedAgent.trnd as keyof typeof TREND_CONFIG] ?? TREND_CONFIG.consistent).color }}>Bulan ini</span></span>
                   </div>
                 </div>
 
