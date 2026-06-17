@@ -359,18 +359,19 @@ export default function ProductivityPage() {
           rows)
       } else {
         // Fetch all trend agents
-        const params = { p_min_active_days_month: 2, p_min_trx_month: 10, p_min_avg_trx_14: 3, p_trend: activeTab, p_mitra: filterMitra, p_pic: filterPic }
+        const params = { p_min_active_days_w2: 2, p_min_trx_w2: 10, p_min_avg_trx_14: 3, p_trend: activeTab, p_mitra: filterMitra, p_pic: filterPic }
         const { data } = await supabase.rpc('get_hidden_gem_agents', { ...params, p_limit: 99999, p_offset: 0 })
         const rows = (data ?? []).map((a: ProductivityAgent) => [
           a.serial_number, a.merchant_name ?? '', a.mitra ?? '', a.pic ?? '',
           a.trend, a.bucket, a.active_days_14, a.avg_trx_14,
-          a.active_days_month, a.total_trx_month, a.avg_trx_month,
-          a.trx_change_pct, a.avg_daily_amount_14d, a.avg_daily_amount_mtd,
+          a.active_days_w1, a.total_trx_w1, a.avg_trx_w1,
+          a.active_days_w2, a.total_trx_w2, a.avg_trx_w2,
+          a.trx_change_pct, a.avg_daily_amount_14d, a.avg_daily_amount_w1, a.avg_daily_amount_w2,
           a.liquidity_ratio, a.liquidity_status,
         ])
         const tabLabel = activeTab || 'semua'
         exportCSV(`produktifitas_${tabLabel}_${lastDate}.csv`,
-          ['Serial','Merchant','Mitra','PIC','Trend','Bucket','Hari Aktif 14H','Avg TRX/Hari 14H','Hari Aktif MTD','Total TRX MTD','Avg TRX/Hari MTD','Growth %','Avg Amount/Hari 14H','Avg Amount/Hari MTD','Liquidity Ratio','Liquidity Status'],
+          ['Serial','Merchant','Mitra','PIC','Trend','Bucket','Hari Aktif 14H','Avg TRX/Hari 14H','Hari Aktif W1','Total TRX W1','Avg TRX/Hari W1','Hari Aktif W2','Total TRX W2','Avg TRX/Hari W2','Growth %','Avg Amount/Hari 14H','Avg Amount/Hari W1','Avg Amount/Hari W2','Liquidity Ratio','Liquidity Status'],
           rows)
       }
     } finally { setExporting(false) }
