@@ -1,40 +1,41 @@
-import { NextApiRequest, NextApiResponse } from 'next'
+import type { NextApiRequest, NextApiResponse } from 'next'
 import { createClient } from '@supabase/supabase-js'
-
-export const config = { api: { bodyParser: true } }
-
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-)
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
 
-  const { date } = req.body as { date?: string }
-  if (!date) return res.status(400).json({ error: 'date wajib diisi (YYYY-MM-DD)' })
+  const supabase = createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!
+  )
 
   try {
-    const { data, error } = await supabase.rpc('compute_agent_metrics', {
-      p_date: date,
-    })
+    // Jalankan compute
+    const { error: computeError } = await supabase.rpc('compute_agent_metrics')
+    if (computeError) throw new Error(computeError.message)
 
-    if (error) throw new Error(error.message)
+    // Ambil window aktual dari data
+    const { data: windowData, error: windowError } = await supabase
+      .from('am_transactions')
+      .select('transaction_date')
+      .order('transaction_date', { ascending: false })
+      .limit(1)
+      .single()
+
+    if (windowError || !windowData) throw new Error('Gagal membaca tanggal data')
+
+    const latest = new Date(windowData.transaction_date)
+    const earliest = new Date(latest)
+    earliest.setDate(earliest.getDate() - 13)
 
     return res.status(200).json({
       success: true,
-      summary: {
-        date,
-        agents_computed: data?.agents ?? 0,
-        mitra_computed:  data?.mitras ?? 0,
-        pic_computed:    data?.pics ?? 0,
-        buckets:         data?.buckets ?? {},
-      },
+      window: {
+        from: earliest.toISOString().split('T')[0],
+        to: latest.toISOString().split('T')[0],
+      }
     })
-
   } catch (err) {
-    const message = err instanceof Error ? err.message : 'Unknown error'
-    console.error('[analytics/compute-metrics]', message)
-    return res.status(500).json({ error: 'Compute metrics gagal', details: message })
+    return res.status(500).json({ error: err instanceof Error ? err.message : 'Gagal menghitung metrics' })
   }
 }
