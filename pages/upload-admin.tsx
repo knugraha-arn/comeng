@@ -242,7 +242,12 @@ export default function UploadCenter() {
       const sessionIds: Record<string, string> = {}
       for (const date of dates) {
         const rowCount = rows.filter(r => r.transaction_date === date).length
-        const existingSession = (existingSessions ?? []).find(s => s.upload_date === date)
+
+        const { data: existingSession } = await supabase
+          .from('am_upload_sessions')
+          .select('id')
+          .eq('upload_date', date)
+          .single()
 
         if (existingSession) {
           const { data: sessionRow } = await supabase
