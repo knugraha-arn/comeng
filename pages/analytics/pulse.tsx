@@ -166,7 +166,7 @@ export default function PulsePage() {
   return (
     <Layout>
       <style>{SKELETON_STYLE}</style>
-      <Head><title>Pulse — AMARIS</title></Head>
+      <Head><title>Pulse MTD — AMARIS</title></Head>
 
       {tooltip && (
         <div style={{ position: 'fixed', left: Math.min(tooltip.x + 12, window.innerWidth - 260), top: tooltip.y - 8, zIndex: 9999, backgroundColor: '#1f2937', color: '#f9fafb', fontSize: '11px', padding: '8px 12px', borderRadius: '8px', maxWidth: '240px', lineHeight: '1.5', pointerEvents: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.3)' }}>
@@ -180,16 +180,13 @@ export default function PulsePage() {
         <div style={{ marginBottom: '24px', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end' }}>
           <div>
             <div style={{ fontSize: '11px', fontWeight: '600', color: '#9ca3af', letterSpacing: '0.1em', marginBottom: '4px' }}>ANALITIK JARINGAN</div>
-            <h1 style={{ fontSize: '24px', fontWeight: '800', color: '#111827', margin: 0, letterSpacing: '-0.02em' }}>⚡ Pulse</h1>
+            <h1 style={{ fontSize: '24px', fontWeight: '800', color: '#111827', margin: 0, letterSpacing: '-0.02em' }}>⚡ Pulse MTD</h1>
             <p style={{ fontSize: '13px', color: '#6b7280', marginTop: '4px' }}>
               {summary ? (() => {
-                const end = summary.end_date
-                const start = new Date(end); start.setDate(start.getDate() - 13)
-                const startStr = start.toISOString().split('T')[0]
                 const fmtNoYear = (d: string) => new Date(d).toLocaleDateString('id-ID', { day: 'numeric', month: 'short' })
                 const fmtFull   = (d: string) => new Date(d).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })
-                return `Data transaksi 14 hari dari tanggal ${fmtNoYear(startStr)} sampai ${fmtFull(end)}`
-              })() : '—'}
+                return `Data transaksi MTD dari tanggal ${fmtNoYear(summary.month_start)} sampai ${fmtFull(summary.end_date)}`
+              })() : ''}
             </p>
           </div>
           <button onClick={loadAll} style={{ padding: '8px 16px', borderRadius: '8px', border: '1px solid #e5e7eb', backgroundColor: '#fff', color: '#374151', fontSize: '12px', cursor: 'pointer' }}>
@@ -291,6 +288,45 @@ export default function PulsePage() {
             )}
           </div>
         </div>
+
+        {/* Bucket Distribution — dipindah ke posisi 2 */}
+        {summary && (
+          <div style={{ backgroundColor: '#fff', border: '1px solid #e5e7eb', borderRadius: '12px', padding: '20px 24px', marginBottom: '24px' }}>
+            <div style={{ fontSize: '13px', fontWeight: '700', color: '#111827', marginBottom: '16px' }}>
+              Distribusi Bucket Agen
+              <span {...tip('Productive: aktif ≥8 hari/14H. Moderate: aktif 1–7 hari + TRX ≥20. Sporadic: aktif 1–7 hari + TRX <20.')}
+                style={{ marginLeft: '6px', fontSize: '11px', color: '#9ca3af', cursor: 'default', fontWeight: '400' }}>ⓘ</span>
+            </div>
+            {(() => {
+              const total = summary.productive_count + summary.moderate_count + summary.sporadic_count
+              const prodPct  = Math.round(summary.productive_count / total * 100)
+              const modPct   = Math.round(summary.moderate_count   / total * 100)
+              const sporPct  = Math.round(summary.sporadic_count   / total * 100)
+              return (
+                <div>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '12px', marginBottom: '12px' }}>
+                    {[
+                      { label: 'Productive', count: summary.productive_count, pct: prodPct,  color: '#166534', bg: '#dcfce7' },
+                      { label: 'Moderate',   count: summary.moderate_count,   pct: modPct,   color: '#ca8a04', bg: '#fef9c3' },
+                      { label: 'Sporadic',   count: summary.sporadic_count,   pct: sporPct,  color: '#dc2626', bg: '#fee2e2' },
+                    ].map(b => (
+                      <div key={b.label} style={{ padding: '12px 16px', backgroundColor: b.bg, borderRadius: '8px', textAlign: 'center' }}>
+                        <div style={{ fontSize: '20px', fontWeight: '800', color: b.color }}>{formatNum(b.count)}</div>
+                        <div style={{ fontSize: '12px', fontWeight: '600', color: b.color }}>{b.label}</div>
+                        <div style={{ fontSize: '11px', color: b.color, opacity: 0.7 }}>{b.pct}% dari total</div>
+                      </div>
+                    ))}
+                  </div>
+                  <div style={{ height: '8px', borderRadius: '99px', overflow: 'hidden', display: 'flex' }}>
+                    <div style={{ width: `${prodPct}%`, backgroundColor: '#166534' }} />
+                    <div style={{ width: `${modPct}%`,  backgroundColor: '#ca8a04' }} />
+                    <div style={{ width: `${sporPct}%`, backgroundColor: '#dc2626' }} />
+                  </div>
+                </div>
+              )
+            })()}
+          </div>
+        )}
 
         {/* Charts Row */}
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '24px' }}>
@@ -395,7 +431,7 @@ export default function PulsePage() {
           <div style={{ backgroundColor: '#fff', border: '1px solid #e5e7eb', borderRadius: '12px', padding: '20px 24px' }}>
             <div style={{ fontSize: '13px', fontWeight: '700', color: '#111827', marginBottom: '4px' }}>
               Pola Waktu Transaksi
-              <span {...tip('Distribusi TRX per slot waktu dalam 14H. Dini Hari 00–06, Pagi 06–12, Siang-Sore 12–18, Malam 18–00.')}
+              <span {...tip('Distribusi TRX per slot waktu bulan berjalan (MTD). Dini Hari 00–06, Pagi 06–12, Siang-Sore 12–18, Malam 18–00.')}
                 style={{ marginLeft: '6px', fontSize: '11px', color: '#9ca3af', cursor: 'default', fontWeight: '400' }}>ⓘ</span>
             </div>
             <div style={{ fontSize: '11px', color: '#9ca3af', marginBottom: '16px' }}>Bulan berjalan (MTD)</div>
@@ -569,45 +605,6 @@ export default function PulsePage() {
 
         </div>{/* end App Distribution + Fee 3500 Row */}
 
-        {/* Bucket Distribution */}
-        {summary && (
-          <div style={{ backgroundColor: '#fff', border: '1px solid #e5e7eb', borderRadius: '12px', padding: '20px 24px', marginBottom: '24px' }}>
-            <div style={{ fontSize: '13px', fontWeight: '700', color: '#111827', marginBottom: '16px' }}>
-              Distribusi Bucket Agen
-              <span {...tip('Productive: aktif ≥8 hari/14H. Moderate: aktif 1–7 hari + TRX ≥20. Sporadic: aktif 1–7 hari + TRX <20.')}
-                style={{ marginLeft: '6px', fontSize: '11px', color: '#9ca3af', cursor: 'default', fontWeight: '400' }}>ⓘ</span>
-            </div>
-            {(() => {
-              const total = summary.productive_count + summary.moderate_count + summary.sporadic_count
-              const prodPct  = Math.round(summary.productive_count / total * 100)
-              const modPct   = Math.round(summary.moderate_count   / total * 100)
-              const sporPct  = Math.round(summary.sporadic_count   / total * 100)
-              return (
-                <div>
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '12px', marginBottom: '12px' }}>
-                    {[
-                      { label: 'Productive', count: summary.productive_count, pct: prodPct,  color: '#166534', bg: '#dcfce7' },
-                      { label: 'Moderate',   count: summary.moderate_count,   pct: modPct,   color: '#ca8a04', bg: '#fef9c3' },
-                      { label: 'Sporadic',   count: summary.sporadic_count,   pct: sporPct,  color: '#dc2626', bg: '#fee2e2' },
-                    ].map(b => (
-                      <div key={b.label} style={{ padding: '12px 16px', backgroundColor: b.bg, borderRadius: '8px', textAlign: 'center' }}>
-                        <div style={{ fontSize: '20px', fontWeight: '800', color: b.color }}>{formatNum(b.count)}</div>
-                        <div style={{ fontSize: '12px', fontWeight: '600', color: b.color }}>{b.label}</div>
-                        <div style={{ fontSize: '11px', color: b.color, opacity: 0.7 }}>{b.pct}% dari total</div>
-                      </div>
-                    ))}
-                  </div>
-                  {/* Stacked bar */}
-                  <div style={{ height: '8px', borderRadius: '99px', overflow: 'hidden', display: 'flex' }}>
-                    <div style={{ width: `${prodPct}%`, backgroundColor: '#166534' }} />
-                    <div style={{ width: `${modPct}%`,  backgroundColor: '#ca8a04' }} />
-                    <div style={{ width: `${sporPct}%`, backgroundColor: '#dc2626' }} />
-                  </div>
-                </div>
-              )
-            })()}
-          </div>
-        )}
 
 
       </div>
