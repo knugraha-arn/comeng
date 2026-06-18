@@ -398,7 +398,7 @@ export default function PulsePage() {
               <span {...tip('Distribusi TRX per slot waktu dalam 14H. Dini Hari 00–06, Pagi 06–12, Siang-Sore 12–18, Malam 18–00.')}
                 style={{ marginLeft: '6px', fontSize: '11px', color: '#9ca3af', cursor: 'default', fontWeight: '400' }}>ⓘ</span>
             </div>
-            <div style={{ fontSize: '11px', color: '#9ca3af', marginBottom: '16px' }}>14 hari terakhir</div>
+            <div style={{ fontSize: '11px', color: '#9ca3af', marginBottom: '16px' }}>Bulan berjalan (MTD)</div>
             {loading ? <Skeleton width="100%" height={140} /> : (
               <div>
                 {/* Donut-style: stacked horizontal bar */}
@@ -437,7 +437,7 @@ export default function PulsePage() {
               <span {...tip('DIP = kartu chip dimasukkan ke mesin. SWIPE = kartu digesek. Rasio DIP tinggi menandakan mayoritas kartu chip (lebih aman).')}
                 style={{ marginLeft: '6px', fontSize: '11px', color: '#9ca3af', cursor: 'default', fontWeight: '400' }}>ⓘ</span>
             </div>
-            <div style={{ fontSize: '11px', color: '#9ca3af', marginBottom: '16px' }}>14 hari terakhir</div>
+            <div style={{ fontSize: '11px', color: '#9ca3af', marginBottom: '16px' }}>Bulan berjalan (MTD)</div>
             {loading ? <Skeleton width="100%" height={140} /> : (
               <div>
                 {/* Stacked bar */}
@@ -483,10 +483,10 @@ export default function PulsePage() {
           <div style={{ backgroundColor: '#fff', border: '1px solid #e5e7eb', borderRadius: '12px', padding: '20px 24px' }}>
             <div style={{ fontSize: '13px', fontWeight: '700', color: '#111827', marginBottom: '4px' }}>
               Distribusi Aplikasi
-              <span {...tip('Distribusi transaksi berdasarkan aplikasi yang digunakan agen dalam 14 hari terakhir. MiniATM-Swing adalah aplikasi native KB Bank.')}
+              <span {...tip('Distribusi transaksi berdasarkan aplikasi yang digunakan agen bulan berjalan (MTD). MiniATM-Swing adalah aplikasi native KB Bank.')}
                 style={{ marginLeft: '6px', fontSize: '11px', color: '#9ca3af', cursor: 'default', fontWeight: '400' }}>ⓘ</span>
             </div>
-            <div style={{ fontSize: '11px', color: '#9ca3af', marginBottom: '16px' }}>14 hari terakhir</div>
+            <div style={{ fontSize: '11px', color: '#9ca3af', marginBottom: '16px' }}>Bulan berjalan (MTD)</div>
             {/* Stacked bar */}
             <div style={{ display: 'flex', height: '16px', borderRadius: '99px', overflow: 'hidden', marginBottom: '16px' }}>
               {appDist.map((a, i) => {
@@ -531,10 +531,10 @@ export default function PulsePage() {
         <div style={{ backgroundColor: '#fff', border: '1px solid #e5e7eb', borderRadius: '12px', padding: '20px 24px' }}>
           <div style={{ fontSize: '13px', fontWeight: '700', color: '#111827', marginBottom: '4px' }}>
             Fee Rp 3.500 vs Lainnya
-            <span onMouseEnter={e => setTooltip({ text: 'Distribusi TRX berdasarkan fee sharing dalam 14 hari terakhir. Fee Rp 3.500 = transaksi via rekening Arranet (Lite/Plus).', x: e.clientX, y: e.clientY })} onMouseMove={e => setTooltip({ text: 'Distribusi TRX berdasarkan fee sharing dalam 14 hari terakhir. Fee Rp 3.500 = transaksi via rekening Arranet (Lite/Plus).', x: e.clientX, y: e.clientY })} onMouseLeave={() => setTooltip(null)}
+            <span onMouseEnter={e => setTooltip({ text: 'Distribusi TRX berdasarkan fee sharing bulan berjalan (MTD). Fee Rp 3.500 = transaksi via rekening Arranet (Lite/Plus).', x: e.clientX, y: e.clientY })} onMouseMove={e => setTooltip({ text: 'Distribusi TRX berdasarkan fee sharing bulan berjalan (MTD). Fee Rp 3.500 = transaksi via rekening Arranet (Lite/Plus).', x: e.clientX, y: e.clientY })} onMouseLeave={() => setTooltip(null)}
               style={{ marginLeft: '6px', fontSize: '11px', color: '#9ca3af', cursor: 'default', fontWeight: '400' }}>ⓘ</span>
           </div>
-          <div style={{ fontSize: '11px', color: '#9ca3af', marginBottom: '16px' }}>14 hari terakhir</div>
+          <div style={{ fontSize: '11px', color: '#9ca3af', marginBottom: '16px' }}>Bulan berjalan (MTD)</div>
           {loading ? <Skeleton width="100%" height={120} /> : (
             <div>
               <div style={{ display: 'flex', height: '16px', borderRadius: '99px', overflow: 'hidden', marginBottom: '16px' }}>
