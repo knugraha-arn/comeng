@@ -182,7 +182,7 @@ export default function MitraPage() {
       <Head><title>Kekuatan Mitra — AMARIS</title></Head>
 
       {tooltip && (
-        <div style={{ position: 'fixed', left: Math.min(tooltip.x + 12, window.innerWidth - 260), top: tooltip.y - 8, zIndex: 9999, backgroundColor: '#1f2937', color: '#f9fafb', fontSize: '11px', padding: '8px 12px', borderRadius: '8px', maxWidth: '240px', lineHeight: '1.5', pointerEvents: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.3)' }}>
+        <div style={{ position: 'fixed', left: Math.min(tooltip.x + 12, window.innerWidth - 340), top: tooltip.y - 8, zIndex: 9999, backgroundColor: '#1f2937', color: '#f9fafb', fontSize: '11px', padding: '8px 12px', borderRadius: '8px', maxWidth: '320px', lineHeight: '1.5', pointerEvents: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.3)', whiteSpace: 'pre-line' }}>
           {tooltip.text}
         </div>
       )}
@@ -197,7 +197,7 @@ export default function MitraPage() {
               const fmtNoYear = (d: string) => new Date(d).toLocaleDateString('id-ID', { day: 'numeric', month: 'short' })
               const fmtFull   = (d: string) => new Date(d).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })
               return `Data transaksi 14 hari dari tanggal ${fmtNoYear(windowStart)} sampai ${fmtFull(windowEnd)}`
-            })() : 'Performa, momentum, dan kesehatan jaringan per mitra — berdasarkan 14 hari terakhir.'}
+            })() : 'Performa, momentum, dan kesehatan jaringan per mitra.'}
           </p>
         </div>
 
@@ -242,9 +242,9 @@ export default function MitraPage() {
               <div style={{ textAlign: 'right' }}>AGEN</div>
               <div style={{ textAlign: 'right' }}>FEE (14H)</div>
               <div style={{ textAlign: 'right' }}><span {...tip('Fee dibagi jumlah agen aktif 14H — ukuran efisiensi mitra.')}>FEE/AGEN ⓘ</span></div>
-              <div style={{ textAlign: 'right' }}><span {...tip('% agen yang avg TRX/hari bulan ini > 120% vs 14H.')}>GROWING ⓘ</span></div>
-              <div style={{ textAlign: 'right' }}><span {...tip('% agen yang avg TRX/hari bulan ini < 80% vs 14H.')}>DECLINING ⓘ</span></div>
-              <div style={{ textAlign: 'right' }}><span {...tip('% agen yang avg amount/hari MTD < 50% dari avg 14H. Indikasi float menipis.')}>LIQ. LEMAH ⓘ</span></div>
+              <div style={{ textAlign: 'right' }}><span {...tip('% agen yang avg TRX/hari W2 (8–14) > 120% vs W1 (1–7).')}>GROWING ⓘ</span></div>
+              <div style={{ textAlign: 'right' }}><span {...tip('% agen yang avg TRX/hari W2 (8–14) < 80% vs W1 (1–7).')}>DECLINING ⓘ</span></div>
+              <div style={{ textAlign: 'right' }}><span {...tip('% agen yang avg amount/hari W2 < 50% dari W1. Indikasi float menipis.')}>LIQ. LEMAH ⓘ</span></div>
               <div><span {...tip('Composite score 0–100. Komponen: % Productive (30%), % Growing (25%), % rendah Declining (25%), % rendah Liquidity Lemah (20%).')}>HEALTH ⓘ</span></div>
               <div style={{ textAlign: 'right' }}>TRX 14H</div>
             </div>
