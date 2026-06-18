@@ -187,6 +187,7 @@ export default function PicPage() {
   // Ranger Detail tab
   const [rangerAgentFilter, setRangerAgentFilter] = useState<string>('semua')
   const [rangerAgents, setRangerAgents]         = useState<RangerAgent[]>([])
+  const [allRangerAgents, setAllRangerAgents]   = useState<RangerAgent[]>([])
   const [loadingRangerAgents, setLoadingRangerAgents] = useState(false)
   const [rangerAgentPage, setRangerAgentPage]   = useState(0)
   const [rangerAgentTotal, setRangerAgentTotal] = useState(0)
@@ -336,18 +337,29 @@ export default function PicPage() {
     setActiveTab('ranger_detail')
     setRangerAgentPage(0)
     setRangerAgentFilter('semua')
+    setAllRangerAgents([])
     await loadRangerAgents(ranger.pic, 0)
   }
 
   async function loadRangerAgents(pic: string, newPage: number) {
     setLoadingRangerAgents(true)
     try {
-      const [dataRes, countRes] = await Promise.all([
+      const [dataRes, allRes, countRes] = await Promise.all([
         supabase.rpc('get_ranger_agents', { p_pic: pic, p_limit: PAGE_SIZE, p_offset: newPage * PAGE_SIZE }),
+        supabase.rpc('get_ranger_agents', { p_pic: pic, p_limit: 9999, p_offset: 0 }),
         supabase.rpc('get_ranger_agents_count', { p_pic: pic }),
       ])
       setRangerAgents(dataRes.data ?? [])
+      setAllRangerAgents(allRes.data ?? [])
       setRangerAgentTotal(Number(countRes.data ?? 0))
+    } finally { setLoadingRangerAgents(false) }
+  }
+
+  async function loadRangerAgentsPage(pic: string, newPage: number) {
+    setLoadingRangerAgents(true)
+    try {
+      const { data } = await supabase.rpc('get_ranger_agents', { p_pic: pic, p_limit: PAGE_SIZE, p_offset: newPage * PAGE_SIZE })
+      setRangerAgents(data ?? [])
     } finally { setLoadingRangerAgents(false) }
   }
 
@@ -754,11 +766,11 @@ export default function PicPage() {
             {/* Agent List */}
             {(() => {
               // Count per trend dari semua agen yang di-load
-              const growingList   = rangerAgents.filter(a => a.trnd === 'growing')
-              const decliningList = rangerAgents.filter(a => a.trnd === 'declining')
-              const consistentList= rangerAgents.filter(a => a.trnd === 'consistent')
-              const baruList      = rangerAgents.filter(a => a.trnd === 'baru')
-              const hilangList    = rangerAgents.filter(a => a.trnd === 'hilang')
+              const growingList   = allRangerAgents.filter(a => a.trnd === 'growing')
+              const decliningList = allRangerAgents.filter(a => a.trnd === 'declining')
+              const consistentList= allRangerAgents.filter(a => a.trnd === 'consistent')
+              const baruList      = allRangerAgents.filter(a => a.trnd === 'baru')
+              const hilangList    = allRangerAgents.filter(a => a.trnd === 'hilang')
 
               const filtered = rangerAgentFilter === 'semua'      ? rangerAgents
                              : rangerAgentFilter === 'growing'    ? growingList
@@ -772,7 +784,7 @@ export default function PicPage() {
                 exportCSV(
                   `agen_${selectedRanger.pic.replace(/[^a-zA-Z0-9]/g, '_')}_${new Date().toISOString().split('T')[0]}.csv`,
                   ['Serial Number','Merchant Name','Mitra','Hari Aktif 14H','TRX 14H','Fee 14H','Avg TRX/Hari 14H','Avg W1','Avg W2','Trend','% Change','Bucket'],
-                  filtered.map(a => [a.sn, a.mer_name ?? '', a.mtr ?? '', a.act_days_14, a.tot_trx_14, a.tot_fee_14, a.avg_trx_14, a.avg_w1, a.avg_w2, a.trnd, a.chg_pct, a.bkt])
+                  allRangerAgents.map(a => [a.sn, a.mer_name ?? '', a.mtr ?? '', a.act_days_14, a.tot_trx_14, a.tot_fee_14, a.avg_trx_14, a.avg_w1, a.avg_w2, a.trnd, a.chg_pct, a.bkt])
                 )
               }
 
@@ -871,10 +883,10 @@ export default function PicPage() {
             {/* Agent Pagination */}
             {agentTotalPages > 1 && (
               <div style={{ display: 'flex', justifyContent: 'center', gap: '8px', alignItems: 'center', marginTop: '16px' }}>
-                <button onClick={() => { setRangerAgentPage(p => Math.max(0, p - 1)); loadRangerAgents(selectedRanger.pic, Math.max(0, rangerAgentPage - 1)) }} disabled={rangerAgentPage === 0}
+                <button onClick={() => { setRangerAgentPage(p => Math.max(0, p - 1)); loadRangerAgentsPage(selectedRanger.pic, Math.max(0, rangerAgentPage - 1)) }} disabled={rangerAgentPage === 0}
                   style={{ padding: '7px 14px', borderRadius: '8px', border: '1px solid #e5e7eb', backgroundColor: '#fff', color: rangerAgentPage === 0 ? '#d1d5db' : '#374151', fontSize: '13px', cursor: rangerAgentPage === 0 ? 'not-allowed' : 'pointer' }}>← Prev</button>
                 <span style={{ fontSize: '13px', color: '#6b7280' }}>{rangerAgentPage + 1} / {agentTotalPages}</span>
-                <button onClick={() => { setRangerAgentPage(p => Math.min(agentTotalPages - 1, p + 1)); loadRangerAgents(selectedRanger.pic, Math.min(agentTotalPages - 1, rangerAgentPage + 1)) }} disabled={rangerAgentPage >= agentTotalPages - 1}
+                <button onClick={() => { setRangerAgentPage(p => Math.min(agentTotalPages - 1, p + 1)); loadRangerAgentsPage(selectedRanger.pic, Math.min(agentTotalPages - 1, rangerAgentPage + 1)) }} disabled={rangerAgentPage >= agentTotalPages - 1}
                   style={{ padding: '7px 14px', borderRadius: '8px', border: '1px solid #e5e7eb', backgroundColor: '#fff', color: rangerAgentPage >= agentTotalPages - 1 ? '#d1d5db' : '#374151', fontSize: '13px', cursor: rangerAgentPage >= agentTotalPages - 1 ? 'not-allowed' : 'pointer' }}>Next →</button>
               </div>
             )}
