@@ -43,6 +43,17 @@ interface ReturningAgent {
   gap_threshold: number
 }
 
+interface SwipeChampionAgent {
+  serial_number: string
+  merchant_name: string | null
+  mitra: string | null
+  pic: string | null
+  swipe_count_14d: number
+  total_trx_14d: number
+  pct_swipe: number
+  total_fee_14d: number
+}
+
 interface AgentDayDetail {
   transaction_date: string
   total_trx: number
@@ -158,7 +169,7 @@ export default function ProductivityPage() {
   const [totalCount, setTotalCount] = useState(0)
   const [trendCounts, setTrendCounts] = useState({ growing: 0, declining: 0, consistent: 0 })
 
-  const [activeTab, setActiveTab] = useState<'growing' | 'declining' | 'consistent' | 'returning' | ''>('')
+  const [activeTab, setActiveTab] = useState<'growing' | 'declining' | 'consistent' | 'returning' | 'jagoan_bansos' | ''>('')
   const [filterMitra, setFilterMitra] = useState('')
   const [filterPic, setFilterPic] = useState('')
   const [page, setPage] = useState(0)
@@ -168,6 +179,11 @@ export default function ProductivityPage() {
   const [returningCount, setReturningCount] = useState(0)
   const [loadingReturning, setLoadingReturning] = useState(false)
   const [returningPage, setReturningPage] = useState(0)
+
+  const [swipeChampions, setSwipeChampions] = useState<SwipeChampionAgent[]>([])
+  const [swipeChampionCount, setSwipeChampionCount] = useState(0)
+  const [loadingSwipeChampion, setLoadingSwipeChampion] = useState(false)
+  const [swipeChampionPage, setSwipeChampionPage] = useState(0)
 
   const [mitras, setMitras] = useState<string[]>([])
   const [pics, setPics] = useState<string[]>([])
@@ -188,6 +204,12 @@ export default function ProductivityPage() {
   const [returningDetail, setReturningDetail] = useState<AgentDayDetail[]>([])
   const [returningLiqDetail, setReturningLiqDetail] = useState<AgentLiquidityDetail[]>([])
   const [loadingReturningDetail, setLoadingReturningDetail] = useState(false)
+
+  // Drawer — swipe champion (Jagoan Bansos)
+  const [selectedSwipeChampion, setSelectedSwipeChampion] = useState<SwipeChampionAgent | null>(null)
+  const [swipeChampionDetail, setSwipeChampionDetail] = useState<AgentDayDetail[]>([])
+  const [swipeChampionLiqDetail, setSwipeChampionLiqDetail] = useState<AgentLiquidityDetail[]>([])
+  const [loadingSwipeChampionDetail, setLoadingSwipeChampionDetail] = useState(false)
 
   const [tooltip, setTooltip] = useState<{ text: string, x: number, y: number } | null>(null)
   const [exporting, setExporting] = useState(false)
@@ -237,6 +259,9 @@ export default function ProductivityPage() {
         supabase.rpc('get_returning_agents_count', { p_mitra: '', p_pic: '' }),
       ])
       setReturningCount(Number(rc.data ?? 0))
+
+      const scc = await supabase.rpc('get_swipe_champion_agents_count', { p_mitra: '', p_pic: '' })
+      setSwipeChampionCount(Number(scc.data ?? 0))
     } finally {
       setLoading(false)
     }
@@ -281,36 +306,56 @@ export default function ProductivityPage() {
     }
   }
 
+  async function loadSwipeChampionAgents(newPage: number, mitra: string, pic: string) {
+    setLoadingSwipeChampion(true)
+    try {
+      const [dataRes, countRes] = await Promise.all([
+        supabase.rpc('get_swipe_champion_agents', { p_mitra: mitra, p_pic: pic, p_limit: PAGE_SIZE, p_offset: newPage * PAGE_SIZE }),
+        supabase.rpc('get_swipe_champion_agents_count', { p_mitra: mitra, p_pic: pic }),
+      ])
+      setSwipeChampions(dataRes.data ?? [])
+      setSwipeChampionCount(Number(countRes.data ?? 0))
+    } finally {
+      setLoadingSwipeChampion(false)
+    }
+  }
+
   async function handleTabChange(tab: typeof activeTab) {
-    setActiveTab(tab); setPage(0); setReturningPage(0)
+    setActiveTab(tab); setPage(0); setReturningPage(0); setSwipeChampionPage(0)
     if (tab === 'returning') await loadReturningAgents(0, filterMitra, filterPic)
+    else if (tab === 'jagoan_bansos') await loadSwipeChampionAgents(0, filterMitra, filterPic)
     else await loadAgents(0, tab, filterMitra, filterPic)
   }
 
   async function handleMitraChange(mitra: string) {
-    setFilterMitra(mitra); setFilterPic(''); setPage(0); setReturningPage(0)
+    setFilterMitra(mitra); setFilterPic(''); setPage(0); setReturningPage(0); setSwipeChampionPage(0)
     await loadTrendCounts(mitra, '')
     if (activeTab === 'returning') await loadReturningAgents(0, mitra, '')
+    else if (activeTab === 'jagoan_bansos') await loadSwipeChampionAgents(0, mitra, '')
     else await loadAgents(0, activeTab, mitra, '')
   }
 
   async function handlePicChange(pic: string) {
-    setFilterPic(pic); setPage(0); setReturningPage(0)
+    setFilterPic(pic); setPage(0); setReturningPage(0); setSwipeChampionPage(0)
     if (activeTab === 'returning') await loadReturningAgents(0, filterMitra, pic)
+    else if (activeTab === 'jagoan_bansos') await loadSwipeChampionAgents(0, filterMitra, pic)
     else await loadAgents(0, activeTab, filterMitra, pic)
   }
 
   async function handlePageChange(newPage: number) {
     if (activeTab === 'returning') { setReturningPage(newPage); await loadReturningAgents(newPage, filterMitra, filterPic) }
+    else if (activeTab === 'jagoan_bansos') { setSwipeChampionPage(newPage); await loadSwipeChampionAgents(newPage, filterMitra, filterPic) }
     else { setPage(newPage); await loadAgents(newPage, activeTab, filterMitra, filterPic) }
   }
 
   async function handleReset() {
-    setFilterMitra(''); setFilterPic(''); setActiveTab(''); setPage(0); setReturningPage(0)
+    setFilterMitra(''); setFilterPic(''); setActiveTab(''); setPage(0); setReturningPage(0); setSwipeChampionPage(0)
     await loadTrendCounts('', '')
     await loadAgents(0, '', '', '')
     const rc = await supabase.rpc('get_returning_agents_count', { p_mitra: '', p_pic: '' })
     setReturningCount(Number(rc.data ?? 0))
+    const scc = await supabase.rpc('get_swipe_champion_agents_count', { p_mitra: '', p_pic: '' })
+    setSwipeChampionCount(Number(scc.data ?? 0))
   }
 
   async function openDrawer(agent: ProductivityAgent) {
@@ -337,6 +382,18 @@ export default function ProductivityPage() {
     } finally { setLoadingReturningDetail(false) }
   }
 
+  async function openSwipeChampionDrawer(agent: SwipeChampionAgent) {
+    setSelectedSwipeChampion(agent); setSwipeChampionDetail([]); setSwipeChampionLiqDetail([]); setLoadingSwipeChampionDetail(true)
+    try {
+      const [detailRes, liquidityRes] = await Promise.all([
+        supabase.rpc('get_agent_detail', { p_serial: agent.serial_number, p_since: sinceDate, p_until: lastDate }),
+        supabase.rpc('get_agent_liquidity_summary', { p_serial: agent.serial_number }),
+      ])
+      setSwipeChampionDetail(detailRes.data ?? [])
+      setSwipeChampionLiqDetail(liquidityRes.data ?? [])
+    } finally { setLoadingSwipeChampionDetail(false) }
+  }
+
   // Export CSV
   async function handleExport() {
     setExporting(true)
@@ -356,6 +413,18 @@ export default function ProductivityPage() {
         ])
         exportCSV(`produktifitas_kembali_aktif_${lastDate}.csv`,
           ['Serial','Merchant','Mitra','PIC','Tgl Kembali W2','Hari Sejak Kembali','TRX W1','TRX W2','TRX 14H','Avg TRX/Hari','Total Fee','Max Gap (hari)','Threshold','Status Absen'],
+          rows)
+      } else if (activeTab === 'jagoan_bansos') {
+        // Fetch all swipe champions
+        const { data } = await supabase.rpc('get_swipe_champion_agents', {
+          p_mitra: filterMitra, p_pic: filterPic, p_limit: 99999, p_offset: 0
+        })
+        const rows = (data ?? []).map((a: SwipeChampionAgent) => [
+          a.serial_number, a.merchant_name ?? '', a.mitra ?? '', a.pic ?? '',
+          a.swipe_count_14d, a.pct_swipe, a.total_trx_14d, a.total_fee_14d,
+        ])
+        exportCSV(`produktifitas_jagoan_bansos_${lastDate}.csv`,
+          ['Serial','Merchant','Mitra','PIC','SWIPE 14H','% SWIPE','Total TRX 14H','Total Fee 14H'],
           rows)
       } else {
         // Fetch all trend agents
@@ -377,8 +446,8 @@ export default function ProductivityPage() {
     } finally { setExporting(false) }
   }
 
-  const currentPage  = activeTab === 'returning' ? returningPage : page
-  const currentTotal = activeTab === 'returning' ? returningCount : totalCount
+  const currentPage  = activeTab === 'returning' ? returningPage : activeTab === 'jagoan_bansos' ? swipeChampionPage : page
+  const currentTotal = activeTab === 'returning' ? returningCount : activeTab === 'jagoan_bansos' ? swipeChampionCount : totalCount
   const totalPages   = Math.ceil(currentTotal / PAGE_SIZE)
   const feeProgress  = progress && monthlyTarget ? Math.min(100, Math.round(progress.total_fee / monthlyTarget * 100)) : null
   const projectedFee = progress && progress.days_elapsed > 0 ? Math.round(progress.total_fee / progress.days_elapsed * progress.days_in_month) : null
@@ -386,7 +455,8 @@ export default function ProductivityPage() {
   const currentYear  = progress ? new Date(progress.end_date).getFullYear() : ''
   const liquiditySummary = liquidityDetail[0] ?? null
   const returningLiqSummary = returningLiqDetail[0] ?? null
-  const isLoadingTable = activeTab === 'returning' ? loadingReturning : loading
+  const swipeChampionLiqSummary = swipeChampionLiqDetail[0] ?? null
+  const isLoadingTable = activeTab === 'returning' ? loadingReturning : activeTab === 'jagoan_bansos' ? loadingSwipeChampion : loading
 
   function TrendChip({ trend }: { trend: string }) {
     const cfg = TREND_CONFIG[trend as keyof typeof TREND_CONFIG] ?? TREND_CONFIG.consistent
@@ -506,6 +576,19 @@ export default function ProductivityPage() {
               </button>
             )
           })()}
+          {(() => {
+            const isActive = activeTab === 'jagoan_bansos'
+            return (
+              <button onClick={() => handleTabChange(isActive ? '' : 'jagoan_bansos')}
+                onMouseEnter={e => setTooltip({ text: 'Agen dengan total transaksi SWIPE ≥100 dalam 14 hari terakhir. SWIPE umumnya terkait transaksi pencairan bansos — agen di sini melayani volume SWIPE besar, terlepas dari berapa banyak transaksi DIP-nya.', x: e.clientX, y: e.clientY })}
+                onMouseMove={e => setTooltip({ text: 'Agen dengan total transaksi SWIPE ≥100 dalam 14 hari terakhir. SWIPE umumnya terkait transaksi pencairan bansos — agen di sini melayani volume SWIPE besar, terlepas dari berapa banyak transaksi DIP-nya.', x: e.clientX, y: e.clientY })}
+                onMouseLeave={() => setTooltip(null)}
+                style={{ padding: '9px 18px', borderRadius: '8px', cursor: 'pointer', border: `2px solid ${isActive ? '#c2410c' : '#e5e7eb'}`, backgroundColor: isActive ? '#fff7ed' : '#fff', color: isActive ? '#c2410c' : '#6b7280', fontSize: '13px', fontWeight: '600', transition: 'all 0.15s', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <span>🪪</span><span>Jagoan Bansos</span>
+                <span style={{ padding: '1px 8px', borderRadius: '99px', fontSize: '11px', backgroundColor: isActive ? '#fff' : '#f3f4f6', color: isActive ? '#c2410c' : '#9ca3af', fontWeight: '700' }}>{swipeChampionCount}</span>
+              </button>
+            )
+          })()}
         </div>
 
         {/* Filters + Export */}
@@ -597,6 +680,52 @@ export default function ProductivityPage() {
             </div>
           ) : (
             <div style={{ textAlign: 'center', padding: '60px', backgroundColor: '#f9fafb', borderRadius: '10px', border: '1px dashed #e5e7eb', color: '#9ca3af', fontSize: '13px' }}>Tidak ada agen kembali aktif</div>
+          )
+        ) : activeTab === 'jagoan_bansos' ? (
+          loadingSwipeChampion ? (
+            <div style={{ border: '1px solid #e5e7eb', borderRadius: '10px', overflow: 'hidden' }}>
+              {[1,2,3,4,5].map(i => (
+                <div key={i} style={{ display: 'grid', gridTemplateColumns: '1fr 150px 150px 100px 90px 90px 100px', padding: '13px 16px', borderBottom: '1px solid #f3f4f6', gap: '16px', alignItems: 'center' }}>
+                  <div><Skeleton width={120} height={13} /><div style={{marginTop:4}}><Skeleton width={80} height={10} /></div></div>
+                  <Skeleton width={100} height={12} /><Skeleton width={100} height={12} /><Skeleton width={60} height={12} /><Skeleton width={60} height={12} /><Skeleton width={60} height={12} /><Skeleton width={70} height={12} />
+                </div>
+              ))}
+            </div>
+          ) : swipeChampions.length > 0 ? (
+            <div style={{ border: '1px solid #e5e7eb', borderRadius: '10px', overflow: 'hidden' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 150px 150px 100px 90px 90px 100px', padding: '10px 16px', backgroundColor: '#f9fafb', borderBottom: '1px solid #e5e7eb', fontSize: '11px', fontWeight: '700', color: '#9ca3af', letterSpacing: '0.05em' }}>
+                <div>AGEN</div>
+                <div>MITRA</div>
+                <div>PIC</div>
+                <div style={{ textAlign: 'right' }}>
+                  <span onMouseEnter={e => setTooltip({ text: 'Total transaksi SWIPE dalam 14 hari terakhir. Minimal 100 untuk masuk kategori ini.', x: e.clientX, y: e.clientY })} onMouseMove={e => setTooltip({ text: 'Total transaksi SWIPE dalam 14 hari terakhir. Minimal 100 untuk masuk kategori ini.', x: e.clientX, y: e.clientY })} onMouseLeave={() => setTooltip(null)}>
+                    SWIPE 14H ⓘ
+                  </span>
+                </div>
+                <div style={{ textAlign: 'right' }}>% SWIPE</div>
+                <div style={{ textAlign: 'right' }}>TRX 14H</div>
+                <div style={{ textAlign: 'right' }}>FEE 14H</div>
+              </div>
+              {swipeChampions.map((agent, i) => (
+                <div key={agent.serial_number} onClick={() => openSwipeChampionDrawer(agent)}
+                  style={{ display: 'grid', gridTemplateColumns: '1fr 150px 150px 100px 90px 90px 100px', padding: '11px 16px', borderBottom: i < swipeChampions.length - 1 ? '1px solid #f3f4f6' : 'none', alignItems: 'center', backgroundColor: '#fff', cursor: 'pointer' }}
+                  onMouseEnter={e => e.currentTarget.style.backgroundColor = '#f9fafb'}
+                  onMouseLeave={e => e.currentTarget.style.backgroundColor = '#fff'}>
+                  <div>
+                    <div style={{ fontSize: '13px', fontWeight: '600', color: '#111827' }}>{agent.merchant_name ?? agent.serial_number}</div>
+                    <div style={{ fontSize: '10px', color: '#9ca3af', marginTop: '1px' }}>{agent.serial_number}</div>
+                  </div>
+                  <div style={{ fontSize: '12px', color: '#374151', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{agent.mitra ?? '—'}</div>
+                  <div style={{ fontSize: '12px', color: '#374151', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{agent.pic ?? '—'}</div>
+                  <div style={{ fontSize: '13px', fontWeight: '700', color: '#c2410c', textAlign: 'right' }}>{agent.swipe_count_14d.toLocaleString('id')}</div>
+                  <div style={{ fontSize: '12px', color: '#374151', textAlign: 'right' }}>{agent.pct_swipe}%</div>
+                  <div style={{ fontSize: '12px', color: '#374151', textAlign: 'right' }}>{agent.total_trx_14d.toLocaleString('id')}</div>
+                  <div style={{ fontSize: '12px', fontWeight: '600', color: '#374151', textAlign: 'right' }}>{formatFee(agent.total_fee_14d)}</div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div style={{ textAlign: 'center', padding: '60px', backgroundColor: '#f9fafb', borderRadius: '10px', border: '1px dashed #e5e7eb', color: '#9ca3af', fontSize: '13px' }}>Tidak ada agen Jagoan Bansos (SWIPE ≥100 dalam 14H)</div>
           )
         ) : (
           loading ? (
@@ -986,6 +1115,143 @@ export default function ProductivityPage() {
                     </div>
                   )
                 })()}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Drawer — Jagoan Bansos (SWIPE Champion) */}
+      {selectedSwipeChampion && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 1000, display: 'flex', justifyContent: 'flex-end' }}>
+          <div onClick={() => setSelectedSwipeChampion(null)} style={{ position: 'absolute', inset: 0, backgroundColor: 'rgba(0,0,0,0.3)' }} />
+          <div style={{ position: 'relative', width: '480px', height: '100%', backgroundColor: '#fff', boxShadow: '-4px 0 24px rgba(0,0,0,0.12)', display: 'flex', flexDirection: 'column', overflowY: 'auto' }}>
+            <div style={{ padding: '20px 24px', borderBottom: '1px solid #f3f4f6', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', position: 'sticky', top: 0, backgroundColor: '#fff', zIndex: 1 }}>
+              <div>
+                <div style={{ fontSize: '18px', fontWeight: '800', color: '#111827', marginBottom: '4px' }}>{selectedSwipeChampion.merchant_name ?? selectedSwipeChampion.serial_number}</div>
+                <div style={{ fontSize: '11px', color: '#9ca3af', marginBottom: '6px' }}>{selectedSwipeChampion.serial_number}</div>
+                <span style={{ padding: '2px 10px', borderRadius: '99px', fontSize: '11px', fontWeight: '700', backgroundColor: '#fff7ed', color: '#c2410c', border: '1px solid #fed7aa' }}>
+                  🪪 Jagoan Bansos · {selectedSwipeChampion.swipe_count_14d.toLocaleString('id')} SWIPE (14H)
+                </span>
+              </div>
+              <button onClick={() => setSelectedSwipeChampion(null)} style={{ padding: '6px 10px', borderRadius: '8px', border: '1px solid #e5e7eb', backgroundColor: '#fff', color: '#6b7280', fontSize: '18px', cursor: 'pointer', lineHeight: 1 }}>✕</button>
+            </div>
+            {loadingSwipeChampionDetail ? (
+              <div style={{ padding: '40px', textAlign: 'center', color: '#9ca3af', fontSize: '13px' }}>Memuat data...</div>
+            ) : (
+              <div style={{ padding: '20px 24px' }}>
+
+                {/* 1. Info Agen */}
+                {swipeChampionDetail.length > 0 && (() => {
+                  const latest = swipeChampionDetail[swipeChampionDetail.length - 1]
+                  return (
+                    <div style={{ marginBottom: '24px' }}>
+                      <div style={{ fontSize: '11px', fontWeight: '700', color: '#9ca3af', letterSpacing: '0.08em', marginBottom: '12px' }}>INFO AGEN</div>
+                      {[
+                        { label: 'Mitra', value: latest.mitra }, { label: 'PIC', value: latest.pic },
+                        { label: 'Alamat', value: latest.alamat_struk }, { label: 'Brand', value: latest.brand },
+                        { label: 'Mesin', value: latest.tipe_mesin }, { label: 'Aplikasi', value: latest.source_app },
+                        { label: 'Terminal', value: latest.terminal_data_source },
+                      ].filter(r => r.value).map(r => (
+                        <div key={r.label} style={{ display: 'flex', gap: '12px', padding: '7px 0', borderBottom: '1px solid #f9fafb' }}>
+                          <span style={{ fontSize: '12px', color: '#9ca3af', minWidth: '80px', flexShrink: 0 }}>{r.label}</span>
+                          <span style={{ fontSize: '12px', color: '#111827', fontWeight: '500' }}>{r.value}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )
+                })()}
+
+                {/* 2. Ringkasan SWIPE */}
+                <div style={{ marginBottom: '24px' }}>
+                  <div style={{ fontSize: '11px', fontWeight: '700', color: '#9ca3af', letterSpacing: '0.08em', marginBottom: '12px' }}>RINGKASAN 14 HARI</div>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '10px' }}>
+                    {[
+                      { label: 'SWIPE 14H', value: selectedSwipeChampion.swipe_count_14d.toLocaleString('id'), highlight: true },
+                      { label: '% SWIPE', value: `${selectedSwipeChampion.pct_swipe}%` },
+                      { label: 'Total TRX 14H', value: selectedSwipeChampion.total_trx_14d.toLocaleString('id') },
+                      { label: 'Total Fee 14H', value: formatFee(selectedSwipeChampion.total_fee_14d) },
+                    ].map(s => (
+                      <div key={s.label} style={{ padding: '10px 12px', backgroundColor: (s as any).highlight ? '#fff7ed' : '#f9fafb', borderRadius: '8px', textAlign: 'center', border: (s as any).highlight ? '1px solid #fed7aa' : 'none' }}>
+                        <div style={{ fontSize: '14px', fontWeight: '700', color: (s as any).highlight ? '#c2410c' : '#111827' }}>{s.value}</div>
+                        <div style={{ fontSize: '10px', color: '#9ca3af', marginTop: '2px' }}>{s.label}</div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* 3. DIP vs SWIPE breakdown */}
+                {swipeChampionDetail.length > 0 && (() => {
+                  const totalDip   = swipeChampionDetail.reduce((s, d) => s + Number(d.dip_count), 0)
+                  const totalSwipe = swipeChampionDetail.reduce((s, d) => s + Number(d.swipe_count), 0)
+                  const total      = totalDip + totalSwipe
+                  if (total === 0) return null
+                  return (
+                    <div style={{ marginBottom: '24px' }}>
+                      <div style={{ fontSize: '11px', fontWeight: '700', color: '#9ca3af', letterSpacing: '0.08em', marginBottom: '12px' }}>TIPE KARTU</div>
+                      <div style={{ display: 'flex', gap: '8px' }}>
+                        <div style={{ flex: totalDip || 1, padding: '8px', borderRadius: '6px', backgroundColor: '#eff6ff', textAlign: 'center' }}>
+                          <div style={{ fontSize: '16px', fontWeight: '700', color: '#1d4ed8' }}>{totalDip.toLocaleString('id')}</div>
+                          <div style={{ fontSize: '10px', color: '#6b7280' }}>DIP (Chip)</div>
+                          <div style={{ fontSize: '10px', color: '#9ca3af' }}>{Math.round(totalDip/total*100)}%</div>
+                        </div>
+                        <div style={{ flex: totalSwipe || 1, padding: '8px', borderRadius: '6px', backgroundColor: '#fff7ed', textAlign: 'center', border: '1px solid #fed7aa' }}>
+                          <div style={{ fontSize: '16px', fontWeight: '700', color: '#c2410c' }}>{totalSwipe.toLocaleString('id')}</div>
+                          <div style={{ fontSize: '10px', color: '#6b7280' }}>SWIPE (Bansos)</div>
+                          <div style={{ fontSize: '10px', color: '#9ca3af' }}>{Math.round(totalSwipe/total*100)}%</div>
+                        </div>
+                      </div>
+                    </div>
+                  )
+                })()}
+
+                {/* 4. Likuiditas */}
+                {swipeChampionLiqSummary && (() => {
+                  const cfg = LIQUIDITY_CONFIG[swipeChampionLiqSummary.liquidity_status] ?? LIQUIDITY_CONFIG.no_data
+                  return (
+                    <div style={{ marginBottom: '24px' }}>
+                      <div style={{ fontSize: '11px', fontWeight: '700', color: '#9ca3af', letterSpacing: '0.08em', marginBottom: '12px' }}>LIKUIDITAS AGEN</div>
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                        <div style={{ padding: '10px 12px', backgroundColor: '#f9fafb', borderRadius: '8px', textAlign: 'center' }}>
+                          <div style={{ fontSize: '14px', fontWeight: '700', color: '#111827' }}>{formatAmount(swipeChampionLiqSummary.avg_daily_amount_14d)}</div>
+                          <div style={{ fontSize: '10px', color: '#9ca3af', marginTop: '2px' }}>Avg Amount/Hari (14H)</div>
+                        </div>
+                        <div style={{ padding: '10px 12px', backgroundColor: cfg.bg, borderRadius: '8px', textAlign: 'center', border: `1px solid ${cfg.border}` }}>
+                          <div style={{ fontSize: '14px', fontWeight: '700', color: cfg.color }}>{swipeChampionLiqSummary.liquidity_ratio?.toFixed(2)}x</div>
+                          <div style={{ fontSize: '10px', color: cfg.color, marginTop: '2px', opacity: 0.8 }}>{cfg.sublabel}</div>
+                          <div style={{ marginTop: '4px' }}><LiquidityChip status={swipeChampionLiqSummary.liquidity_status} /></div>
+                        </div>
+                      </div>
+                    </div>
+                  )
+                })()}
+
+                {/* 5. Grafik TRX per hari */}
+                {swipeChampionDetail.length > 0 && (
+                  <div>
+                    <div style={{ fontSize: '11px', fontWeight: '700', color: '#9ca3af', letterSpacing: '0.08em', marginBottom: '12px' }}>TRANSAKSI PER HARI (14H)</div>
+                    <div style={{ display: 'flex', alignItems: 'flex-end', gap: '3px', height: '80px' }}>
+                      {(() => {
+                        const maxTrx = Math.max(...swipeChampionDetail.map(d => Number(d.total_trx)), 1)
+                        const sd = new Date(sinceDate)
+                        return Array.from({ length: 14 }, (_, i) => {
+                          const d = new Date(sd); d.setDate(sd.getDate() + i)
+                          const dateStr = d.toISOString().split('T')[0]
+                          const found = swipeChampionDetail.find(a => a.transaction_date === dateStr)
+                          const trx = found ? Number(found.total_trx) : 0
+                          return (
+                            <div key={dateStr} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px' }} title={`${dateStr}: ${trx} trx`}>
+                              <div style={{ width: '100%', height: `${Math.max(4, (trx / maxTrx) * 64)}px`, backgroundColor: trx > 0 ? '#c2410c' : '#f3f4f6', borderRadius: '3px 3px 0 0', transition: 'height 0.3s' }} />
+                              <div style={{ fontSize: '8px', color: '#d1d5db', writingMode: 'vertical-rl', transform: 'rotate(180deg)' }}>
+                                {new Date(dateStr).toLocaleDateString('id-ID', { day: 'numeric', month: 'short' })}
+                              </div>
+                            </div>
+                          )
+                        })
+                      })()}
+                    </div>
+                  </div>
+                )}
               </div>
             )}
           </div>
