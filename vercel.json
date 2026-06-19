@@ -11,6 +11,9 @@
     },
     "pages/api/parse-upload.ts": {
       "maxDuration": 60
+    },
+    "pages/api/notify/pulse-email.ts": {
+      "maxDuration": 30
     }
   }
 }
