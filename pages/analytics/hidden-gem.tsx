@@ -54,6 +54,20 @@ interface SwipeChampionAgent {
   total_fee_14d: number
 }
 
+interface LostAgent {
+  serial_number: string
+  merchant_name: string | null
+  mitra: string | null
+  pic: string | null
+  last_active_date: string
+  days_since_lost: number
+  trx_count_14d: number
+  trx_count_w1: number
+  trx_count_w2: number
+  avg_trx_w1: number
+  total_fee_14d: number
+}
+
 interface AgentDayDetail {
   transaction_date: string
   total_trx: number
@@ -169,7 +183,7 @@ export default function ProductivityPage() {
   const [totalCount, setTotalCount] = useState(0)
   const [trendCounts, setTrendCounts] = useState({ growing: 0, declining: 0, consistent: 0 })
 
-  const [activeTab, setActiveTab] = useState<'growing' | 'declining' | 'consistent' | 'returning' | 'jagoan_bansos' | ''>('')
+  const [activeTab, setActiveTab] = useState<'growing' | 'declining' | 'consistent' | 'returning' | 'jagoan_bansos' | 'lost_w2' | ''>('')
   const [filterMitra, setFilterMitra] = useState('')
   const [filterPic, setFilterPic] = useState('')
   const [page, setPage] = useState(0)
@@ -184,6 +198,11 @@ export default function ProductivityPage() {
   const [swipeChampionCount, setSwipeChampionCount] = useState(0)
   const [loadingSwipeChampion, setLoadingSwipeChampion] = useState(false)
   const [swipeChampionPage, setSwipeChampionPage] = useState(0)
+
+  const [lostAgents, setLostAgents] = useState<LostAgent[]>([])
+  const [lostCount, setLostCount] = useState(0)
+  const [loadingLost, setLoadingLost] = useState(false)
+  const [lostPage, setLostPage] = useState(0)
 
   const [mitras, setMitras] = useState<string[]>([])
   const [pics, setPics] = useState<string[]>([])
@@ -210,6 +229,12 @@ export default function ProductivityPage() {
   const [swipeChampionDetail, setSwipeChampionDetail] = useState<AgentDayDetail[]>([])
   const [swipeChampionLiqDetail, setSwipeChampionLiqDetail] = useState<AgentLiquidityDetail[]>([])
   const [loadingSwipeChampionDetail, setLoadingSwipeChampionDetail] = useState(false)
+
+  // Drawer — lost agents (Hilang W2)
+  const [selectedLost, setSelectedLost] = useState<LostAgent | null>(null)
+  const [lostDetail, setLostDetail] = useState<AgentDayDetail[]>([])
+  const [lostLiqDetail, setLostLiqDetail] = useState<AgentLiquidityDetail[]>([])
+  const [loadingLostDetail, setLoadingLostDetail] = useState(false)
 
   const [tooltip, setTooltip] = useState<{ text: string, x: number, y: number } | null>(null)
   const [exporting, setExporting] = useState(false)
@@ -262,6 +287,9 @@ export default function ProductivityPage() {
 
       const scc = await supabase.rpc('get_swipe_champion_agents_count', { p_mitra: '', p_pic: '' })
       setSwipeChampionCount(Number(scc.data ?? 0))
+
+      const lc = await supabase.rpc('get_lost_agents_count', { p_mitra: '', p_pic: '' })
+      setLostCount(Number(lc.data ?? 0))
     } finally {
       setLoading(false)
     }
@@ -320,42 +348,62 @@ export default function ProductivityPage() {
     }
   }
 
+  async function loadLostAgents(newPage: number, mitra: string, pic: string) {
+    setLoadingLost(true)
+    try {
+      const [dataRes, countRes] = await Promise.all([
+        supabase.rpc('get_lost_agents', { p_mitra: mitra, p_pic: pic, p_limit: PAGE_SIZE, p_offset: newPage * PAGE_SIZE }),
+        supabase.rpc('get_lost_agents_count', { p_mitra: mitra, p_pic: pic }),
+      ])
+      setLostAgents(dataRes.data ?? [])
+      setLostCount(Number(countRes.data ?? 0))
+    } finally {
+      setLoadingLost(false)
+    }
+  }
+
   async function handleTabChange(tab: typeof activeTab) {
-    setActiveTab(tab); setPage(0); setReturningPage(0); setSwipeChampionPage(0)
+    setActiveTab(tab); setPage(0); setReturningPage(0); setSwipeChampionPage(0); setLostPage(0)
     if (tab === 'returning') await loadReturningAgents(0, filterMitra, filterPic)
     else if (tab === 'jagoan_bansos') await loadSwipeChampionAgents(0, filterMitra, filterPic)
+    else if (tab === 'lost_w2') await loadLostAgents(0, filterMitra, filterPic)
     else await loadAgents(0, tab, filterMitra, filterPic)
   }
 
   async function handleMitraChange(mitra: string) {
-    setFilterMitra(mitra); setFilterPic(''); setPage(0); setReturningPage(0); setSwipeChampionPage(0)
+    setFilterMitra(mitra); setFilterPic(''); setPage(0); setReturningPage(0); setSwipeChampionPage(0); setLostPage(0)
     await loadTrendCounts(mitra, '')
     if (activeTab === 'returning') await loadReturningAgents(0, mitra, '')
     else if (activeTab === 'jagoan_bansos') await loadSwipeChampionAgents(0, mitra, '')
+    else if (activeTab === 'lost_w2') await loadLostAgents(0, mitra, '')
     else await loadAgents(0, activeTab, mitra, '')
   }
 
   async function handlePicChange(pic: string) {
-    setFilterPic(pic); setPage(0); setReturningPage(0); setSwipeChampionPage(0)
+    setFilterPic(pic); setPage(0); setReturningPage(0); setSwipeChampionPage(0); setLostPage(0)
     if (activeTab === 'returning') await loadReturningAgents(0, filterMitra, pic)
     else if (activeTab === 'jagoan_bansos') await loadSwipeChampionAgents(0, filterMitra, pic)
+    else if (activeTab === 'lost_w2') await loadLostAgents(0, filterMitra, pic)
     else await loadAgents(0, activeTab, filterMitra, pic)
   }
 
   async function handlePageChange(newPage: number) {
     if (activeTab === 'returning') { setReturningPage(newPage); await loadReturningAgents(newPage, filterMitra, filterPic) }
     else if (activeTab === 'jagoan_bansos') { setSwipeChampionPage(newPage); await loadSwipeChampionAgents(newPage, filterMitra, filterPic) }
+    else if (activeTab === 'lost_w2') { setLostPage(newPage); await loadLostAgents(newPage, filterMitra, filterPic) }
     else { setPage(newPage); await loadAgents(newPage, activeTab, filterMitra, filterPic) }
   }
 
   async function handleReset() {
-    setFilterMitra(''); setFilterPic(''); setActiveTab(''); setPage(0); setReturningPage(0); setSwipeChampionPage(0)
+    setFilterMitra(''); setFilterPic(''); setActiveTab(''); setPage(0); setReturningPage(0); setSwipeChampionPage(0); setLostPage(0)
     await loadTrendCounts('', '')
     await loadAgents(0, '', '', '')
     const rc = await supabase.rpc('get_returning_agents_count', { p_mitra: '', p_pic: '' })
     setReturningCount(Number(rc.data ?? 0))
     const scc = await supabase.rpc('get_swipe_champion_agents_count', { p_mitra: '', p_pic: '' })
     setSwipeChampionCount(Number(scc.data ?? 0))
+    const lc = await supabase.rpc('get_lost_agents_count', { p_mitra: '', p_pic: '' })
+    setLostCount(Number(lc.data ?? 0))
   }
 
   async function openDrawer(agent: ProductivityAgent) {
@@ -394,6 +442,18 @@ export default function ProductivityPage() {
     } finally { setLoadingSwipeChampionDetail(false) }
   }
 
+  async function openLostDrawer(agent: LostAgent) {
+    setSelectedLost(agent); setLostDetail([]); setLostLiqDetail([]); setLoadingLostDetail(true)
+    try {
+      const [detailRes, liquidityRes] = await Promise.all([
+        supabase.rpc('get_agent_detail', { p_serial: agent.serial_number, p_since: sinceDate, p_until: lastDate }),
+        supabase.rpc('get_agent_liquidity_summary', { p_serial: agent.serial_number }),
+      ])
+      setLostDetail(detailRes.data ?? [])
+      setLostLiqDetail(liquidityRes.data ?? [])
+    } finally { setLoadingLostDetail(false) }
+  }
+
   // Export CSV
   async function handleExport() {
     setExporting(true)
@@ -426,6 +486,20 @@ export default function ProductivityPage() {
         exportCSV(`produktifitas_jagoan_bansos_${lastDate}.csv`,
           ['Serial','Merchant','Mitra','PIC','SWIPE 14H','% SWIPE','Total TRX 14H','Total Fee 14H'],
           rows)
+      } else if (activeTab === 'lost_w2') {
+        // Fetch all lost agents
+        const { data } = await supabase.rpc('get_lost_agents', {
+          p_mitra: filterMitra, p_pic: filterPic, p_limit: 99999, p_offset: 0
+        })
+        const rows = (data ?? []).map((a: LostAgent) => [
+          a.serial_number, a.merchant_name ?? '', a.mitra ?? '', a.pic ?? '',
+          a.last_active_date, a.days_since_lost,
+          a.trx_count_w1, a.trx_count_w2, a.trx_count_14d,
+          a.avg_trx_w1, a.total_fee_14d,
+        ])
+        exportCSV(`produktifitas_hilang_w2_${lastDate}.csv`,
+          ['Serial','Merchant','Mitra','PIC','Tgl Aktif Terakhir','Hari Sejak Hilang','TRX W1','TRX W2','TRX 14H','Avg TRX/Hari W1','Total Fee 14H'],
+          rows)
       } else {
         // Fetch all trend agents
         const params = { p_min_active_days_w2: 2, p_min_trx_w2: 10, p_min_avg_trx_14: 3, p_trend: activeTab, p_mitra: filterMitra, p_pic: filterPic }
@@ -446,8 +520,8 @@ export default function ProductivityPage() {
     } finally { setExporting(false) }
   }
 
-  const currentPage  = activeTab === 'returning' ? returningPage : activeTab === 'jagoan_bansos' ? swipeChampionPage : page
-  const currentTotal = activeTab === 'returning' ? returningCount : activeTab === 'jagoan_bansos' ? swipeChampionCount : totalCount
+  const currentPage  = activeTab === 'returning' ? returningPage : activeTab === 'jagoan_bansos' ? swipeChampionPage : activeTab === 'lost_w2' ? lostPage : page
+  const currentTotal = activeTab === 'returning' ? returningCount : activeTab === 'jagoan_bansos' ? swipeChampionCount : activeTab === 'lost_w2' ? lostCount : totalCount
   const totalPages   = Math.ceil(currentTotal / PAGE_SIZE)
   const feeProgress  = progress && monthlyTarget ? Math.min(100, Math.round(progress.total_fee / monthlyTarget * 100)) : null
   const projectedFee = progress && progress.days_elapsed > 0 ? Math.round(progress.total_fee / progress.days_elapsed * progress.days_in_month) : null
@@ -456,7 +530,8 @@ export default function ProductivityPage() {
   const liquiditySummary = liquidityDetail[0] ?? null
   const returningLiqSummary = returningLiqDetail[0] ?? null
   const swipeChampionLiqSummary = swipeChampionLiqDetail[0] ?? null
-  const isLoadingTable = activeTab === 'returning' ? loadingReturning : activeTab === 'jagoan_bansos' ? loadingSwipeChampion : loading
+  const lostLiqSummary = lostLiqDetail[0] ?? null
+  const isLoadingTable = activeTab === 'returning' ? loadingReturning : activeTab === 'jagoan_bansos' ? loadingSwipeChampion : activeTab === 'lost_w2' ? loadingLost : loading
 
   function TrendChip({ trend }: { trend: string }) {
     const cfg = TREND_CONFIG[trend as keyof typeof TREND_CONFIG] ?? TREND_CONFIG.consistent
@@ -571,8 +646,21 @@ export default function ProductivityPage() {
                 onMouseMove={e => setTooltip({ text: 'Agen yang aktif di 7 hari kedua window (W2) tapi tidak ada di 7 hari pertama (W1). Indikasi agen yang baru mulai aktif minggu ini setelah absen minggu lalu.', x: e.clientX, y: e.clientY })}
                 onMouseLeave={() => setTooltip(null)}
                 style={{ padding: '9px 18px', borderRadius: '8px', cursor: 'pointer', border: `2px solid ${isActive ? '#7c3aed' : '#e5e7eb'}`, backgroundColor: isActive ? '#f5f3ff' : '#fff', color: isActive ? '#7c3aed' : '#6b7280', fontSize: '13px', fontWeight: '600', transition: 'all 0.15s', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <span>🔄</span><span>Kembali Aktif</span>
+                <span>🆕</span><span>Baru W2</span>
                 <span style={{ padding: '1px 8px', borderRadius: '99px', fontSize: '11px', backgroundColor: isActive ? '#fff' : '#f3f4f6', color: isActive ? '#7c3aed' : '#9ca3af', fontWeight: '700' }}>{returningCount}</span>
+              </button>
+            )
+          })()}
+          {(() => {
+            const isActive = activeTab === 'lost_w2'
+            return (
+              <button onClick={() => handleTabChange(isActive ? '' : 'lost_w2')}
+                onMouseEnter={e => setTooltip({ text: 'Agen yang aktif di 7 hari pertama (W1) tapi tidak ada transaksi sama sekali di 7 hari kedua (W2). Perlu dicek — mungkin berhenti atau ada masalah.', x: e.clientX, y: e.clientY })}
+                onMouseMove={e => setTooltip({ text: 'Agen yang aktif di 7 hari pertama (W1) tapi tidak ada transaksi sama sekali di 7 hari kedua (W2). Perlu dicek — mungkin berhenti atau ada masalah.', x: e.clientX, y: e.clientY })}
+                onMouseLeave={() => setTooltip(null)}
+                style={{ padding: '9px 18px', borderRadius: '8px', cursor: 'pointer', border: `2px solid ${isActive ? '#c2410c' : '#e5e7eb'}`, backgroundColor: isActive ? '#fff7ed' : '#fff', color: isActive ? '#c2410c' : '#6b7280', fontSize: '13px', fontWeight: '600', transition: 'all 0.15s', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <span>👻</span><span>Hilang W2</span>
+                <span style={{ padding: '1px 8px', borderRadius: '99px', fontSize: '11px', backgroundColor: isActive ? '#fff' : '#f3f4f6', color: isActive ? '#c2410c' : '#9ca3af', fontWeight: '700' }}>{lostCount}</span>
               </button>
             )
           })()}
@@ -645,7 +733,7 @@ export default function ProductivityPage() {
                 <div>PIC</div>
                 <div style={{ textAlign: 'center' }}>
                   <span onMouseEnter={e => setTooltip({ text: 'Tanggal pertama aktif di W2 (7 hari terakhir). TRX/hari dihitung sejak tanggal kembali hingga hari terakhir data.', x: e.clientX, y: e.clientY })} onMouseMove={e => setTooltip({ text: 'Tanggal pertama aktif di W2 (7 hari terakhir). TRX/hari dihitung sejak tanggal kembali hingga hari terakhir data.', x: e.clientX, y: e.clientY })} onMouseLeave={() => setTooltip(null)}>
-                    KEMBALI AKTIF ⓘ
+                    BARU W2 ⓘ
                   </span>
                 </div>
                 <div style={{ textAlign: 'right' }}>TRX 14H</div>
@@ -680,6 +768,55 @@ export default function ProductivityPage() {
             </div>
           ) : (
             <div style={{ textAlign: 'center', padding: '60px', backgroundColor: '#f9fafb', borderRadius: '10px', border: '1px dashed #e5e7eb', color: '#9ca3af', fontSize: '13px' }}>Tidak ada agen kembali aktif</div>
+          )
+        ) : activeTab === 'lost_w2' ? (
+          loadingLost ? (
+            <div style={{ border: '1px solid #e5e7eb', borderRadius: '10px', overflow: 'hidden' }}>
+              {[1,2,3,4,5].map(i => (
+                <div key={i} style={{ display: 'grid', gridTemplateColumns: '1fr 150px 150px 130px 80px', padding: '13px 16px', borderBottom: '1px solid #f3f4f6', gap: '16px', alignItems: 'center' }}>
+                  <div><Skeleton width={120} height={13} /><div style={{marginTop:4}}><Skeleton width={80} height={10} /></div></div>
+                  <Skeleton width={100} height={12} /><Skeleton width={100} height={12} /><Skeleton width={100} height={12} /><Skeleton width={60} height={12} />
+                </div>
+              ))}
+            </div>
+          ) : lostAgents.length > 0 ? (
+            <div style={{ border: '1px solid #e5e7eb', borderRadius: '10px', overflow: 'hidden' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 150px 150px 130px 80px', padding: '10px 16px', backgroundColor: '#f9fafb', borderBottom: '1px solid #e5e7eb', fontSize: '11px', fontWeight: '700', color: '#9ca3af', letterSpacing: '0.05em' }}>
+                <div>AGEN</div>
+                <div>MITRA</div>
+                <div>PIC</div>
+                <div style={{ textAlign: 'center' }}>
+                  <span onMouseEnter={e => setTooltip({ text: 'Tanggal terakhir aktif di W1 (7 hari pertama), sebelum berhenti total di W2. TRX W1 dihitung dari 7 hari pertama window.', x: e.clientX, y: e.clientY })} onMouseMove={e => setTooltip({ text: 'Tanggal terakhir aktif di W1 (7 hari pertama), sebelum berhenti total di W2. TRX W1 dihitung dari 7 hari pertama window.', x: e.clientX, y: e.clientY })} onMouseLeave={() => setTooltip(null)}>
+                    HILANG W2 ⓘ
+                  </span>
+                </div>
+                <div style={{ textAlign: 'right' }}>TRX W1</div>
+              </div>
+              {lostAgents.map((agent, i) => (
+                <div key={agent.serial_number} onClick={() => openLostDrawer(agent)}
+                  style={{ display: 'grid', gridTemplateColumns: '1fr 150px 150px 130px 80px', padding: '11px 16px', borderBottom: i < lostAgents.length - 1 ? '1px solid #f3f4f6' : 'none', alignItems: 'center', backgroundColor: '#fff', cursor: 'pointer' }}
+                  onMouseEnter={e => e.currentTarget.style.backgroundColor = '#f9fafb'}
+                  onMouseLeave={e => e.currentTarget.style.backgroundColor = '#fff'}>
+                  <div>
+                    <div style={{ fontSize: '13px', fontWeight: '600', color: '#111827' }}>{agent.merchant_name ?? agent.serial_number}</div>
+                    <div style={{ fontSize: '10px', color: '#9ca3af', marginTop: '1px' }}>{agent.serial_number}</div>
+                  </div>
+                  <div style={{ fontSize: '12px', color: '#374151', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{agent.mitra ?? '—'}</div>
+                  <div style={{ fontSize: '12px', color: '#374151', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{agent.pic ?? '—'}</div>
+                  <div style={{ textAlign: 'center' }}>
+                    <div style={{ fontSize: '11px', fontWeight: '700', color: '#c2410c' }}>
+                      {new Date(agent.last_active_date).toLocaleDateString('id-ID', { day: 'numeric', month: 'short' })}
+                    </div>
+                    <div style={{ fontSize: '10px', color: '#9ca3af', marginTop: '1px' }}>
+                      {agent.days_since_lost} hari lalu
+                    </div>
+                  </div>
+                  <div style={{ fontSize: '12px', fontWeight: '600', color: '#374151', textAlign: 'right' }}>{agent.trx_count_w1.toLocaleString('id')}</div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div style={{ textAlign: 'center', padding: '60px', backgroundColor: '#f9fafb', borderRadius: '10px', border: '1px dashed #e5e7eb', color: '#9ca3af', fontSize: '13px' }}>Tidak ada agen hilang di W2</div>
           )
         ) : activeTab === 'jagoan_bansos' ? (
           loadingSwipeChampion ? (
@@ -1238,6 +1375,125 @@ export default function ProductivityPage() {
                           const d = new Date(sd); d.setDate(sd.getDate() + i)
                           const dateStr = d.toISOString().split('T')[0]
                           const found = swipeChampionDetail.find(a => a.transaction_date === dateStr)
+                          const trx = found ? Number(found.total_trx) : 0
+                          return (
+                            <div key={dateStr} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px' }} title={`${dateStr}: ${trx} trx`}>
+                              <div style={{ width: '100%', height: `${Math.max(4, (trx / maxTrx) * 64)}px`, backgroundColor: trx > 0 ? '#c2410c' : '#f3f4f6', borderRadius: '3px 3px 0 0', transition: 'height 0.3s' }} />
+                              <div style={{ fontSize: '8px', color: '#d1d5db', writingMode: 'vertical-rl', transform: 'rotate(180deg)' }}>
+                                {new Date(dateStr).toLocaleDateString('id-ID', { day: 'numeric', month: 'short' })}
+                              </div>
+                            </div>
+                          )
+                        })
+                      })()}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Drawer — Hilang W2 (Lost Agent) */}
+      {selectedLost && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 1000, display: 'flex', justifyContent: 'flex-end' }}>
+          <div onClick={() => setSelectedLost(null)} style={{ position: 'absolute', inset: 0, backgroundColor: 'rgba(0,0,0,0.3)' }} />
+          <div style={{ position: 'relative', width: '480px', height: '100%', backgroundColor: '#fff', boxShadow: '-4px 0 24px rgba(0,0,0,0.12)', display: 'flex', flexDirection: 'column', overflowY: 'auto' }}>
+            <div style={{ padding: '20px 24px', borderBottom: '1px solid #f3f4f6', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', position: 'sticky', top: 0, backgroundColor: '#fff', zIndex: 1 }}>
+              <div>
+                <div style={{ fontSize: '18px', fontWeight: '800', color: '#111827', marginBottom: '4px' }}>{selectedLost.merchant_name ?? selectedLost.serial_number}</div>
+                <div style={{ fontSize: '11px', color: '#9ca3af', marginBottom: '6px' }}>{selectedLost.serial_number}</div>
+                <span style={{ padding: '2px 10px', borderRadius: '99px', fontSize: '11px', fontWeight: '700', backgroundColor: '#fff7ed', color: '#c2410c', border: '1px solid #fed7aa' }}>
+                  👻 Hilang W2 · Terakhir aktif {new Date(selectedLost.last_active_date).toLocaleDateString('id-ID', { day: 'numeric', month: 'short' })}
+                </span>
+              </div>
+              <button onClick={() => setSelectedLost(null)} style={{ padding: '6px 10px', borderRadius: '8px', border: '1px solid #e5e7eb', backgroundColor: '#fff', color: '#6b7280', fontSize: '18px', cursor: 'pointer', lineHeight: 1 }}>✕</button>
+            </div>
+            {loadingLostDetail ? (
+              <div style={{ padding: '40px', textAlign: 'center', color: '#9ca3af', fontSize: '13px' }}>Memuat data...</div>
+            ) : (
+              <div style={{ padding: '20px 24px' }}>
+
+                {/* 1. Info Agen */}
+                {lostDetail.length > 0 && (() => {
+                  const latest = lostDetail[lostDetail.length - 1]
+                  return (
+                    <div style={{ marginBottom: '24px' }}>
+                      <div style={{ fontSize: '11px', fontWeight: '700', color: '#9ca3af', letterSpacing: '0.08em', marginBottom: '12px' }}>INFO AGEN</div>
+                      {[
+                        { label: 'Mitra', value: latest.mitra }, { label: 'PIC', value: latest.pic },
+                        { label: 'Alamat', value: latest.alamat_struk }, { label: 'Brand', value: latest.brand },
+                        { label: 'Mesin', value: latest.tipe_mesin }, { label: 'Aplikasi', value: latest.source_app },
+                        { label: 'Terminal', value: latest.terminal_data_source },
+                      ].filter(r => r.value).map(r => (
+                        <div key={r.label} style={{ display: 'flex', gap: '12px', padding: '7px 0', borderBottom: '1px solid #f9fafb' }}>
+                          <span style={{ fontSize: '12px', color: '#9ca3af', minWidth: '80px', flexShrink: 0 }}>{r.label}</span>
+                          <span style={{ fontSize: '12px', color: '#111827', fontWeight: '500' }}>{r.value}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )
+                })()}
+
+                {/* 2. Ringkasan Hilang W2 */}
+                <div style={{ marginBottom: '24px' }}>
+                  <div style={{ fontSize: '11px', fontWeight: '700', color: '#9ca3af', letterSpacing: '0.08em', marginBottom: '12px' }}>RINGKASAN</div>
+                  <div style={{ padding: '12px 16px', backgroundColor: '#fff7ed', border: '1px solid #fed7aa', borderRadius: '8px', marginBottom: '10px' }}>
+                    <div style={{ fontSize: '13px', fontWeight: '700', color: '#c2410c' }}>
+                      Tidak ada transaksi selama {selectedLost.days_since_lost} hari
+                    </div>
+                    <div style={{ fontSize: '11px', color: '#9a3412', marginTop: '2px' }}>
+                      Terakhir aktif {new Date(selectedLost.last_active_date).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })}
+                    </div>
+                  </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '10px' }}>
+                    {[
+                      { label: 'TRX W1', value: selectedLost.trx_count_w1.toLocaleString('id') },
+                      { label: 'Avg TRX/Hari (W1)', value: selectedLost.avg_trx_w1.toString() },
+                      { label: 'Total Fee 14H', value: formatFee(selectedLost.total_fee_14d) },
+                    ].map(s => (
+                      <div key={s.label} style={{ padding: '10px 12px', backgroundColor: '#f9fafb', borderRadius: '8px', textAlign: 'center' }}>
+                        <div style={{ fontSize: '14px', fontWeight: '700', color: '#111827' }}>{s.value}</div>
+                        <div style={{ fontSize: '10px', color: '#9ca3af', marginTop: '2px' }}>{s.label}</div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* 3. Likuiditas (sebelum hilang) */}
+                {lostLiqSummary && (() => {
+                  const cfg = LIQUIDITY_CONFIG[lostLiqSummary.liquidity_status] ?? LIQUIDITY_CONFIG.no_data
+                  return (
+                    <div style={{ marginBottom: '24px' }}>
+                      <div style={{ fontSize: '11px', fontWeight: '700', color: '#9ca3af', letterSpacing: '0.08em', marginBottom: '12px' }}>LIKUIDITAS TERAKHIR</div>
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                        <div style={{ padding: '10px 12px', backgroundColor: '#f9fafb', borderRadius: '8px', textAlign: 'center' }}>
+                          <div style={{ fontSize: '14px', fontWeight: '700', color: '#111827' }}>{formatAmount(lostLiqSummary.avg_daily_amount_14d)}</div>
+                          <div style={{ fontSize: '10px', color: '#9ca3af', marginTop: '2px' }}>Avg Amount/Hari (14H)</div>
+                        </div>
+                        <div style={{ padding: '10px 12px', backgroundColor: cfg.bg, borderRadius: '8px', textAlign: 'center', border: `1px solid ${cfg.border}` }}>
+                          <div style={{ fontSize: '14px', fontWeight: '700', color: cfg.color }}>{lostLiqSummary.liquidity_ratio?.toFixed(2)}x</div>
+                          <div style={{ fontSize: '10px', color: cfg.color, marginTop: '2px', opacity: 0.8 }}>{cfg.sublabel}</div>
+                          <div style={{ marginTop: '4px' }}><LiquidityChip status={lostLiqSummary.liquidity_status} /></div>
+                        </div>
+                      </div>
+                    </div>
+                  )
+                })()}
+
+                {/* 4. Grafik TRX per hari (untuk lihat pola sebelum berhenti) */}
+                {lostDetail.length > 0 && (
+                  <div>
+                    <div style={{ fontSize: '11px', fontWeight: '700', color: '#9ca3af', letterSpacing: '0.08em', marginBottom: '12px' }}>TRANSAKSI PER HARI (14H)</div>
+                    <div style={{ display: 'flex', alignItems: 'flex-end', gap: '3px', height: '80px' }}>
+                      {(() => {
+                        const maxTrx = Math.max(...lostDetail.map(d => Number(d.total_trx)), 1)
+                        const sd = new Date(sinceDate)
+                        return Array.from({ length: 14 }, (_, i) => {
+                          const d = new Date(sd); d.setDate(sd.getDate() + i)
+                          const dateStr = d.toISOString().split('T')[0]
+                          const found = lostDetail.find(a => a.transaction_date === dateStr)
                           const trx = found ? Number(found.total_trx) : 0
                           return (
                             <div key={dateStr} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px' }} title={`${dateStr}: ${trx} trx`}>
