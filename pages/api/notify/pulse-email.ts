@@ -48,11 +48,91 @@ interface PulseSummary {
   trx_avg_daily_14d: number
 }
 
-function buildEmailHtml(s: PulseSummary): string {
+interface HourlySlot {
+  slot_name: string
+  slot_emoji: string
+  total_trx: number
+  pct: number
+}
+
+interface CardType {
+  card_type: string
+  total_trx: number
+  pct: number
+}
+
+interface AppDistribution {
+  app_name: string
+  total_trx: number
+  total_fee: number
+  pct_trx: number
+}
+
+interface FeeBreakdown {
+  category: string
+  total_trx: number
+  total_fee: number
+  pct: number
+}
+
+function buildEmailHtml(
+  s: PulseSummary,
+  hourlySlots: HourlySlot[],
+  cardTypes: CardType[],
+  appDistribution: AppDistribution[],
+  feeBreakdown: FeeBreakdown[]
+): string {
   const feeGap = s.fee_target - s.fee_projected
   const feePct = Math.round((s.fee_mtd / s.fee_target) * 100)
   const gapColor = feeGap > 0 ? '#dc2626' : '#16a34a'
   const gapLabel = feeGap > 0 ? `Gap ${formatFee(feeGap)}` : `Surplus ${formatFee(Math.abs(feeGap))}`
+
+  // Baris persentase sederhana — dipakai untuk 4 section breakdown tambahan.
+  // Tanpa bar/chart visual karena tidak konsisten render-nya lintas email client (Gmail/Outlook).
+  function pctRow(label: string, pct: number, detail: string): string {
+    return `
+                <tr>
+                  <td style="padding:6px 0;border-bottom:1px solid #f3f4f6;">
+                    <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+                      <tr>
+                        <td style="font-size:12px;color:#374151;">${label}</td>
+                        <td align="right" style="font-size:12px;font-weight:700;color:#111827;white-space:nowrap;">${pct}%</td>
+                      </tr>
+                      <tr>
+                        <td colspan="2" style="font-size:10px;color:#9ca3af;">${detail}</td>
+                      </tr>
+                    </table>
+                  </td>
+                </tr>`
+  }
+
+  function sectionBlock(title: string, rowsHtml: string): string {
+    return `
+          <tr>
+            <td style="padding:6px 28px;">
+              <div style="font-size:10px;font-weight:700;color:#9ca3af;letter-spacing:0.05em;margin-bottom:6px;">${title}</div>
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#f9fafb;border-radius:8px;padding:4px 12px;">
+                ${rowsHtml}
+              </table>
+            </td>
+          </tr>`
+  }
+
+  const hourlyRows = hourlySlots
+    .map(h => pctRow(`${h.slot_emoji} ${h.slot_name}`, h.pct, `${formatNum(h.total_trx)} trx`))
+    .join('')
+
+  const cardTypeRows = cardTypes
+    .map(c => pctRow(c.card_type === 'SWIPE' ? 'SWIPE (Bansos)' : c.card_type, c.pct, `${formatNum(c.total_trx)} trx`))
+    .join('')
+
+  const appRows = appDistribution
+    .map(a => pctRow(a.app_name, a.pct_trx, `${formatNum(a.total_trx)} trx · ${formatFee(a.total_fee)}`))
+    .join('')
+
+  const feeRows = feeBreakdown
+    .map(f => pctRow(f.category, f.pct, formatFee(f.total_fee)))
+    .join('')
 
   // Catatan: HTML email harus pakai table-based layout + inline style untuk
   // konsistensi lintas email client (Gmail/Outlook tidak render flexbox/grid dengan baik)
@@ -125,10 +205,23 @@ function buildEmailHtml(s: PulseSummary): string {
           </tr>
 
           <tr>
-            <td style="padding:16px 28px 24px 28px;">
+            <td style="padding:16px 28px 4px 28px;">
               <span style="font-size:12px;color:#6b7280;">Total ${formatNum(s.trx_mtd)} TRX bulan ini (MTD)</span>
             </td>
           </tr>
+
+          <tr>
+            <td style="padding:12px 28px 4px 28px;">
+              <hr style="border:none;border-top:1px solid #f3f4f6;margin:0;" />
+            </td>
+          </tr>
+
+          ${sectionBlock('🕐 POLA WAKTU TRANSAKSI (MTD)', hourlyRows)}
+          ${sectionBlock('💳 METODE KARTU: DIP vs SWIPE', cardTypeRows)}
+          ${sectionBlock('📱 DISTRIBUSI APLIKASI', appRows)}
+          ${sectionBlock('💰 FEE RP 3.500 vs LAINNYA', feeRows)}
+
+          <tr><td style="padding:10px;"></td></tr>
 
           <tr>
             <td style="padding:14px 28px;background-color:#f9fafb;border-top:1px solid #f3f4f6;">
@@ -163,12 +256,23 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   try {
-    const { data, error } = await supabase.rpc('get_pulse_summary')
-    if (error) throw error
-    const summary: PulseSummary = Array.isArray(data) ? data[0] : data
+    const [summaryRes, hourlyRes, cardTypeRes, appDistRes, feeBreakdownRes] = await Promise.all([
+      supabase.rpc('get_pulse_summary'),
+      supabase.rpc('get_pulse_hourly_slots'),
+      supabase.rpc('get_pulse_card_types'),
+      supabase.rpc('get_pulse_app_distribution'),
+      supabase.rpc('get_pulse_fee_breakdown'),
+    ])
+    if (summaryRes.error) throw summaryRes.error
+    const summary: PulseSummary = Array.isArray(summaryRes.data) ? summaryRes.data[0] : summaryRes.data
     if (!summary) return res.status(404).json({ error: 'Data Pulse MTD tidak tersedia' })
 
-    const html = buildEmailHtml(summary)
+    const hourlySlots: HourlySlot[] = hourlyRes.data ?? []
+    const cardTypes: CardType[] = cardTypeRes.data ?? []
+    const appDistribution: AppDistribution[] = appDistRes.data ?? []
+    const feeBreakdown: FeeBreakdown[] = feeBreakdownRes.data ?? []
+
+    const html = buildEmailHtml(summary, hourlySlots, cardTypes, appDistribution, feeBreakdown)
 
     const { data: sendResult, error: sendError } = await resend.emails.send({
       from: `ARNES - Arranet Notification Services <${FROM_EMAIL}>`,
