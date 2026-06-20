@@ -49,6 +49,14 @@ interface AgentProfile {
   month_start: string
 }
 
+interface LiquiditySummary {
+  avg_daily_amount_14d: number
+  avg_daily_amount_w1: number
+  avg_daily_amount_w2: number
+  liquidity_ratio: number | null
+  liquidity_status: string
+}
+
 interface DailyChart {
   trx_date: string
   total_trx: number
@@ -68,6 +76,13 @@ const BUCKET_CONFIG: Record<string, { label: string, color: string, bg: string, 
   productive: { label: 'Productive', color: '#166534', bg: '#dcfce7', border: '#bbf7d0' },
   moderate:   { label: 'Moderate',   color: '#ca8a04', bg: '#fef9c3', border: '#fde68a' },
   sporadic:   { label: 'Sporadic',   color: '#dc2626', bg: '#fee2e2', border: '#fecaca' },
+}
+
+const LIQUIDITY_CONFIG: Record<string, { label: string, color: string, bg: string, border: string, sublabel: string }> = {
+  kuat:    { label: 'Kuat',    color: '#166534', bg: '#dcfce7', border: '#bbf7d0', sublabel: 'Float kemungkinan aman' },
+  menurun: { label: 'Menurun', color: '#92400e', bg: '#fef9c3', border: '#fde68a', sublabel: 'Perlu perhatian' },
+  lemah:   { label: 'Lemah',   color: '#dc2626', bg: '#fee2e2', border: '#fecaca', sublabel: 'Kemungkinan float menipis' },
+  no_data: { label: '—',       color: '#9ca3af', bg: '#f9fafb', border: '#e5e7eb', sublabel: 'Data tidak cukup' },
 }
 
 const SKELETON_STYLE = `@keyframes shimmer { 0% { background-position: 200% 0 } 100% { background-position: -200% 0 } }`
@@ -122,6 +137,7 @@ export default function AgentProfilePage() {
 
   const [profile, setProfile] = useState<AgentProfile | null>(null)
   const [chart, setChart] = useState<DailyChart[]>([])
+  const [liquidity, setLiquidity] = useState<LiquiditySummary | null>(null)
   const [loading, setLoading] = useState(false)
 
   const [tooltip, setTooltip] = useState<{ text: string, x: number, y: number } | null>(null)
@@ -172,12 +188,14 @@ export default function AgentProfilePage() {
     setLoading(true)
     setShowDropdown(false)
     try {
-      const [profileRes, chartRes] = await Promise.all([
+      const [profileRes, chartRes, liquidityRes] = await Promise.all([
         supabase.rpc('get_agent_profile', { p_serial: sn }),
         supabase.rpc('get_agent_daily_chart', { p_serial: sn }),
+        supabase.rpc('get_agent_liquidity_summary', { p_serial: sn }),
       ])
       setProfile(profileRes.data?.[0] ?? null)
       setChart(chartRes.data ?? [])
+      setLiquidity(liquidityRes.data?.[0] ?? null)
       router.replace({ query: { sn } }, undefined, { shallow: true })
     } finally { setLoading(false) }
   }
@@ -196,6 +214,7 @@ export default function AgentProfilePage() {
   const maxTrx = chart.length > 0 ? Math.max(...chart.map(d => d.total_trx)) : 1
   const trendCfg = profile ? (TREND_CONFIG[profile.trend as keyof typeof TREND_CONFIG] ?? TREND_CONFIG.consistent) : null
   const bucketCfg = profile ? (BUCKET_CONFIG[profile.bucket] ?? BUCKET_CONFIG.sporadic) : null
+  const liquidityCfg = liquidity ? (LIQUIDITY_CONFIG[liquidity.liquidity_status] ?? LIQUIDITY_CONFIG.no_data) : null
 
   return (
     <Layout>
@@ -311,6 +330,11 @@ export default function AgentProfilePage() {
                         {bucketCfg.label}
                       </span>
                     )}
+                    {liquidityCfg && liquidity?.liquidity_status !== 'no_data' && (
+                      <span style={{ padding: '2px 10px', borderRadius: '99px', fontSize: '11px', fontWeight: '700', backgroundColor: liquidityCfg.bg, color: liquidityCfg.color, border: `1px solid ${liquidityCfg.border}` }}>
+                        💧 {liquidityCfg.label}
+                      </span>
+                    )}
                   </div>
                 </div>
                 <div style={{ textAlign: 'right', fontSize: '11px', color: '#9ca3af' }}>
@@ -389,6 +413,32 @@ export default function AgentProfilePage() {
                 </div>
               </div>
             </div>
+
+            {/* Likuiditas */}
+            {liquidity && liquidityCfg && (
+              <div style={{ backgroundColor: '#fff', border: '1px solid #e5e7eb', borderRadius: '12px', padding: '20px 24px' }}>
+                <div style={{ fontSize: '12px', fontWeight: '700', color: '#9ca3af', letterSpacing: '0.05em', marginBottom: '16px' }}>
+                  KEKUATAN LIKUIDITAS
+                  <span {...tip('Berdasarkan rata-rata nominal transaksi (Rupiah) per hari W2 dibanding W1. Mengukur kesehatan modal (float) agen — beda dari tren TRX yang mengukur jumlah transaksi.')} style={{ marginLeft: '6px', cursor: 'default', fontWeight: '400' }}>ⓘ</span>
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '10px' }}>
+                  <div style={{ padding: '10px 12px', backgroundColor: '#f9fafb', borderRadius: '8px', textAlign: 'center' }}>
+                    <div style={{ fontSize: '16px', fontWeight: '700', color: '#111827' }}>{formatFee(liquidity.avg_daily_amount_14d)}</div>
+                    <div style={{ fontSize: '10px', color: '#9ca3af', marginTop: '2px' }}>Avg Amount/Hari (14H)</div>
+                  </div>
+                  <div style={{ padding: '10px 12px', backgroundColor: '#f9fafb', borderRadius: '8px', textAlign: 'center' }}>
+                    <div style={{ fontSize: '16px', fontWeight: '700', color: '#111827' }}>
+                      {liquidity.liquidity_ratio != null ? `${liquidity.liquidity_ratio.toFixed(2)}x` : '—'}
+                    </div>
+                    <div style={{ fontSize: '10px', color: '#9ca3af', marginTop: '2px' }}>Rasio W2 vs W1</div>
+                  </div>
+                  <div style={{ padding: '10px 12px', backgroundColor: liquidityCfg.bg, borderRadius: '8px', textAlign: 'center', border: `1px solid ${liquidityCfg.border}` }}>
+                    <div style={{ fontSize: '16px', fontWeight: '700', color: liquidityCfg.color }}>{liquidityCfg.label}</div>
+                    <div style={{ fontSize: '10px', color: liquidityCfg.color, marginTop: '2px', opacity: 0.8 }}>{liquidityCfg.sublabel}</div>
+                  </div>
+                </div>
+              </div>
+            )}
 
             {/* Chart TRX Harian */}
             {chart.length > 0 && (
