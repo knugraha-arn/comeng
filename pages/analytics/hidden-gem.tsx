@@ -204,8 +204,7 @@ export default function ProductivityPage() {
   const [loadingLost, setLoadingLost] = useState(false)
   const [lostPage, setLostPage] = useState(0)
 
-  const [mitras, setMitras] = useState<string[]>([])
-  const [pics, setPics] = useState<string[]>([])
+  const [filterOptions, setFilterOptions] = useState<{ mitra: string, pic: string }[]>([])
 
   const [progress, setProgress] = useState<MonthlyProgress | null>(null)
   const [monthlyTarget, setMonthlyTarget] = useState<number | null>(null)
@@ -273,9 +272,8 @@ export default function ProductivityPage() {
         setMonthlyTarget(targetData?.monthly_fee ?? null)
       }
 
-      if (filterRes.data?.[0]) {
-        setMitras(filterRes.data[0].mitras ?? [])
-        setPics(filterRes.data[0].pics ?? [])
+      if (filterRes.data) {
+        setFilterOptions(filterRes.data)
       }
 
       const [, , rc] = await Promise.all([
@@ -519,6 +517,9 @@ export default function ProductivityPage() {
       }
     } finally { setExporting(false) }
   }
+
+  const mitras = [...new Set(filterOptions.map(f => f.mitra))].sort()
+  const pics   = [...new Set(filterOptions.filter(f => !filterMitra || f.mitra === filterMitra).map(f => f.pic))].sort()
 
   const currentPage  = activeTab === 'returning' ? returningPage : activeTab === 'jagoan_bansos' ? swipeChampionPage : activeTab === 'lost_w2' ? lostPage : page
   const currentTotal = activeTab === 'returning' ? returningCount : activeTab === 'jagoan_bansos' ? swipeChampionCount : activeTab === 'lost_w2' ? lostCount : totalCount
