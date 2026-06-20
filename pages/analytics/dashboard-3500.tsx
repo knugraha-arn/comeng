@@ -50,6 +50,34 @@ interface MonthlyProgress {
   end_date: string
 }
 
+interface ReturningAgent3500 {
+  serial_number: string
+  merchant_name: string | null
+  mitra: string | null
+  pic: string | null
+  first_return_date: string
+  days_since_return: number
+  trx_count_14d: number
+  trx_count_w1: number
+  trx_count_w2: number
+  avg_trx_since_return: number
+  total_fee_14d: number
+}
+
+interface LostAgent3500 {
+  serial_number: string
+  merchant_name: string | null
+  mitra: string | null
+  pic: string | null
+  last_active_date: string
+  days_since_lost: number
+  trx_count_14d: number
+  trx_count_w1: number
+  trx_count_w2: number
+  avg_trx_w1: number
+  total_fee_14d: number
+}
+
 const TREND_CONFIG = {
   growing:    { label: 'Growing',   icon: '💎', color: '#166534', bg: '#dcfce7', border: '#bbf7d0', tooltip: 'Avg TRX/hari W2 (8–14) > 120% vs W1 (1–7). Agen sedang tumbuh.' },
   declining:  { label: 'Declining', icon: '⚠️', color: '#92400e', bg: '#fef9c3', border: '#fde68a', tooltip: 'Avg TRX/hari W2 (8–14) < 80% vs W1 (1–7). Agen sedang menurun, perlu perhatian.' },
@@ -89,6 +117,22 @@ function ProgressBar({ value, max, color }: { value: number, max: number, color:
   )
 }
 
+function exportCSV(filename: string, headers: string[], rows: (string | number)[][]) {
+  const csvContent = [headers, ...rows]
+    .map(row => row.map(cell => {
+      const s = String(cell ?? '')
+      return s.includes(',') || s.includes('"') || s.includes('\n') ? `"${s.replace(/"/g, '""')}"` : s
+    }).join(','))
+    .join('\n')
+  const blob = new Blob(['\uFEFF' + csvContent], { type: 'text/csv;charset=utf-8;' })
+  const url = URL.createObjectURL(blob)
+  const link = document.createElement('a')
+  link.href = url
+  link.download = filename
+  link.click()
+  URL.revokeObjectURL(url)
+}
+
 export default function Dashboard3500Page() {
   const router = useRouter()
   const supabase = createBrowserClient(
@@ -101,10 +145,28 @@ export default function Dashboard3500Page() {
   const [totalCount, setTotalCount] = useState(0)
   const [trendCounts, setTrendCounts] = useState({ growing: 0, declining: 0, consistent: 0 })
 
-  const [activeTab, setActiveTab] = useState<'growing' | 'declining' | 'consistent' | 'all' | ''>('')
+  const [activeTab, setActiveTab] = useState<'growing' | 'declining' | 'consistent' | 'all' | 'returning' | 'lost_w2' | ''>('')
   const [filterMitra, setFilterMitra] = useState('')
   const [filterPic, setFilterPic] = useState('')
   const [page, setPage] = useState(0)
+
+  const [returningAgents, setReturningAgents] = useState<ReturningAgent3500[]>([])
+  const [returningCount, setReturningCount] = useState(0)
+  const [loadingReturning, setLoadingReturning] = useState(false)
+  const [returningPage, setReturningPage] = useState(0)
+  const [selectedReturning, setSelectedReturning] = useState<ReturningAgent3500 | null>(null)
+  const [returningDetail, setReturningDetail] = useState<AgentDayDetail[]>([])
+  const [loadingReturningDetail, setLoadingReturningDetail] = useState(false)
+
+  const [lostAgents, setLostAgents] = useState<LostAgent3500[]>([])
+  const [lostCount, setLostCount] = useState(0)
+  const [loadingLost, setLoadingLost] = useState(false)
+  const [lostPage, setLostPage] = useState(0)
+  const [selectedLost, setSelectedLost] = useState<LostAgent3500 | null>(null)
+  const [lostDetail, setLostDetail] = useState<AgentDayDetail[]>([])
+  const [loadingLostDetail, setLoadingLostDetail] = useState(false)
+
+  const [exporting, setExporting] = useState(false)
 
   const [mitras, setMitras] = useState<string[]>([])
   const [pics, setPics] = useState<string[]>([])
@@ -160,6 +222,11 @@ export default function Dashboard3500Page() {
 
       await loadTrendCounts('', '')
       await loadAgents(0, '', '', '')
+
+      const rc = await supabase.rpc('get_returning_agents_3500_count', { p_mitra: '', p_pic: '' })
+      setReturningCount(Number(rc.data ?? 0))
+      const lc = await supabase.rpc('get_lost_agents_3500_count', { p_mitra: '', p_pic: '' })
+      setLostCount(Number(lc.data ?? 0))
     } finally {
       setLoading(false)
     }
@@ -216,32 +283,71 @@ export default function Dashboard3500Page() {
     }
   }
 
+  async function loadReturningAgents(newPage: number, mitra: string, pic: string) {
+    setLoadingReturning(true)
+    try {
+      const [dataRes, countRes] = await Promise.all([
+        supabase.rpc('get_returning_agents_3500', { p_mitra: mitra, p_pic: pic, p_limit: PAGE_SIZE, p_offset: newPage * PAGE_SIZE }),
+        supabase.rpc('get_returning_agents_3500_count', { p_mitra: mitra, p_pic: pic }),
+      ])
+      setReturningAgents(dataRes.data ?? [])
+      setReturningCount(Number(countRes.data ?? 0))
+    } finally {
+      setLoadingReturning(false)
+    }
+  }
+
+  async function loadLostAgents(newPage: number, mitra: string, pic: string) {
+    setLoadingLost(true)
+    try {
+      const [dataRes, countRes] = await Promise.all([
+        supabase.rpc('get_lost_agents_3500', { p_mitra: mitra, p_pic: pic, p_limit: PAGE_SIZE, p_offset: newPage * PAGE_SIZE }),
+        supabase.rpc('get_lost_agents_3500_count', { p_mitra: mitra, p_pic: pic }),
+      ])
+      setLostAgents(dataRes.data ?? [])
+      setLostCount(Number(countRes.data ?? 0))
+    } finally {
+      setLoadingLost(false)
+    }
+  }
+
   async function handleTabChange(tab: typeof activeTab) {
     setActiveTab(tab)
-    setPage(0)
-    await loadAgents(0, tab, filterMitra, filterPic)
+    setPage(0); setReturningPage(0); setLostPage(0)
+    if (tab === 'returning') await loadReturningAgents(0, filterMitra, filterPic)
+    else if (tab === 'lost_w2') await loadLostAgents(0, filterMitra, filterPic)
+    else await loadAgents(0, tab, filterMitra, filterPic)
   }
 
   async function handleMitraChange(mitra: string) {
-    setFilterMitra(mitra); setFilterPic(''); setPage(0)
+    setFilterMitra(mitra); setFilterPic(''); setPage(0); setReturningPage(0); setLostPage(0)
     await loadTrendCounts(mitra, '')
-    await loadAgents(0, activeTab, mitra, '')
+    if (activeTab === 'returning') await loadReturningAgents(0, mitra, '')
+    else if (activeTab === 'lost_w2') await loadLostAgents(0, mitra, '')
+    else await loadAgents(0, activeTab, mitra, '')
   }
 
   async function handlePicChange(pic: string) {
-    setFilterPic(pic); setPage(0)
-    await loadAgents(0, activeTab, filterMitra, pic)
+    setFilterPic(pic); setPage(0); setReturningPage(0); setLostPage(0)
+    if (activeTab === 'returning') await loadReturningAgents(0, filterMitra, pic)
+    else if (activeTab === 'lost_w2') await loadLostAgents(0, filterMitra, pic)
+    else await loadAgents(0, activeTab, filterMitra, pic)
   }
 
   async function handlePageChange(newPage: number) {
-    setPage(newPage)
-    await loadAgents(newPage, activeTab, filterMitra, filterPic)
+    if (activeTab === 'returning') { setReturningPage(newPage); await loadReturningAgents(newPage, filterMitra, filterPic) }
+    else if (activeTab === 'lost_w2') { setLostPage(newPage); await loadLostAgents(newPage, filterMitra, filterPic) }
+    else { setPage(newPage); await loadAgents(newPage, activeTab, filterMitra, filterPic) }
   }
 
   async function handleReset() {
-    setFilterMitra(''); setFilterPic(''); setActiveTab(''); setPage(0)
+    setFilterMitra(''); setFilterPic(''); setActiveTab(''); setPage(0); setReturningPage(0); setLostPage(0)
     await loadTrendCounts('', '')
     await loadAgents(0, '', '', '')
+    const rc = await supabase.rpc('get_returning_agents_3500_count', { p_mitra: '', p_pic: '' })
+    setReturningCount(Number(rc.data ?? 0))
+    const lc = await supabase.rpc('get_lost_agents_3500_count', { p_mitra: '', p_pic: '' })
+    setLostCount(Number(lc.data ?? 0))
   }
 
   async function openDrawer(agent: Agent3500) {
@@ -256,7 +362,78 @@ export default function Dashboard3500Page() {
     } finally { setLoadingDetail(false) }
   }
 
-  const totalPages   = Math.ceil(totalCount / PAGE_SIZE)
+  async function openReturningDrawer(agent: ReturningAgent3500) {
+    setSelectedReturning(agent); setReturningDetail([]); setLoadingReturningDetail(true)
+    try {
+      const { data } = await supabase.rpc('get_agent_detail_3500', { p_serial: agent.serial_number, p_since: sinceDate, p_until: lastDate })
+      setReturningDetail(data ?? [])
+    } finally { setLoadingReturningDetail(false) }
+  }
+
+  async function openLostDrawer(agent: LostAgent3500) {
+    setSelectedLost(agent); setLostDetail([]); setLoadingLostDetail(true)
+    try {
+      const { data } = await supabase.rpc('get_agent_detail_3500', { p_serial: agent.serial_number, p_since: sinceDate, p_until: lastDate })
+      setLostDetail(data ?? [])
+    } finally { setLoadingLostDetail(false) }
+  }
+
+  // Export CSV — selalu fetch ulang SEMUA data (p_limit besar), bukan pakai state tabel
+  // yang sudah dipotong PAGE_SIZE untuk pagination.
+  async function handleExport() {
+    setExporting(true)
+    try {
+      if (activeTab === 'returning') {
+        const { data } = await supabase.rpc('get_returning_agents_3500', {
+          p_mitra: filterMitra, p_pic: filterPic, p_limit: 99999, p_offset: 0
+        })
+        const rows = (data ?? []).map((a: ReturningAgent3500) => [
+          a.serial_number, a.merchant_name ?? '', a.mitra ?? '', a.pic ?? '',
+          a.first_return_date, a.days_since_return,
+          a.trx_count_w1, a.trx_count_w2, a.trx_count_14d,
+          a.avg_trx_since_return, a.total_fee_14d,
+        ])
+        exportCSV(`dashboard3500_baru_w2_${lastDate}.csv`,
+          ['Serial','Merchant','Mitra','PIC','Tgl Kembali W2','Hari Sejak Kembali','TRX W1','TRX W2','TRX 14H','Avg TRX/Hari','Total Fee 14H'],
+          rows)
+      } else if (activeTab === 'lost_w2') {
+        const { data } = await supabase.rpc('get_lost_agents_3500', {
+          p_mitra: filterMitra, p_pic: filterPic, p_limit: 99999, p_offset: 0
+        })
+        const rows = (data ?? []).map((a: LostAgent3500) => [
+          a.serial_number, a.merchant_name ?? '', a.mitra ?? '', a.pic ?? '',
+          a.last_active_date, a.days_since_lost,
+          a.trx_count_w1, a.trx_count_w2, a.trx_count_14d,
+          a.avg_trx_w1, a.total_fee_14d,
+        ])
+        exportCSV(`dashboard3500_hilang_w2_${lastDate}.csv`,
+          ['Serial','Merchant','Mitra','PIC','Tgl Aktif Terakhir','Hari Sejak Hilang','TRX W1','TRX W2','TRX 14H','Avg TRX/Hari W1','Total Fee 14H'],
+          rows)
+      } else {
+        const minParams = getMinParams(activeTab)
+        const trendParam = activeTab === 'all' ? '' : activeTab
+        const { data } = await supabase.rpc('get_hidden_gem_agents_3500', {
+          ...minParams, p_trend: trendParam, p_mitra: filterMitra, p_pic: filterPic, p_limit: 99999, p_offset: 0
+        })
+        const rows = (data ?? []).map((a: Agent3500) => [
+          a.serial_number, a.merchant_name ?? '', a.mitra ?? '', a.pic ?? '',
+          a.trend, a.bucket, a.active_days_14, a.avg_trx_14,
+          a.active_days_w1, a.total_trx_w1, a.avg_trx_w1,
+          a.active_days_w2, a.total_trx_w2, a.avg_trx_w2,
+          a.trx_change_pct,
+        ])
+        const tabLabel = activeTab || 'semua'
+        exportCSV(`dashboard3500_${tabLabel}_${lastDate}.csv`,
+          ['Serial','Merchant','Mitra','PIC','Trend','Bucket','Hari Aktif 14H','Avg TRX/Hari 14H','Hari Aktif W1','Total TRX W1','Avg TRX/Hari W1','Hari Aktif W2','Total TRX W2','Avg TRX/Hari W2','Growth %'],
+          rows)
+      }
+    } finally { setExporting(false) }
+  }
+
+  const currentPage  = activeTab === 'returning' ? returningPage : activeTab === 'lost_w2' ? lostPage : page
+  const currentTotal = activeTab === 'returning' ? returningCount : activeTab === 'lost_w2' ? lostCount : totalCount
+  const totalPages   = Math.ceil(currentTotal / PAGE_SIZE)
+  const isLoadingTable = activeTab === 'returning' ? loadingReturning : activeTab === 'lost_w2' ? loadingLost : loading
   const feeProgress  = progress && monthlyTarget ? Math.min(100, Math.round(progress.total_fee / monthlyTarget * 100)) : null
   const projectedFee = progress && progress.days_elapsed > 0 ? Math.round(progress.total_fee / progress.days_elapsed * progress.days_in_month) : null
   const currentMonth = progress ? MONTHS[new Date(progress.end_date).getMonth()] : ''
@@ -384,6 +561,32 @@ export default function Dashboard3500Page() {
               </button>
             )
           })()}
+          {(() => {
+            const isActive = activeTab === 'returning'
+            return (
+              <button onClick={() => handleTabChange(isActive ? '' : 'returning')}
+                onMouseEnter={e => setTooltip({ text: 'Agen fee Rp 3.500 yang aktif di W2 (7 hari terakhir) tapi tidak ada transaksi di W1 (7 hari pertama). Baru mulai aktif lagi minggu ini.', x: e.clientX, y: e.clientY })}
+                onMouseMove={e => setTooltip({ text: 'Agen fee Rp 3.500 yang aktif di W2 (7 hari terakhir) tapi tidak ada transaksi di W1 (7 hari pertama). Baru mulai aktif lagi minggu ini.', x: e.clientX, y: e.clientY })}
+                onMouseLeave={() => setTooltip(null)}
+                style={{ padding: '9px 18px', borderRadius: '8px', cursor: 'pointer', border: `2px solid ${isActive ? '#7c3aed' : '#e5e7eb'}`, backgroundColor: isActive ? '#f5f3ff' : '#fff', color: isActive ? '#7c3aed' : '#6b7280', fontSize: '13px', fontWeight: '600', transition: 'all 0.15s', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <span>🆕</span><span>Baru W2</span>
+                <span style={{ padding: '1px 8px', borderRadius: '99px', fontSize: '11px', backgroundColor: isActive ? '#fff' : '#f3f4f6', color: isActive ? '#7c3aed' : '#9ca3af', fontWeight: '700' }}>{returningCount}</span>
+              </button>
+            )
+          })()}
+          {(() => {
+            const isActive = activeTab === 'lost_w2'
+            return (
+              <button onClick={() => handleTabChange(isActive ? '' : 'lost_w2')}
+                onMouseEnter={e => setTooltip({ text: 'Agen fee Rp 3.500 yang aktif di W1 (7 hari pertama) tapi tidak ada transaksi sama sekali di W2 (7 hari terakhir). Perlu dicek — mungkin berhenti.', x: e.clientX, y: e.clientY })}
+                onMouseMove={e => setTooltip({ text: 'Agen fee Rp 3.500 yang aktif di W1 (7 hari pertama) tapi tidak ada transaksi sama sekali di W2 (7 hari terakhir). Perlu dicek — mungkin berhenti.', x: e.clientX, y: e.clientY })}
+                onMouseLeave={() => setTooltip(null)}
+                style={{ padding: '9px 18px', borderRadius: '8px', cursor: 'pointer', border: `2px solid ${isActive ? '#c2410c' : '#e5e7eb'}`, backgroundColor: isActive ? '#fff7ed' : '#fff', color: isActive ? '#c2410c' : '#6b7280', fontSize: '13px', fontWeight: '600', transition: 'all 0.15s', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <span>👻</span><span>Hilang W2</span>
+                <span style={{ padding: '1px 8px', borderRadius: '99px', fontSize: '11px', backgroundColor: isActive ? '#fff' : '#f3f4f6', color: isActive ? '#c2410c' : '#9ca3af', fontWeight: '700' }}>{lostCount}</span>
+              </button>
+            )
+          })()}
         </div>
 
         {/* Filters */}
@@ -402,13 +605,103 @@ export default function Dashboard3500Page() {
             <button onClick={handleReset}
               style={{ padding: '7px 12px', borderRadius: '8px', border: '1px solid #e5e7eb', backgroundColor: '#fff', color: '#6b7280', fontSize: '12px', cursor: 'pointer' }}>✕ Reset</button>
           )}
+          <button onClick={handleExport} disabled={exporting || isLoadingTable}
+            style={{ padding: '7px 12px', borderRadius: '8px', border: '1px solid #e5e7eb', backgroundColor: '#fff', color: '#374151', fontSize: '12px', cursor: exporting || isLoadingTable ? 'not-allowed' : 'pointer', opacity: exporting || isLoadingTable ? 0.5 : 1, fontWeight: '600' }}>
+            {exporting ? 'Mengekspor...' : '📥 Export CSV'}
+          </button>
           <span style={{ marginLeft: 'auto', fontSize: '13px', color: '#6b7280' }}>
-            {loading ? 'Memuat...' : `${totalCount.toLocaleString('id')} agen`}
+            {isLoadingTable ? 'Memuat...' : `${currentTotal.toLocaleString('id')} agen`}
           </span>
         </div>
 
         {/* Table */}
-        {loading ? (
+        {activeTab === 'returning' ? (
+          loadingReturning ? (
+            <div style={{ border: '1px solid #e5e7eb', borderRadius: '10px', overflow: 'hidden' }}>
+              {[1,2,3,4,5].map(i => (
+                <div key={i} style={{ display: 'grid', gridTemplateColumns: '1fr 150px 150px 130px 80px', padding: '13px 16px', borderBottom: '1px solid #f3f4f6', gap: '16px', alignItems: 'center' }}>
+                  <div><Skeleton width={120} height={13} /><div style={{marginTop:4}}><Skeleton width={80} height={10} /></div></div>
+                  <Skeleton width={100} height={12} /><Skeleton width={100} height={12} /><Skeleton width={100} height={12} /><Skeleton width={60} height={12} />
+                </div>
+              ))}
+            </div>
+          ) : returningAgents.length > 0 ? (
+            <div style={{ border: '1px solid #e5e7eb', borderRadius: '10px', overflow: 'hidden' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 150px 150px 130px 80px', padding: '10px 16px', backgroundColor: '#f9fafb', borderBottom: '1px solid #e5e7eb', fontSize: '11px', fontWeight: '700', color: '#9ca3af', letterSpacing: '0.05em' }}>
+                <div>AGEN</div><div>MITRA</div><div>PIC</div>
+                <div style={{ textAlign: 'center' }}>BARU W2</div>
+                <div style={{ textAlign: 'right' }}>TRX 14H</div>
+              </div>
+              {returningAgents.map((agent, i) => (
+                <div key={agent.serial_number} onClick={() => openReturningDrawer(agent)}
+                  style={{ display: 'grid', gridTemplateColumns: '1fr 150px 150px 130px 80px', padding: '11px 16px', borderBottom: i < returningAgents.length - 1 ? '1px solid #f3f4f6' : 'none', alignItems: 'center', backgroundColor: '#fff', cursor: 'pointer' }}
+                  onMouseEnter={e => e.currentTarget.style.backgroundColor = '#f9fafb'}
+                  onMouseLeave={e => e.currentTarget.style.backgroundColor = '#fff'}>
+                  <div>
+                    <div style={{ fontSize: '13px', fontWeight: '600', color: '#111827' }}>{agent.merchant_name ?? agent.serial_number}</div>
+                    <div style={{ fontSize: '10px', color: '#9ca3af', marginTop: '1px' }}>{agent.serial_number}</div>
+                  </div>
+                  <div style={{ fontSize: '12px', color: '#374151', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{agent.mitra ?? '—'}</div>
+                  <div style={{ fontSize: '12px', color: '#374151', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{agent.pic ?? '—'}</div>
+                  <div style={{ textAlign: 'center' }}>
+                    <div style={{ fontSize: '11px', fontWeight: '700', color: '#7c3aed' }}>
+                      {new Date(agent.first_return_date).toLocaleDateString('id-ID', { day: 'numeric', month: 'short' })}
+                    </div>
+                    <div style={{ fontSize: '10px', color: '#9ca3af', marginTop: '1px' }}>
+                      {agent.avg_trx_since_return} TRX/hari ({agent.days_since_return}h)
+                    </div>
+                  </div>
+                  <div style={{ fontSize: '12px', fontWeight: '600', color: '#374151', textAlign: 'right' }}>{agent.trx_count_14d.toLocaleString('id')}</div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div style={{ textAlign: 'center', padding: '60px', backgroundColor: '#f9fafb', borderRadius: '10px', border: '1px dashed #e5e7eb', color: '#9ca3af', fontSize: '13px' }}>Tidak ada agen Baru W2 di lini fee 3.500</div>
+          )
+        ) : activeTab === 'lost_w2' ? (
+          loadingLost ? (
+            <div style={{ border: '1px solid #e5e7eb', borderRadius: '10px', overflow: 'hidden' }}>
+              {[1,2,3,4,5].map(i => (
+                <div key={i} style={{ display: 'grid', gridTemplateColumns: '1fr 150px 150px 130px 80px', padding: '13px 16px', borderBottom: '1px solid #f3f4f6', gap: '16px', alignItems: 'center' }}>
+                  <div><Skeleton width={120} height={13} /><div style={{marginTop:4}}><Skeleton width={80} height={10} /></div></div>
+                  <Skeleton width={100} height={12} /><Skeleton width={100} height={12} /><Skeleton width={100} height={12} /><Skeleton width={60} height={12} />
+                </div>
+              ))}
+            </div>
+          ) : lostAgents.length > 0 ? (
+            <div style={{ border: '1px solid #e5e7eb', borderRadius: '10px', overflow: 'hidden' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 150px 150px 130px 80px', padding: '10px 16px', backgroundColor: '#f9fafb', borderBottom: '1px solid #e5e7eb', fontSize: '11px', fontWeight: '700', color: '#9ca3af', letterSpacing: '0.05em' }}>
+                <div>AGEN</div><div>MITRA</div><div>PIC</div>
+                <div style={{ textAlign: 'center' }}>HILANG W2</div>
+                <div style={{ textAlign: 'right' }}>TRX W1</div>
+              </div>
+              {lostAgents.map((agent, i) => (
+                <div key={agent.serial_number} onClick={() => openLostDrawer(agent)}
+                  style={{ display: 'grid', gridTemplateColumns: '1fr 150px 150px 130px 80px', padding: '11px 16px', borderBottom: i < lostAgents.length - 1 ? '1px solid #f3f4f6' : 'none', alignItems: 'center', backgroundColor: '#fff', cursor: 'pointer' }}
+                  onMouseEnter={e => e.currentTarget.style.backgroundColor = '#f9fafb'}
+                  onMouseLeave={e => e.currentTarget.style.backgroundColor = '#fff'}>
+                  <div>
+                    <div style={{ fontSize: '13px', fontWeight: '600', color: '#111827' }}>{agent.merchant_name ?? agent.serial_number}</div>
+                    <div style={{ fontSize: '10px', color: '#9ca3af', marginTop: '1px' }}>{agent.serial_number}</div>
+                  </div>
+                  <div style={{ fontSize: '12px', color: '#374151', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{agent.mitra ?? '—'}</div>
+                  <div style={{ fontSize: '12px', color: '#374151', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{agent.pic ?? '—'}</div>
+                  <div style={{ textAlign: 'center' }}>
+                    <div style={{ fontSize: '11px', fontWeight: '700', color: '#c2410c' }}>
+                      {new Date(agent.last_active_date).toLocaleDateString('id-ID', { day: 'numeric', month: 'short' })}
+                    </div>
+                    <div style={{ fontSize: '10px', color: '#9ca3af', marginTop: '1px' }}>
+                      {agent.days_since_lost} hari lalu
+                    </div>
+                  </div>
+                  <div style={{ fontSize: '12px', fontWeight: '600', color: '#374151', textAlign: 'right' }}>{agent.trx_count_w1.toLocaleString('id')}</div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div style={{ textAlign: 'center', padding: '60px', backgroundColor: '#f9fafb', borderRadius: '10px', border: '1px dashed #e5e7eb', color: '#9ca3af', fontSize: '13px' }}>Tidak ada agen Hilang W2 di lini fee 3.500</div>
+          )
+        ) : loading ? (
           <div style={{ border: '1px solid #e5e7eb', borderRadius: '10px', overflow: 'hidden' }}>
             {[1,2,3,4,5].map(i => (
               <div key={i} style={{ display: 'grid', gridTemplateColumns: '100px 1fr 150px 150px 60px 80px 80px 80px', padding: '13px 16px', borderBottom: '1px solid #f3f4f6', gap: '16px', alignItems: 'center' }}>
@@ -477,9 +770,9 @@ export default function Dashboard3500Page() {
 
         {totalPages > 1 && (
           <div style={{ display: 'flex', justifyContent: 'center', gap: '8px', alignItems: 'center', marginTop: '16px' }}>
-            <button onClick={() => handlePageChange(Math.max(0, page - 1))} disabled={page === 0} style={{ padding: '7px 14px', borderRadius: '8px', border: '1px solid #e5e7eb', backgroundColor: '#fff', color: page === 0 ? '#d1d5db' : '#374151', fontSize: '13px', cursor: page === 0 ? 'not-allowed' : 'pointer' }}>← Prev</button>
-            <span style={{ fontSize: '13px', color: '#6b7280' }}>{page + 1} / {totalPages}</span>
-            <button onClick={() => handlePageChange(Math.min(totalPages - 1, page + 1))} disabled={page >= totalPages - 1} style={{ padding: '7px 14px', borderRadius: '8px', border: '1px solid #e5e7eb', backgroundColor: '#fff', color: page >= totalPages - 1 ? '#d1d5db' : '#374151', fontSize: '13px', cursor: page >= totalPages - 1 ? 'not-allowed' : 'pointer' }}>Next →</button>
+            <button onClick={() => handlePageChange(Math.max(0, currentPage - 1))} disabled={currentPage === 0} style={{ padding: '7px 14px', borderRadius: '8px', border: '1px solid #e5e7eb', backgroundColor: '#fff', color: currentPage === 0 ? '#d1d5db' : '#374151', fontSize: '13px', cursor: currentPage === 0 ? 'not-allowed' : 'pointer' }}>← Prev</button>
+            <span style={{ fontSize: '13px', color: '#6b7280' }}>{currentPage + 1} / {totalPages}</span>
+            <button onClick={() => handlePageChange(Math.min(totalPages - 1, currentPage + 1))} disabled={currentPage >= totalPages - 1} style={{ padding: '7px 14px', borderRadius: '8px', border: '1px solid #e5e7eb', backgroundColor: '#fff', color: currentPage >= totalPages - 1 ? '#d1d5db' : '#374151', fontSize: '13px', cursor: currentPage >= totalPages - 1 ? 'not-allowed' : 'pointer' }}>Next →</button>
           </div>
         )}
       </div>
@@ -598,6 +891,127 @@ export default function Dashboard3500Page() {
               </div>
             ) : (
               <div style={{ padding: '40px', textAlign: 'center', color: '#9ca3af', fontSize: '13px' }}>Tidak ada data</div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Drawer — Baru W2 */}
+      {selectedReturning && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 1000, display: 'flex', justifyContent: 'flex-end' }}>
+          <div onClick={() => setSelectedReturning(null)} style={{ position: 'absolute', inset: 0, backgroundColor: 'rgba(0,0,0,0.3)' }} />
+          <div style={{ position: 'relative', width: '480px', height: '100%', backgroundColor: '#fff', boxShadow: '-4px 0 24px rgba(0,0,0,0.12)', display: 'flex', flexDirection: 'column', overflowY: 'auto' }}>
+            <div style={{ padding: '20px 24px', borderBottom: '1px solid #f3f4f6', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', position: 'sticky', top: 0, backgroundColor: '#fff', zIndex: 1 }}>
+              <div>
+                <div style={{ fontSize: '18px', fontWeight: '800', color: '#111827', marginBottom: '4px' }}>{selectedReturning.merchant_name ?? selectedReturning.serial_number}</div>
+                <div style={{ fontSize: '11px', color: '#9ca3af', marginBottom: '6px' }}>{selectedReturning.serial_number}</div>
+                <span style={{ padding: '2px 10px', borderRadius: '99px', fontSize: '11px', fontWeight: '700', backgroundColor: '#f5f3ff', color: '#7c3aed', border: '1px solid #e9d5ff' }}>
+                  🆕 Baru W2 sejak {new Date(selectedReturning.first_return_date).toLocaleDateString('id-ID', { day: 'numeric', month: 'short' })}
+                </span>
+              </div>
+              <button onClick={() => setSelectedReturning(null)} style={{ padding: '6px 10px', borderRadius: '8px', border: '1px solid #e5e7eb', backgroundColor: '#fff', color: '#6b7280', fontSize: '18px', cursor: 'pointer', lineHeight: 1 }}>✕</button>
+            </div>
+            {loadingReturningDetail ? (
+              <div style={{ padding: '40px', textAlign: 'center', color: '#9ca3af', fontSize: '13px' }}>Memuat data...</div>
+            ) : (
+              <div style={{ padding: '20px 24px' }}>
+                {returningDetail.length > 0 && (() => {
+                  const latest = returningDetail[returningDetail.length - 1]
+                  return (
+                    <div style={{ marginBottom: '24px' }}>
+                      <div style={{ fontSize: '11px', fontWeight: '700', color: '#9ca3af', letterSpacing: '0.08em', marginBottom: '12px' }}>INFO AGEN</div>
+                      {[
+                        { label: 'Mitra', value: latest.mitra }, { label: 'PIC', value: latest.pic },
+                        { label: 'Alamat', value: latest.alamat_struk }, { label: 'Brand', value: latest.brand },
+                        { label: 'Mesin', value: latest.tipe_mesin }, { label: 'Aplikasi', value: latest.source_app },
+                      ].filter(r => r.value).map(r => (
+                        <div key={r.label} style={{ display: 'flex', gap: '12px', padding: '7px 0', borderBottom: '1px solid #f9fafb' }}>
+                          <span style={{ fontSize: '12px', color: '#9ca3af', minWidth: '80px', flexShrink: 0 }}>{r.label}</span>
+                          <span style={{ fontSize: '12px', color: '#111827', fontWeight: '500' }}>{r.value}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )
+                })()}
+                <div style={{ marginBottom: '24px' }}>
+                  <div style={{ fontSize: '11px', fontWeight: '700', color: '#9ca3af', letterSpacing: '0.08em', marginBottom: '12px' }}>RINGKASAN</div>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '10px' }}>
+                    {[
+                      { label: 'TRX 14H', value: selectedReturning.trx_count_14d.toLocaleString('id') },
+                      { label: 'TRX W2', value: selectedReturning.trx_count_w2.toLocaleString('id') },
+                      { label: 'Total Fee 14H', value: formatFee(selectedReturning.total_fee_14d) },
+                    ].map(s => (
+                      <div key={s.label} style={{ padding: '10px 12px', backgroundColor: '#f9fafb', borderRadius: '8px', textAlign: 'center' }}>
+                        <div style={{ fontSize: '14px', fontWeight: '700', color: '#111827' }}>{s.value}</div>
+                        <div style={{ fontSize: '10px', color: '#9ca3af', marginTop: '2px' }}>{s.label}</div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Drawer — Hilang W2 */}
+      {selectedLost && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 1000, display: 'flex', justifyContent: 'flex-end' }}>
+          <div onClick={() => setSelectedLost(null)} style={{ position: 'absolute', inset: 0, backgroundColor: 'rgba(0,0,0,0.3)' }} />
+          <div style={{ position: 'relative', width: '480px', height: '100%', backgroundColor: '#fff', boxShadow: '-4px 0 24px rgba(0,0,0,0.12)', display: 'flex', flexDirection: 'column', overflowY: 'auto' }}>
+            <div style={{ padding: '20px 24px', borderBottom: '1px solid #f3f4f6', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', position: 'sticky', top: 0, backgroundColor: '#fff', zIndex: 1 }}>
+              <div>
+                <div style={{ fontSize: '18px', fontWeight: '800', color: '#111827', marginBottom: '4px' }}>{selectedLost.merchant_name ?? selectedLost.serial_number}</div>
+                <div style={{ fontSize: '11px', color: '#9ca3af', marginBottom: '6px' }}>{selectedLost.serial_number}</div>
+                <span style={{ padding: '2px 10px', borderRadius: '99px', fontSize: '11px', fontWeight: '700', backgroundColor: '#fff7ed', color: '#c2410c', border: '1px solid #fed7aa' }}>
+                  👻 Hilang W2 · Terakhir aktif {new Date(selectedLost.last_active_date).toLocaleDateString('id-ID', { day: 'numeric', month: 'short' })}
+                </span>
+              </div>
+              <button onClick={() => setSelectedLost(null)} style={{ padding: '6px 10px', borderRadius: '8px', border: '1px solid #e5e7eb', backgroundColor: '#fff', color: '#6b7280', fontSize: '18px', cursor: 'pointer', lineHeight: 1 }}>✕</button>
+            </div>
+            {loadingLostDetail ? (
+              <div style={{ padding: '40px', textAlign: 'center', color: '#9ca3af', fontSize: '13px' }}>Memuat data...</div>
+            ) : (
+              <div style={{ padding: '20px 24px' }}>
+                {lostDetail.length > 0 && (() => {
+                  const latest = lostDetail[lostDetail.length - 1]
+                  return (
+                    <div style={{ marginBottom: '24px' }}>
+                      <div style={{ fontSize: '11px', fontWeight: '700', color: '#9ca3af', letterSpacing: '0.08em', marginBottom: '12px' }}>INFO AGEN</div>
+                      {[
+                        { label: 'Mitra', value: latest.mitra }, { label: 'PIC', value: latest.pic },
+                        { label: 'Alamat', value: latest.alamat_struk }, { label: 'Brand', value: latest.brand },
+                        { label: 'Mesin', value: latest.tipe_mesin }, { label: 'Aplikasi', value: latest.source_app },
+                      ].filter(r => r.value).map(r => (
+                        <div key={r.label} style={{ display: 'flex', gap: '12px', padding: '7px 0', borderBottom: '1px solid #f9fafb' }}>
+                          <span style={{ fontSize: '12px', color: '#9ca3af', minWidth: '80px', flexShrink: 0 }}>{r.label}</span>
+                          <span style={{ fontSize: '12px', color: '#111827', fontWeight: '500' }}>{r.value}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )
+                })()}
+                <div style={{ marginBottom: '24px' }}>
+                  <div style={{ fontSize: '11px', fontWeight: '700', color: '#9ca3af', letterSpacing: '0.08em', marginBottom: '12px' }}>RINGKASAN</div>
+                  <div style={{ padding: '12px 16px', backgroundColor: '#fff7ed', border: '1px solid #fed7aa', borderRadius: '8px', marginBottom: '10px' }}>
+                    <div style={{ fontSize: '13px', fontWeight: '700', color: '#c2410c' }}>
+                      Tidak ada transaksi fee 3.500 selama {selectedLost.days_since_lost} hari
+                    </div>
+                  </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '10px' }}>
+                    {[
+                      { label: 'TRX W1', value: selectedLost.trx_count_w1.toLocaleString('id') },
+                      { label: 'Avg TRX/Hari W1', value: selectedLost.avg_trx_w1.toString() },
+                      { label: 'Total Fee 14H', value: formatFee(selectedLost.total_fee_14d) },
+                    ].map(s => (
+                      <div key={s.label} style={{ padding: '10px 12px', backgroundColor: '#f9fafb', borderRadius: '8px', textAlign: 'center' }}>
+                        <div style={{ fontSize: '14px', fontWeight: '700', color: '#111827' }}>{s.value}</div>
+                        <div style={{ fontSize: '10px', color: '#9ca3af', marginTop: '2px' }}>{s.label}</div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
             )}
           </div>
         </div>
