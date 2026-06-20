@@ -82,7 +82,7 @@ export default function TriggerPage() {
             'Content-Type': 'application/json',
             Authorization: `Bearer ${session.access_token}`,
           },
-          body: JSON.stringify({ date }),
+          body: JSON.stringify({ date, mode: 'specific' }),
         })
         const data = await res.json()
         if (!res.ok) throw new Error(data.error ?? 'Failed')
@@ -289,7 +289,7 @@ export default function TriggerPage() {
                 border: '1px solid #bbf7d0', borderRadius: '8px',
                 fontSize: '13px', color: '#166534', fontWeight: '600', textAlign: 'center',
               }}>
-                ✅ Selesai — buka Morning Brief untuk lihat hasilnya
+                ✅ Selesai — metrics dan insights sudah ter-update
               </div>
             )}
           </>

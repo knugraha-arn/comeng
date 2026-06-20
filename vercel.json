@@ -14,6 +14,12 @@
     },
     "pages/api/notify/pulse-email.ts": {
       "maxDuration": 30
+    },
+    "pages/api/analytics/compute-metrics.ts": {
+      "maxDuration": 60
+    },
+    "pages/api/analytics/run-insights.ts": {
+      "maxDuration": 60
     }
   }
 }

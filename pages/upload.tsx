@@ -693,22 +693,13 @@ export default function UploadCenter() {
               )}
             </div>
 
-            <div style={{ display: 'flex', gap: '10px' }}>
-              <button onClick={() => router.push('/analytics')} style={{
-                flex: 1, padding: '12px', borderRadius: '8px', border: 'none',
-                backgroundColor: '#0344D8', color: '#fff',
-                fontSize: '13px', fontWeight: '700', cursor: 'pointer',
-              }}>
-                Lihat Morning Brief
-              </button>
-              <button onClick={resetForm} style={{
-                flex: 1, padding: '12px', borderRadius: '8px',
-                border: '1px solid #e5e7eb', backgroundColor: '#fff',
-                color: '#374151', fontSize: '13px', cursor: 'pointer',
-              }}>
-                Upload Lagi
-              </button>
-            </div>
+            <button onClick={resetForm} style={{
+              width: '100%', padding: '12px', borderRadius: '8px',
+              border: '1px solid #e5e7eb', backgroundColor: '#fff',
+              color: '#374151', fontSize: '13px', fontWeight: '600', cursor: 'pointer',
+            }}>
+              Upload Lagi
+            </button>
           </div>
         )}
       </div>

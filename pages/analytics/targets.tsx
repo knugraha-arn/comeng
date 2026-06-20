@@ -315,7 +315,7 @@ export default function TargetsPage() {
                 value={form.daily_at_risk_max}
                 onChange={v => setForm(f => ({ ...f, daily_at_risk_max: v }))}
                 suffix="terminal"
-                hint="Kalau Sporadic melewati angka ini, muncul alert di Morning Brief"
+                hint="Batas alarm jumlah agen Sporadic per hari"
               />
             </Section>
 

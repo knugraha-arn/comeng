@@ -40,7 +40,8 @@ interface UploadSummary {
 const REQUIRED_COLUMNS = ['refnum', 'datetime_tran', 'serial_number', 'trntype', 'sharing_fee', 'mitra']
 const CHUNK_SIZE = 500
 
-type Stage = 'idle' | 'reading' | 'parsing' | 'inserting' | 'computing' | 'success' | 'error'
+type Stage = 'idle' | 'reading' | 'parsing' | 'inserting' | 'success' | 'error'
+type ComputeStatus = 'idle' | 'running' | 'done' | 'error'
 
 function str(val: unknown): string | null {
   if (val === null || val === undefined || val === '') return null
@@ -89,6 +90,8 @@ export default function UploadCenter() {
   const [summary, setSummary] = useState<UploadSummary | null>(null)
   const [errorMsg, setErrorMsg] = useState('')
   const [isDragging, setIsDragging] = useState(false)
+  const [computeStatus, setComputeStatus] = useState<ComputeStatus>('idle')
+  const [computeMessage, setComputeMessage] = useState('')
   const inputRef = useRef<HTMLInputElement>(null)
 
   const isBusy = !['idle', 'success', 'error'].includes(stage)
@@ -301,16 +304,14 @@ export default function UploadCenter() {
         }
       }
 
-      setStage('computing')
-setProgress(90)
-setProgressLabel('Membersihkan data lama...')
+      setProgress(95)
+      setProgressLabel('Membersihkan data lama...')
 
-// Purge data lama
-try { await supabase.rpc('am_purge_old_data') } catch {}
-
-// Compute agent metrics
-setProgressLabel('Menghitung ulang metrics agen...')
-try { await supabase.rpc('compute_agent_metrics') } catch {}
+      // Purge data lama — tetap dijalankan di sini karena ringan & idempotent.
+      // Compute metrics TIDAK lagi dipanggil otomatis di sini — lihat handleComputeMetrics,
+      // dipicu manual via tombol di step 2 setelah upload selesai (server-side, lebih reliable
+      // daripada RPC langsung dari browser yang sebelumnya sering timeout/gagal diam-diam).
+      try { await supabase.rpc('am_purge_old_data') } catch {}
 
       setProgress(100)
       setStage('success')
@@ -333,7 +334,48 @@ try { await supabase.rpc('compute_agent_metrics') } catch {}
     setErrorMsg('')
     setProgress(0)
     setProgressLabel('')
+    setComputeStatus('idle')
+    setComputeMessage('')
     if (inputRef.current) inputRef.current.value = ''
+  }
+
+  async function handleComputeMetrics() {
+    setComputeStatus('running')
+    setComputeMessage('')
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session) {
+        setComputeStatus('error')
+        setComputeMessage('Sesi tidak ditemukan — silakan login ulang')
+        return
+      }
+
+      const res = await fetch('/api/analytics/compute-metrics', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify({ date: summary?.dates_processed?.[summary.dates_processed.length - 1] }),
+      })
+      const data = await res.json()
+
+      if (!res.ok) {
+        setComputeStatus('error')
+        setComputeMessage(data.error ?? 'Gagal menghitung metrics')
+        return
+      }
+
+      setComputeStatus('done')
+      const b = data.summary?.buckets
+      setComputeMessage(
+        `${data.summary?.agents_computed ?? 0} agen dihitung` +
+        (b ? ` (${b.productive ?? 0} productive, ${b.moderate ?? 0} moderate, ${b.sporadic ?? 0} sporadic)` : '')
+      )
+    } catch (err) {
+      setComputeStatus('error')
+      setComputeMessage(err instanceof Error ? err.message : 'Terjadi kesalahan')
+    }
   }
 
   const stageLabels: Record<Stage, string> = {
@@ -341,7 +383,6 @@ try { await supabase.rpc('compute_agent_metrics') } catch {}
     reading:   'Membaca file',
     parsing:   'Mengurai data',
     inserting: 'Menyimpan ke database',
-    computing: 'Menghitung metrics',
     success:   'Selesai',
     error:     'Error',
   }
@@ -415,13 +456,13 @@ try { await supabase.rpc('compute_agent_metrics') } catch {}
             {isBusy && (
               <div style={{ marginBottom: '20px' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
-                  {(['reading', 'parsing', 'inserting', 'computing'] as Stage[]).map(s => (
+                  {(['reading', 'parsing', 'inserting'] as Stage[]).map(s => (
                     <div key={s} style={{
                       fontSize: '10px', fontWeight: '600',
                       color: stage === s ? '#0344D8' :
                              ['success'].includes(stage) ? '#22c55e' :
-                             ['reading', 'parsing', 'inserting', 'computing'].indexOf(s) <
-                             ['reading', 'parsing', 'inserting', 'computing'].indexOf(stage) ? '#22c55e' : '#d1d5db',
+                             ['reading', 'parsing', 'inserting'].indexOf(s) <
+                             ['reading', 'parsing', 'inserting'].indexOf(stage) ? '#22c55e' : '#d1d5db',
                       letterSpacing: '0.04em',
                     }}>
                       {stageLabels[s].toUpperCase()}
@@ -535,22 +576,54 @@ try { await supabase.rpc('compute_agent_metrics') } catch {}
               </div>
             )}
 
-            <div style={{ display: 'flex', gap: '10px' }}>
-              <button onClick={() => router.push('/analytics')} style={{
-                flex: 1, padding: '12px', borderRadius: '8px', border: 'none',
-                backgroundColor: '#0344D8', color: '#fff',
-                fontSize: '13px', fontWeight: '700', cursor: 'pointer',
-              }}>
-                Lihat Morning Brief
-              </button>
-              <button onClick={resetForm} style={{
-                flex: 1, padding: '12px', borderRadius: '8px',
-                border: '1px solid #e5e7eb', backgroundColor: '#fff',
-                color: '#374151', fontSize: '13px', cursor: 'pointer',
-              }}>
-                Upload Lagi
-              </button>
+            {/* Step 2 — Compute Metrics (manual, server-side, terpisah dari proses upload) */}
+            <div style={{
+              padding: '16px', borderRadius: '8px',
+              backgroundColor: computeStatus === 'done' ? '#f0fdf4' : computeStatus === 'error' ? '#fef2f2' : '#eff6ff',
+              border: `1px solid ${computeStatus === 'done' ? '#bbf7d0' : computeStatus === 'error' ? '#fecaca' : '#bfdbfe'}`,
+            }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: computeStatus !== 'idle' ? '10px' : 0 }}>
+                <div>
+                  <div style={{ fontSize: '13px', fontWeight: '700', color: '#111827' }}>Langkah 2: Hitung Ulang Metrics</div>
+                  <div style={{ fontSize: '11px', color: '#6b7280', marginTop: '2px' }}>
+                    Data sudah tersimpan. Hitung metrics agen supaya dashboard ter-update dengan data terbaru.
+                  </div>
+                </div>
+                {computeStatus !== 'running' && (
+                  <button onClick={handleComputeMetrics} style={{
+                    padding: '9px 16px', borderRadius: '8px',
+                    border: computeStatus === 'done' ? '1px solid #bbf7d0' : 'none',
+                    backgroundColor: computeStatus === 'done' ? '#fff' : '#0344D8',
+                    color: computeStatus === 'done' ? '#166534' : '#fff',
+                    fontSize: '12px', fontWeight: '700', cursor: 'pointer', whiteSpace: 'nowrap',
+                  }}>
+                    {computeStatus === 'done' ? '↻ Hitung Ulang' : computeStatus === 'error' ? '↻ Coba Lagi' : '▶ Hitung Metrics'}
+                  </button>
+                )}
+              </div>
+
+              {computeStatus === 'running' && (
+                <div style={{ fontSize: '12px', color: '#0344D8', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <span style={{ display: 'inline-block', width: '12px', height: '12px', border: '2px solid #bfdbfe', borderTopColor: '#0344D8', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
+                  Menghitung metrics agen, mitra, dan PIC... (biasanya 5-10 detik)
+                </div>
+              )}
+              {computeStatus === 'done' && (
+                <div style={{ fontSize: '12px', color: '#166534', fontWeight: '600' }}>✅ {computeMessage}</div>
+              )}
+              {computeStatus === 'error' && (
+                <div style={{ fontSize: '12px', color: '#b00020', fontWeight: '600' }}>⚠️ {computeMessage}</div>
+              )}
+              <style>{'@keyframes spin { to { transform: rotate(360deg) } }'}</style>
             </div>
+
+            <button onClick={resetForm} style={{
+              width: '100%', padding: '12px', borderRadius: '8px',
+              border: '1px solid #e5e7eb', backgroundColor: '#fff',
+              color: '#374151', fontSize: '13px', fontWeight: '600', cursor: 'pointer',
+            }}>
+              Upload Lagi
+            </button>
           </div>
         )}
       </div>
