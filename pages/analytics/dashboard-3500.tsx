@@ -145,7 +145,7 @@ export default function Dashboard3500Page() {
   const [totalCount, setTotalCount] = useState(0)
   const [trendCounts, setTrendCounts] = useState({ growing: 0, declining: 0, consistent: 0 })
 
-  const [activeTab, setActiveTab] = useState<'growing' | 'declining' | 'consistent' | 'all' | 'returning' | 'lost_w2' | ''>('')
+  const [activeTab, setActiveTab] = useState<'growing' | 'declining' | 'consistent' | 'returning' | 'lost_w2' | ''>('')
   const [filterMitra, setFilterMitra] = useState('')
   const [filterPic, setFilterPic] = useState('')
   const [page, setPage] = useState(0)
@@ -247,7 +247,7 @@ export default function Dashboard3500Page() {
   }
 
   function getMinParams(tab: string) {
-    const isAll = tab === 'all'
+    const isAll = tab === '' || tab === 'all'
     return {
       p_min_active_days_w2: isAll ? 0 : 2,
       p_min_trx_w2:         isAll ? 0 : 5,
@@ -259,7 +259,7 @@ export default function Dashboard3500Page() {
     setLoading(true)
     try {
       const minParams = getMinParams(trend)
-      const trendParam = trend === 'all' ? '' : trend
+      const trendParam = trend
       const [dataRes, countRes] = await Promise.all([
         supabase.rpc('get_hidden_gem_agents_3500', {
           ...minParams,
@@ -411,7 +411,7 @@ export default function Dashboard3500Page() {
           rows)
       } else {
         const minParams = getMinParams(activeTab)
-        const trendParam = activeTab === 'all' ? '' : activeTab
+        const trendParam = activeTab
         const { data } = await supabase.rpc('get_hidden_gem_agents_3500', {
           ...minParams, p_trend: trendParam, p_mitra: filterMitra, p_pic: filterPic, p_limit: 99999, p_offset: 0
         })
@@ -547,20 +547,6 @@ export default function Dashboard3500Page() {
             )
           })}
 
-          {/* Tab Semua */}
-          {(() => {
-            const isActive = activeTab === 'all'
-            return (
-              <button onClick={() => handleTabChange(isActive ? '' : 'all')}
-                onMouseEnter={e => setTooltip({ text: 'Tampilkan semua agen dengan sharing_fee Rp 3.500 tanpa filter minimum aktif/TRX bulan ini.', x: e.clientX, y: e.clientY })}
-                onMouseMove={e => setTooltip({ text: 'Tampilkan semua agen dengan sharing_fee Rp 3.500 tanpa filter minimum aktif/TRX bulan ini.', x: e.clientX, y: e.clientY })}
-                onMouseLeave={() => setTooltip(null)}
-                style={{ padding: '9px 18px', borderRadius: '8px', cursor: 'pointer', border: `2px solid ${isActive ? '#374151' : '#e5e7eb'}`, backgroundColor: isActive ? '#f9fafb' : '#fff', color: isActive ? '#374151' : '#6b7280', fontSize: '13px', fontWeight: '600', transition: 'all 0.15s', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <span>📋</span>
-                <span>Semua</span>
-              </button>
-            )
-          })()}
           {(() => {
             const isActive = activeTab === 'returning'
             return (
@@ -948,6 +934,38 @@ export default function Dashboard3500Page() {
                     ))}
                   </div>
                 </div>
+
+                {returningDetail.length > 0 && (
+                  <div>
+                    <div style={{ fontSize: '11px', fontWeight: '700', color: '#9ca3af', letterSpacing: '0.08em', marginBottom: '12px' }}>TRANSAKSI PER HARI (14H)</div>
+                    <div style={{ display: 'flex', alignItems: 'flex-end', gap: '3px', height: '80px' }}>
+                      {(() => {
+                        const maxTrx = Math.max(...returningDetail.map(d => Number(d.total_trx)), 1)
+                        const sd = new Date(sinceDate)
+                        const returnDate = selectedReturning.first_return_date
+                        return Array.from({ length: 14 }, (_, i) => {
+                          const d = new Date(sd); d.setDate(sd.getDate() + i)
+                          const dateStr = d.toISOString().split('T')[0]
+                          const found = returningDetail.find(a => a.transaction_date === dateStr)
+                          const trx = found ? Number(found.total_trx) : 0
+                          const isAfterReturn = dateStr >= returnDate
+                          return (
+                            <div key={dateStr} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px' }} title={`${dateStr}: ${trx} trx`}>
+                              <div style={{ width: '100%', height: `${Math.max(4, (trx / maxTrx) * 64)}px`, backgroundColor: trx > 0 ? (isAfterReturn ? '#7c3aed' : '#94a3b8') : '#f3f4f6', borderRadius: '3px 3px 0 0', transition: 'height 0.3s' }} />
+                              <div style={{ fontSize: '8px', color: '#d1d5db', writingMode: 'vertical-rl', transform: 'rotate(180deg)' }}>
+                                {new Date(dateStr).toLocaleDateString('id-ID', { day: 'numeric', month: 'short' })}
+                              </div>
+                            </div>
+                          )
+                        })
+                      })()}
+                    </div>
+                    <div style={{ display: 'flex', gap: '12px', marginTop: '8px', fontSize: '10px', color: '#9ca3af' }}>
+                      <span>▪ <span style={{ color: '#94a3b8' }}>Sebelum kembali</span></span>
+                      <span>▪ <span style={{ color: '#7c3aed' }}>Setelah kembali</span></span>
+                    </div>
+                  </div>
+                )}
               </div>
             )}
           </div>
@@ -1011,6 +1029,32 @@ export default function Dashboard3500Page() {
                     ))}
                   </div>
                 </div>
+
+                {lostDetail.length > 0 && (
+                  <div>
+                    <div style={{ fontSize: '11px', fontWeight: '700', color: '#9ca3af', letterSpacing: '0.08em', marginBottom: '12px' }}>TRANSAKSI PER HARI (14H)</div>
+                    <div style={{ display: 'flex', alignItems: 'flex-end', gap: '3px', height: '80px' }}>
+                      {(() => {
+                        const maxTrx = Math.max(...lostDetail.map(d => Number(d.total_trx)), 1)
+                        const sd = new Date(sinceDate)
+                        return Array.from({ length: 14 }, (_, i) => {
+                          const d = new Date(sd); d.setDate(sd.getDate() + i)
+                          const dateStr = d.toISOString().split('T')[0]
+                          const found = lostDetail.find(a => a.transaction_date === dateStr)
+                          const trx = found ? Number(found.total_trx) : 0
+                          return (
+                            <div key={dateStr} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px' }} title={`${dateStr}: ${trx} trx`}>
+                              <div style={{ width: '100%', height: `${Math.max(4, (trx / maxTrx) * 64)}px`, backgroundColor: trx > 0 ? '#c2410c' : '#f3f4f6', borderRadius: '3px 3px 0 0', transition: 'height 0.3s' }} />
+                              <div style={{ fontSize: '8px', color: '#d1d5db', writingMode: 'vertical-rl', transform: 'rotate(180deg)' }}>
+                                {new Date(dateStr).toLocaleDateString('id-ID', { day: 'numeric', month: 'short' })}
+                              </div>
+                            </div>
+                          )
+                        })
+                      })()}
+                    </div>
+                  </div>
+                )}
               </div>
             )}
           </div>
