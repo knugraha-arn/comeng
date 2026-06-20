@@ -108,8 +108,7 @@ export default function AgentLiquidityPage() {
   const [filterStatus, setFilterStatus] = useState('')
   const [page, setPage] = useState(0)
 
-  const [mitras, setMitras] = useState<string[]>([])
-  const [pics, setPics] = useState<string[]>([])
+  const [filterOptions, setFilterOptions] = useState<{ mitra: string, pic: string }[]>([])
 
   const [sinceDate, setSinceDate] = useState('')
   const [lastDate, setLastDate] = useState('')
@@ -140,9 +139,8 @@ export default function AgentLiquidityPage() {
         setSinceDate(`${sd.getFullYear()}-${String(sd.getMonth() + 1).padStart(2, '0')}-${String(sd.getDate()).padStart(2, '0')}`)
       }
 
-      if (filterRes.data?.[0]) {
-        setMitras(filterRes.data[0].mitras ?? [])
-        setPics(filterRes.data[0].pics ?? [])
+      if (filterRes.data) {
+        setFilterOptions(filterRes.data)
       }
 
       await loadStatusCounts('', '')
@@ -246,6 +244,9 @@ export default function AgentLiquidityPage() {
       setExporting(false)
     }
   }
+
+  const mitras = [...new Set(filterOptions.map(f => f.mitra))].sort()
+  const pics   = [...new Set(filterOptions.filter(f => !filterMitra || f.mitra === filterMitra).map(f => f.pic))].sort()
 
   const totalPages = Math.ceil(totalCount / PAGE_SIZE)
   const liquiditySummary = liquidityDetail[0] ?? null
