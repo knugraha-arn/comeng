@@ -75,6 +75,22 @@ function formatFee(val: number): string {
   return `Rp ${val}`
 }
 
+function exportCSV(filename: string, headers: string[], rows: (string | number)[][]) {
+  const csvContent = [headers, ...rows]
+    .map(row => row.map(cell => {
+      const s = String(cell ?? '')
+      return s.includes(',') || s.includes('"') || s.includes('\n') ? `"${s.replace(/"/g, '""')}"` : s
+    }).join(','))
+    .join('\n')
+  const blob = new Blob(['\uFEFF' + csvContent], { type: 'text/csv;charset=utf-8;' })
+  const url = URL.createObjectURL(blob)
+  const link = document.createElement('a')
+  link.href = url
+  link.download = filename
+  link.click()
+  URL.revokeObjectURL(url)
+}
+
 export default function AgentLiquidityPage() {
   const router = useRouter()
   const supabase = createBrowserClient(
@@ -104,6 +120,7 @@ export default function AgentLiquidityPage() {
   const [loadingDetail, setLoadingDetail] = useState(false)
 
   const [tooltip, setTooltip] = useState<{ text: string, x: number, y: number } | null>(null)
+  const [exporting, setExporting] = useState(false)
 
   useEffect(() => { initPage() }, [router.asPath])
 
@@ -206,6 +223,30 @@ export default function AgentLiquidityPage() {
     }
   }
 
+  // Export CSV — selalu fetch ulang SEMUA data (p_limit besar), bukan dari state
+  // `agents` yang sudah dipotong PAGE_SIZE untuk pagination.
+  async function handleExport() {
+    setExporting(true)
+    try {
+      const { data } = await supabase.rpc('get_agent_liquidity_list', {
+        p_mitra: filterMitra, p_pic: filterPic, p_status: filterStatus,
+        p_limit: 99999, p_offset: 0,
+      })
+      const rows = (data ?? []).map((a: AgentLiquidityRow) => [
+        a.serial_number, a.merchant_name ?? '', a.mitra ?? '', a.pic ?? '',
+        a.active_days_14, a.total_trx_14,
+        a.avg_daily_amount_14d, a.avg_daily_amount_w1, a.avg_daily_amount_w2,
+        a.liquidity_ratio, a.liquidity_status,
+      ])
+      const statusLabel = filterStatus || 'semua'
+      exportCSV(`likuiditas_agen_${statusLabel}_${lastDate}.csv`,
+        ['Serial', 'Merchant', 'Mitra', 'PIC', 'Hari Aktif 14H', 'Total TRX 14H', 'Avg Amount/Hari 14H', 'Avg Amount/Hari W1', 'Avg Amount/Hari W2', 'Liquidity Ratio', 'Liquidity Status'],
+        rows)
+    } finally {
+      setExporting(false)
+    }
+  }
+
   const totalPages = Math.ceil(totalCount / PAGE_SIZE)
   const liquiditySummary = liquidityDetail[0] ?? null
 
@@ -288,6 +329,10 @@ export default function AgentLiquidityPage() {
           {(filterMitra || filterPic || filterStatus) && (
             <button onClick={handleReset} style={{ padding: '7px 12px', borderRadius: '8px', border: '1px solid #e5e7eb', backgroundColor: '#fff', color: '#6b7280', fontSize: '12px', cursor: 'pointer' }}>✕ Reset</button>
           )}
+          <button onClick={handleExport} disabled={exporting || loading}
+            style={{ padding: '7px 12px', borderRadius: '8px', border: '1px solid #e5e7eb', backgroundColor: '#fff', color: '#374151', fontSize: '12px', cursor: exporting || loading ? 'not-allowed' : 'pointer', opacity: exporting || loading ? 0.5 : 1, fontWeight: '600' }}>
+            {exporting ? 'Mengekspor...' : '📥 Export CSV'}
+          </button>
           <span style={{ marginLeft: 'auto', fontSize: '13px', color: '#6b7280' }}>
             {loading ? 'Memuat...' : `${totalCount.toLocaleString('id')} agen`}
           </span>
