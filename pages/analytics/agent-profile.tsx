@@ -24,11 +24,13 @@ interface AgentProfile {
   active_days_14: number
   total_trx_14: number
   total_fee_14: number
+  total_amount_14: number
   avg_trx_14: number
   bucket: string
   active_days_mtd: number
   total_trx_mtd: number
   total_fee_mtd: number
+  total_amount_mtd: number
   avg_trx_mtd: number
   trx_change_pct: number
   trend: string
@@ -380,8 +382,9 @@ export default function AgentProfilePage() {
                     { label: 'Total TRX',    value: formatNum(profile.total_trx_14) },
                     { label: 'Avg TRX/Hari', value: String(profile.avg_trx_14), highlight: true },
                     { label: 'Total Fee',    value: formatFee(profile.total_fee_14) },
+                    { label: 'Total Liquidity', value: formatFee(profile.total_amount_14), span: true },
                   ].map(s => (
-                    <div key={s.label} style={{ padding: '10px 12px', backgroundColor: s.highlight ? '#eff6ff' : '#f9fafb', borderRadius: '8px', textAlign: 'center', border: s.highlight ? '1px solid #bfdbfe' : 'none' }}>
+                    <div key={s.label} style={{ gridColumn: s.span ? 'span 2' : undefined, padding: '10px 12px', backgroundColor: s.highlight ? '#eff6ff' : '#f9fafb', borderRadius: '8px', textAlign: 'center', border: s.highlight ? '1px solid #bfdbfe' : 'none' }}>
                       <div style={{ fontSize: '16px', fontWeight: '700', color: s.highlight ? '#1e40af' : '#111827' }}>{s.value}</div>
                       <div style={{ fontSize: '10px', color: '#9ca3af', marginTop: '2px' }}>{s.label}</div>
                     </div>
@@ -401,8 +404,9 @@ export default function AgentProfilePage() {
                     { label: 'Total TRX',    value: formatNum(profile.total_trx_mtd) },
                     { label: 'Avg TRX/Hari', value: String(profile.avg_trx_mtd), highlight: true },
                     { label: 'Total Fee',    value: formatFee(profile.total_fee_mtd) },
+                    { label: 'Total Liquidity', value: formatFee(profile.total_amount_mtd), span: true },
                   ].map(s => (
-                    <div key={s.label} style={{ padding: '10px 12px', backgroundColor: s.highlight ? (trendCfg?.bg ?? '#f9fafb') : '#f9fafb', borderRadius: '8px', textAlign: 'center', border: s.highlight ? `1px solid ${trendCfg?.border ?? '#e5e7eb'}` : 'none' }}>
+                    <div key={s.label} style={{ gridColumn: s.span ? 'span 2' : undefined, padding: '10px 12px', backgroundColor: s.highlight ? (trendCfg?.bg ?? '#f9fafb') : '#f9fafb', borderRadius: '8px', textAlign: 'center', border: s.highlight ? `1px solid ${trendCfg?.border ?? '#e5e7eb'}` : 'none' }}>
                       <div style={{ fontSize: '16px', fontWeight: '700', color: s.highlight ? (trendCfg?.color ?? '#111827') : '#111827' }}>{s.value}</div>
                       <div style={{ fontSize: '10px', color: '#9ca3af', marginTop: '2px' }}>{s.label}</div>
                     </div>
