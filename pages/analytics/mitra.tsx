@@ -40,6 +40,18 @@ interface MitraChurn {
   retained_agents: number
 }
 
+interface MitraMTD {
+  total_trx_mtd: number
+  total_fee_mtd: number
+  fee_per_agent_mtd: number
+  active_agents_mtd: number
+  avg_trx_per_day_mtd: number
+  avg_trx_per_day_14d: number
+  days_elapsed: number
+  month_start: string
+  end_date: string
+}
+
 const MOMENTUM_CONFIG = {
   accelerating: { label: 'Akselerasi', icon: '↑', color: '#166534', bg: '#dcfce7', border: '#bbf7d0', tooltip: 'TRX W2 (7 hari terakhir) > 110% dari W1 (7 hari pertama). Jaringan mitra sedang tumbuh.' },
   stable:       { label: 'Stabil',     icon: '→', color: '#1e40af', bg: '#eff6ff', border: '#bfdbfe', tooltip: 'TRX W2 antara 90–110% dari W1. Volume konsisten.' },
@@ -102,6 +114,7 @@ export default function MitraPage() {
   const [selected, setSelected]           = useState<MitraRow | null>(null)
   const [detail, setDetail]               = useState<MitraDetail[]>([])
   const [churn, setChurn]                 = useState<MitraChurn | null>(null)
+  const [mtd, setMtd]                     = useState<MitraMTD | null>(null)
   const [loadingDrawer, setLoadingDrawer] = useState(false)
 
   useEffect(() => { loadMitras() }, [router.asPath])
@@ -121,14 +134,16 @@ export default function MitraPage() {
   }
 
   async function openDrawer(m: MitraRow) {
-    setSelected(m); setDetail([]); setChurn(null); setLoadingDrawer(true)
+    setSelected(m); setDetail([]); setChurn(null); setMtd(null); setLoadingDrawer(true)
     try {
-      const [d, c] = await Promise.all([
+      const [d, c, t] = await Promise.all([
         supabase.rpc('get_mitra_detail',      { p_mitra: m.mitra }),
         supabase.rpc('get_mitra_agent_churn', { p_mitra: m.mitra }),
+        supabase.rpc('get_mitra_mtd',         { p_mitra: m.mitra }),
       ])
       setDetail(d.data ?? [])
       setChurn(c.data?.[0] ?? null)
+      setMtd(t.data?.[0] ?? null)
     } finally { setLoadingDrawer(false) }
   }
 
@@ -352,6 +367,39 @@ export default function MitraPage() {
                     </div>
                   ))}
                 </div>
+
+                {mtd && (() => {
+                  const diffPct = mtd.avg_trx_per_day_14d > 0
+                    ? Math.round((mtd.avg_trx_per_day_mtd - mtd.avg_trx_per_day_14d) / mtd.avg_trx_per_day_14d * 1000) / 10
+                    : 0
+                  const isUp = diffPct >= 0
+                  return (
+                    <div style={{ marginBottom: '24px' }}>
+                      <div style={{ fontSize: '11px', fontWeight: '700', color: '#9ca3af', letterSpacing: '0.08em', marginBottom: '12px' }}>
+                        PERFORMA MTD
+                        <span {...tip(`Akumulasi sejak ${new Date(mtd.month_start).toLocaleDateString('id-ID', { day: 'numeric', month: 'short' })} (${mtd.days_elapsed} hari berjalan). Dibandingkan dengan rata-rata TRX/hari basis 14H untuk lihat apakah momentum bulan ini sedang menguat atau melambat.`)} style={{ marginLeft: '6px', cursor: 'default', fontWeight: '400' }}>ⓘ</span>
+                      </div>
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '10px' }}>
+                        {[
+                          { label: 'TRX MTD',  value: formatNum(mtd.total_trx_mtd) },
+                          { label: 'Fee MTD',  value: formatFee(mtd.total_fee_mtd) },
+                          { label: 'Fee/Agen MTD', value: formatFee(mtd.fee_per_agent_mtd) },
+                        ].map(s => (
+                          <div key={s.label} style={{ padding: '10px 12px', backgroundColor: '#f9fafb', borderRadius: '8px', textAlign: 'center' }}>
+                            <div style={{ fontSize: '14px', fontWeight: '700', color: '#111827' }}>{s.value}</div>
+                            <div style={{ fontSize: '10px', color: '#9ca3af', marginTop: '2px' }}>{s.label}</div>
+                          </div>
+                        ))}
+                      </div>
+                      <div style={{ marginTop: '10px', padding: '8px 12px', borderRadius: '8px', fontSize: '12px', fontWeight: '600', backgroundColor: isUp ? '#f0fdf4' : '#fef2f2', color: isUp ? '#166534' : '#dc2626', border: `1px solid ${isUp ? '#bbf7d0' : '#fecaca'}` }}>
+                        {isUp ? '↑' : '↓'} {Math.abs(diffPct)}% vs avg 14H
+                        <span style={{ fontWeight: '400', color: '#9ca3af', marginLeft: '6px' }}>
+                          ({formatNum(mtd.avg_trx_per_day_mtd)} vs {formatNum(mtd.avg_trx_per_day_14d)} TRX/hari)
+                        </span>
+                      </div>
+                    </div>
+                  )
+                })()}
 
                 {churn && (
                   <div style={{ marginBottom: '24px' }}>
