@@ -23,11 +23,11 @@ const analyticsNavItems = [
 ]
 
 const adminNavItems = [
-  { href: '/analytics/upload',         label: 'Upload Transaksi',    icon: '↑' },
-  { href: '/analytics/history',        label: 'History Upload Transaksi', icon: '◎' },
-  { href: '/upload',                   label: 'Upload WAG', icon: '◈' },
-  { href: '/analytics/target-simple',  label: 'Target Bisnis',         icon: '◎' },
-  { href: '/config',                   label: 'Konfigurasi',    icon: '◈' },
+  { href: '/analytics/upload',         label: 'Upload Transaksi',    icon: '↑',  strictAdmin: false },
+  { href: '/analytics/history',        label: 'History Upload Transaksi', icon: '◎', strictAdmin: false },
+  { href: '/upload',                   label: 'Upload WAG', icon: '◈',            strictAdmin: false },
+  { href: '/analytics/target-simple',  label: 'Target Bisnis',       icon: '◎',  strictAdmin: true },
+  { href: '/config',                   label: 'Konfigurasi',         icon: '◈',  strictAdmin: false },
 ]
 
 // Cache di module level — persist selama session browser, tidak reset saat ganti halaman
@@ -189,7 +189,9 @@ export default function Layout({ children, title }: { children: React.ReactNode;
           {isSuperAdmin && (
             <>
               <SectionLabel label="ADMIN" />
-              {adminNavItems.map(item => <NavItem key={item.href} {...item} />)}
+              {adminNavItems
+                .filter(item => !item.strictAdmin || ['admin', 'super_admin'].includes(role))
+                .map(item => <NavItem key={item.href} {...item} />)}
             </>
           )}
 
