@@ -1,6 +1,8 @@
 import { useState, useEffect, useRef } from 'react'
 import Layout from '@/components/Layout'
 import { supabase } from '@/lib/supabase'
+import ReactMarkdown from 'react-markdown'
+import remarkGfm from 'remark-gfm'
 
 type Message = {
   role: 'user' | 'assistant'
@@ -12,9 +14,9 @@ type Wag = { id: string; name: string }
 
 const SUGGESTIONS = [
   'Ranger mana yang paling konsisten minggu ini?',
-  'Masalah apa yang paling mengemuka di semua WAG',
+  'WAG mana yang perlu perhatian segera?',
   'Bandingkan performa semua Ranger bulan ini',
-  'Agen mana yang potensi menjadi ambasador/champion dari semua WAG?',
+  'Agen mana yang paling aktif di semua WAG?',
   'Apa tren participation rate 4 minggu terakhir?',
   'Ranger mana yang proactive posts-nya paling tinggi?',
 ]
@@ -193,7 +195,39 @@ export default function AiAssistantPage() {
                   fontSize: '13px', lineHeight: '1.6',
                   border: m.role === 'assistant' ? '1px solid #e5e5e5' : 'none',
                 }}>
-                  <div style={{ whiteSpace: 'pre-wrap' }}>{m.content}</div>
+                  {m.role === 'user' ? (
+                    <div style={{ whiteSpace: 'pre-wrap' }}>{m.content}</div>
+                  ) : (
+                    <div className="md-content">
+                      <ReactMarkdown
+                        remarkPlugins={[remarkGfm]}
+                        components={{
+                          p: ({ children }) => <p style={{ margin: '0 0 8px 0' }}>{children}</p>,
+                          strong: ({ children }) => <strong style={{ fontWeight: '700', color: '#111' }}>{children}</strong>,
+                          em: ({ children }) => <em style={{ fontStyle: 'italic' }}>{children}</em>,
+                          h1: ({ children }) => <div style={{ fontSize: '15px', fontWeight: '700', color: '#111', margin: '12px 0 6px 0', borderBottom: '1px solid #e5e5e5', paddingBottom: '4px' }}>{children}</div>,
+                          h2: ({ children }) => <div style={{ fontSize: '14px', fontWeight: '700', color: '#111', margin: '10px 0 4px 0' }}>{children}</div>,
+                          h3: ({ children }) => <div style={{ fontSize: '13px', fontWeight: '700', color: '#333', margin: '8px 0 4px 0' }}>{children}</div>,
+                          ul: ({ children }) => <ul style={{ margin: '4px 0 8px 0', paddingLeft: '18px' }}>{children}</ul>,
+                          ol: ({ children }) => <ol style={{ margin: '4px 0 8px 0', paddingLeft: '18px' }}>{children}</ol>,
+                          li: ({ children }) => <li style={{ margin: '2px 0', lineHeight: '1.6' }}>{children}</li>,
+                          code: ({ children, className }) => {
+                            const isBlock = !!className
+                            return isBlock
+                              ? <pre style={{ background: '#1A1F2E', color: '#e5e7eb', padding: '10px 12px', borderRadius: '6px', fontSize: '12px', overflowX: 'auto', margin: '8px 0' }}><code>{children}</code></pre>
+                              : <code style={{ background: '#e5e7eb', color: '#1A1F2E', padding: '1px 5px', borderRadius: '4px', fontSize: '12px', fontFamily: 'monospace' }}>{children}</code>
+                          },
+                          blockquote: ({ children }) => <blockquote style={{ borderLeft: '3px solid #0344D8', paddingLeft: '10px', margin: '8px 0', color: '#555', fontStyle: 'italic' }}>{children}</blockquote>,
+                          hr: () => <hr style={{ border: 'none', borderTop: '1px solid #e5e5e5', margin: '10px 0' }} />,
+                          table: ({ children }) => <table style={{ borderCollapse: 'collapse', width: '100%', fontSize: '12px', margin: '8px 0' }}>{children}</table>,
+                          th: ({ children }) => <th style={{ border: '1px solid #e5e5e5', padding: '6px 10px', backgroundColor: '#f3f4f6', fontWeight: '700', textAlign: 'left' }}>{children}</th>,
+                          td: ({ children }) => <td style={{ border: '1px solid #e5e5e5', padding: '6px 10px' }}>{children}</td>,
+                        }}
+                      >
+                        {m.content}
+                      </ReactMarkdown>
+                    </div>
+                  )}
                   <div style={{ fontSize: '10px', color: m.role === 'user' ? 'rgba(255,255,255,0.4)' : '#bbb', marginTop: '6px' }}>
                     {m.timestamp.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })}
                   </div>
