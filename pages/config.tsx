@@ -2,13 +2,24 @@ import { useState, useEffect } from 'react'
 import Layout from '@/components/Layout'
 import { supabase } from '@/lib/supabase'
 
+type MatchingResult = {
+  member_name: string
+  r_wag_name: string
+  cleaned_name: string
+  match_status: 'matched' | 'ambiguous' | 'no_match'
+  matched_merchant: string | null
+  r_serial_number: string | null
+  candidate_count: number
+  match_type: string
+}
+
 type Wag = { id: string; name: string; description: string; status: string; created_at: string }
 type Ranger = { id: string; wag_id: string; full_name: string; display_name: string; phone_number: string; status: string }
 type User = { id: string; email: string; full_name: string; role: string; last_login_at: string; is_approved: boolean }
 type Observer = { id: string; wag_id: string; display_name: string; note: string; created_at: string }
 
 export default function ConfigPage() {
-  const [tab, setTab] = useState<'wag' | 'ranger' | 'users' | 'observer'>('wag')
+  const [tab, setTab] = useState<'wag' | 'ranger' | 'users' | 'observer' | 'matching'>('wag')
   const [wags, setWags] = useState<Wag[]>([])
   const [rangers, setRangers] = useState<Ranger[]>([])
   const [users, setUsers] = useState<User[]>([])
@@ -139,18 +150,68 @@ export default function ConfigPage() {
     boxSizing: 'border-box' as const,
   }
 
+  const [matchingResults, setMatchingResults] = useState<MatchingResult[]>([])
+  const [matchingLoading, setMatchingLoading] = useState(false)
+  const [matchingDone, setMatchingDone] = useState(false)
+
   const tabs = [
     { key: 'wag', label: 'WAG' },
     { key: 'ranger', label: 'Ranger' },
     { key: 'observer', label: 'Observer' },
     { key: 'users', label: 'Akun Pengguna' },
+    { key: 'matching', label: 'Agent Matching' },
   ]
+
+  async function runMatching() {
+    setMatchingLoading(true)
+    setMatchingDone(false)
+    try {
+      const { data, error } = await supabase.rpc('match_wag_members_to_agents')
+      if (error) throw error
+      setMatchingResults(data ?? [])
+      setMatchingDone(true)
+    } catch (err) {
+      setMessage({ text: err instanceof Error ? err.message : 'Gagal menjalankan matching', type: 'error' })
+    } finally {
+      setMatchingLoading(false)
+    }
+  }
+
+  function exportMatchingCSV() {
+    const headers = ['Member Name (WAG)', 'WAG', 'Cleaned Name', 'Status', 'Matched Merchant', 'Serial Number', 'Kandidat', 'Tipe Match']
+    const rows = matchingResults
+      .filter(r => r.match_status !== 'no_match')
+      .map(r => [
+        r.member_name, r.r_wag_name, r.cleaned_name,
+        r.match_status, r.matched_merchant || '', r.r_serial_number || '',
+        String(r.candidate_count), r.match_type,
+      ])
+    const escape = (s: string) => s.includes(',') || s.includes('\n') ? ('"' + s.replace(/"/g, '""') + '"') : s
+    const csv = [headers, ...rows].map(row => row.map(escape).join(',')).join('\n')
+    const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    const date = new Date().toISOString().slice(0, 10)
+    a.href = url
+    a.download = 'agent_matching_' + date + '.csv'
+    a.click()
+    URL.revokeObjectURL(url)
+  }
+
+  const matchedCount   = matchingResults.filter(r => r.match_status === 'matched').length
+  const ambiguousCount = matchingResults.filter(r => r.match_status === 'ambiguous').length
+  const noMatchCount   = matchingResults.filter(r => r.match_status === 'no_match').length
+  const matchStatusConfig = {
+    matched:   { label: 'Matched',   bg: '#EAF3DE', color: '#27500A', border: '#C0DD97' },
+    ambiguous: { label: 'Ambiguous', bg: '#FFF3CD', color: '#856404', border: '#FAC775' },
+    no_match:  { label: 'No Match',  bg: '#F8F9FB', color: '#999',    border: '#e5e5e5' },
+  }
 
   const activeWags = wags.filter(w => w.status === 'active')
   const archivedWags = wags.filter(w => w.status !== 'active')
 
   return (
-    <Layout title="Konfigurasi">
+    <Layout>
 
       {/* Tabs */}
       <div style={{ display: 'flex', gap: '4px', marginBottom: '20px', background: '#F8F9FB', padding: '4px', borderRadius: '10px', width: 'fit-content', border: '1px solid #e5e5e5' }}>
@@ -482,6 +543,83 @@ export default function ConfigPage() {
               </tbody>
             </table>
           </div>
+        </div>
+      )}
+
+      {/* Matching Tab */}
+      {tab === 'matching' && (
+        <div>
+          <div style={{ marginBottom: '16px' }}>
+            <div style={{ fontSize: '13px', fontWeight: '500', marginBottom: '4px' }}>Agent Matching — WAG ↔ Transaksi</div>
+            <div style={{ fontSize: '12px', color: '#999', lineHeight: '1.6' }}>
+              Cocokkan nama member di WAG dengan merchant di data transaksi menggunakan exact/partial match.
+              Hasil hanya untuk referensi — tidak mengubah data apapun di database.
+              Export CSV berisi member yang berhasil di-match (matched + ambiguous).
+            </div>
+          </div>
+
+          <div style={{ display: 'flex', gap: '10px', marginBottom: '20px', alignItems: 'center' }}>
+            <button onClick={runMatching} disabled={matchingLoading}
+              style={{ padding: '9px 20px', borderRadius: '8px', border: 'none', background: matchingLoading ? '#999' : '#0344D8', color: '#fff', fontSize: '13px', fontWeight: '500', cursor: matchingLoading ? 'not-allowed' : 'pointer' }}>
+              {matchingLoading ? '⟳ Menjalankan...' : matchingDone ? '↺ Jalankan Ulang' : '▶ Jalankan Matching'}
+            </button>
+            {matchingDone && (
+              <button onClick={exportMatchingCSV}
+                style={{ padding: '9px 20px', borderRadius: '8px', border: '1px solid #e5e5e5', background: '#fff', color: '#374151', fontSize: '13px', fontWeight: '500', cursor: 'pointer' }}>
+                📥 Export CSV
+              </button>
+            )}
+          </div>
+
+          {matchingDone && (
+            <>
+              {/* Summary */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '10px', marginBottom: '20px' }}>
+                {[
+                  { label: 'Matched', value: matchedCount, bg: '#EAF3DE', color: '#27500A' },
+                  { label: 'Ambiguous', value: ambiguousCount, bg: '#FFF3CD', color: '#856404' },
+                  { label: 'No Match', value: noMatchCount, bg: '#F8F9FB', color: '#999' },
+                ].map(s => (
+                  <div key={s.label} style={{ padding: '12px 16px', borderRadius: '8px', backgroundColor: s.bg, textAlign: 'center' }}>
+                    <div style={{ fontSize: '22px', fontWeight: '700', color: s.color }}>{s.value}</div>
+                    <div style={{ fontSize: '11px', color: s.color, marginTop: '2px' }}>{s.label}</div>
+                  </div>
+                ))}
+              </div>
+
+              {/* Table — hanya matched dan ambiguous */}
+              <div style={{ border: '1px solid #e5e5e5', borderRadius: '10px', overflow: 'hidden' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 100px 80px', padding: '10px 16px', backgroundColor: '#F8F9FB', borderBottom: '1px solid #e5e5e5', fontSize: '11px', fontWeight: '700', color: '#999', letterSpacing: '0.05em' }}>
+                  <div>MEMBER WAG</div><div>MERCHANT MATCH</div><div>WAG</div><div style={{ textAlign: 'center' }}>SERIAL</div><div style={{ textAlign: 'center' }}>STATUS</div>
+                </div>
+                {matchingResults.filter(r => r.match_status !== 'no_match').map((r, i) => {
+                  const cfg = matchStatusConfig[r.match_status]
+                  return (
+                    <div key={i} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 100px 80px', padding: '10px 16px', borderBottom: '1px solid #f5f5f5', alignItems: 'center', fontSize: '12px' }}>
+                      <div>
+                        <div style={{ fontWeight: '500', color: '#111' }}>{r.member_name}</div>
+                        <div style={{ color: '#bbb', fontSize: '10px', marginTop: '2px' }}>{r.cleaned_name}</div>
+                      </div>
+                      <div>
+                        <div style={{ fontWeight: '500', color: '#111' }}>{r.matched_merchant ?? '—'}</div>
+                        <div style={{ color: '#bbb', fontSize: '10px', marginTop: '2px' }}>{r.match_type} · {r.candidate_count} kandidat</div>
+                      </div>
+                      <div style={{ color: '#555', fontSize: '11px' }}>{r.r_wag_name}</div>
+                      <div style={{ textAlign: 'center', fontFamily: 'monospace', fontSize: '10px', color: '#555' }}>{r.r_serial_number ?? '—'}</div>
+                      <div style={{ textAlign: 'center' }}>
+                        <span style={{ padding: '2px 8px', borderRadius: '999px', fontSize: '10px', fontWeight: '600', background: cfg.bg, color: cfg.color, border: `1px solid ${cfg.border}` }}>
+                          {cfg.label}
+                        </span>
+                      </div>
+                    </div>
+                  )
+                })}
+                {matchingResults.filter(r => r.match_status !== 'no_match').length === 0 && (
+                  <div style={{ padding: '32px', textAlign: 'center', fontSize: '13px', color: '#999' }}>Tidak ada hasil yang bisa di-match</div>
+                )}
+              </div>
+            </>
+          )}
         </div>
       )}
 
