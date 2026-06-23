@@ -60,15 +60,43 @@ export default function RekomendasiPage() {
   }
 
   const fetchHistory = async () => {
+    // Fetch history list TANPA items — items bisa sangat besar (ratusan KB per record)
+    // sehingga menyebabkan Supabase JS client gagal parse response kalau di-fetch sekaligus.
     const { data } = await supabase
       .from('recommendations')
-      .select('id, week_key, generated_at, generated_by, users(email), items')
+      .select('id, week_key, generated_at, generated_by')
       .order('generated_at', { ascending: false })
       .limit(10)
-    if (data && data.length > 0) {
-      setHistory(data as unknown as SavedRecommendation[])
-      setSelectedId(data[0].id)
+    if (!data || data.length === 0) return
+
+    // Ambil email user secara terpisah
+    const userIds = [...new Set((data.map(d => d.generated_by) as (string | null)[]).filter(Boolean))] as string[]
+    const emailMap: Record<string, string> = {}
+    if (userIds.length > 0) {
+      const { data: usersData } = await supabase
+        .from('users').select('id, email').in('id', userIds)
+      for (const u of usersData ?? []) emailMap[u.id] = u.email
     }
+
+    const enriched = data.map(d => ({
+      ...d,
+      items: [] as Recommendation[], // items di-fetch terpisah saat user pilih record
+      users: d.generated_by ? { email: emailMap[d.generated_by] ?? null } : null,
+    }))
+    setHistory(enriched as unknown as SavedRecommendation[])
+    setSelectedId(data[0].id)
+    // Langsung fetch items untuk record pertama (yang auto-selected)
+    fetchItems(data[0].id)
+  }
+
+  const fetchItems = async (id: string) => {
+    const { data } = await supabase
+      .from('recommendations')
+      .select('items')
+      .eq('id', id)
+      .single()
+    if (!data) return
+    setHistory(prev => prev.map(h => h.id === id ? { ...h, items: data.items ?? [] } : h))
   }
 
   const startProgress = () => {
@@ -303,7 +331,7 @@ export default function RekomendasiPage() {
             <div style={{ padding: '20px', fontSize: '12px', color: '#999', textAlign: 'center' }}>Belum ada riwayat</div>
           ) : (
             history.map(h => (
-              <div key={h.id} onClick={() => setSelectedId(h.id)}
+              <div key={h.id} onClick={() => { setSelectedId(h.id); if (!h.items?.length) fetchItems(h.id) }}
                 style={{
                   padding: '12px 16px', borderBottom: '1px solid #f5f5f5', cursor: 'pointer',
                   background: selectedId === h.id ? '#F0F5FF' : 'transparent',
