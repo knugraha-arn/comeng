@@ -179,10 +179,11 @@ export default function Layout({ children, title }: { children: React.ReactNode;
         <nav style={{ padding: '10px 8px', flex: 1, overflowY: 'auto' }}>
 
           {/* WAG */}
+          <SectionLabel label="WAG ANALYTICS" />
           {navItems.map(item => <NavItem key={item.href} {...item} />)}
 
           {/* Analytics */}
-          <SectionLabel label="ANALYTICS" />
+          <SectionLabel label="TRX ANALYTICS" />
           {analyticsNavItems.map(item => <NavItem key={item.href} {...item} />)}
 
           {/* Admin */}
