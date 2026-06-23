@@ -57,6 +57,32 @@ export async function buildContext(wagId?: string): Promise<string> {
     .from('observers')
     .select('wag_id, display_name, note')
 
+  // 8. Data transaksi agregat — ringkasan platform (bukan raw data, sudah pre-aggregated)
+  const { data: mitraStats } = await supabase.rpc('get_mitra_list')
+
+  const { data: topAgents } = await supabase
+    .from('am_agent_daily_metrics')
+    .select('serial_number, merchant_name, mitra, pic, total_trx, total_fee, bucket, active_days_14, avg_transfer_per_active_day')
+    .order('total_trx', { ascending: false })
+    .limit(10)
+
+  const { data: bucketRaw } = await supabase
+    .from('am_agent_daily_metrics')
+    .select('bucket')
+    .not('bucket', 'is', null)
+
+  const bucketCount = (bucketRaw ?? []).reduce((acc: Record<string, number>, r) => {
+    acc[r.bucket] = (acc[r.bucket] || 0) + 1
+    return acc
+  }, {})
+
+  const { data: dateData } = await supabase
+    .from('am_agent_daily_metrics')
+    .select('metric_date')
+    .order('metric_date', { ascending: false })
+    .limit(1)
+    .single()
+
   // Build context string
   const lines: string[] = []
 
@@ -147,6 +173,38 @@ export async function buildContext(wagId?: string): Promise<string> {
       lines.push(`  ${item.body}`)
     }
     lines.push('')
+  }
+
+  // Data Transaksi Agen (agregat — basis 14 hari terakhir)
+  if (dateData?.metric_date) {
+    const fmt = (n: number) => n >= 1000000
+      ? `Rp ${(n/1000000).toFixed(1)}jt`
+      : n >= 1000 ? `Rp ${(n/1000).toFixed(0)}rb` : `Rp ${n}`
+
+    lines.push('--- DATA TRANSAKSI AGEN (14 HARI TERAKHIR) ---')
+    lines.push(`Data per: ${dateData.metric_date}`)
+    lines.push(`Distribusi bucket agen:`)
+    lines.push(`  Productive: ${bucketCount['productive'] || 0} agen`)
+    lines.push(`  Moderate:   ${bucketCount['moderate'] || 0} agen`)
+    lines.push(`  Sporadic:   ${bucketCount['sporadic'] || 0} agen`)
+    lines.push(`  Total:      ${(bucketRaw ?? []).length} agen aktif dalam 14H`)
+    lines.push('')
+
+    if (mitraStats && mitraStats.length > 0) {
+      lines.push('Performa per Mitra (14H):')
+      for (const m of mitraStats) {
+        lines.push(`  ${m.mitra}: ${m.active_agents_14d} agen aktif | ${m.total_trx_14d} TRX | ${fmt(m.total_fee_14d)} fee | Growing ${m.growing_pct}% | Declining ${m.declining_pct}%`)
+      }
+      lines.push('')
+    }
+
+    if (topAgents && topAgents.length > 0) {
+      lines.push('Top 10 agen paling aktif (berdasarkan TRX 14H):')
+      for (const a of topAgents) {
+        lines.push(`  ${a.merchant_name} (${a.serial_number}) | Mitra: ${a.mitra} | ${a.total_trx} TRX | ${fmt(a.total_fee)} fee | Bucket: ${a.bucket} | ${a.active_days_14} hari aktif`)
+      }
+      lines.push('')
+    }
   }
 
   return lines.join('\n')
