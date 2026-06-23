@@ -10,15 +10,13 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 )
 
-// Rekomendasi hanya menggunakan 8 minggu terakhir per Ranger.
-// Alasan:
-// 1. Fokus pada kondisi terkini — perilaku 2 bulan terakhir lebih relevan
-//    untuk coaching daripada data historis yang sudah lama.
-// 2. Efisiensi token — data terlalu panjang meningkatkan biaya API
-//    dan dapat menurunkan kualitas analisis Claude.
-// 3. Tren yang actionable — 8 minggu cukup untuk melihat pola perilaku
-//    dan perubahan yang perlu ditindaklanjuti segera.
-// Data historis lengkap tetap tersimpan dan bisa dilihat di halaman Tren.
+// Rekomendasi menggunakan 8 minggu terakhir per WAG.
+// Unit analisis adalah WAG (bukan Ranger) karena:
+// 1. 1 Ranger bisa kelola beberapa WAG — rekomendasi per-Ranger mengaburkan
+//    kondisi spesifik tiap grup.
+// 2. Tiap WAG punya dinamika komunitas berbeda — anggota, tingkat keaktifan,
+//    pola pesan — yang butuh insight terpisah.
+// 3. Ranger tetap disebutkan sebagai konteks ("dikelola oleh X"), bukan unit utama.
 const WEEKS_WINDOW = 8
 
 const PROMPT_TEMPLATE = `Kamu adalah sistem analisis komunitas untuk platform AMARIS — alat monitoring efektivitas Ranger dalam membina komunitas agen WhatsApp (WAG).
@@ -27,20 +25,22 @@ Konteks bisnis:
 - Ranger adalah freelancer yang membina komunitas agen pengguna EDC Mini ATM
 - Ranger mendapat fee per transaksi agen — makin aktif agen bertransaksi, makin besar pendapatan Ranger
 - Masalah utama: Ranger cenderung fokus akuisisi agen baru, tapi kurang membina agen yang sudah ada
-- AMARIS mengukur efektivitas Ranger dari aktivitas di WAG sebagai leading indicator
+- AMARIS mengukur efektivitas pembinaan dari aktivitas di setiap WAG sebagai leading indicator
 
-Catatan analisis: Data yang diberikan adalah 8 minggu terakhir per Ranger untuk memastikan rekomendasi fokus pada kondisi dan tren terkini yang actionable.
+Catatan analisis: Data yang diberikan adalah 8 minggu terakhir per WAG. Unit analisis adalah GRUP (WAG), bukan individu Ranger — satu Ranger bisa kelola beberapa grup dengan kondisi yang berbeda-beda.
 
-Data komunitas:
+Data komunitas per WAG:
 
 {{DATA}}
 
-Berdasarkan data di atas, berikan rekomendasi coaching yang spesifik dan actionable untuk setiap Ranger.
+Berdasarkan data di atas, berikan rekomendasi coaching yang spesifik dan actionable untuk SETIAP WAG.
+Rekomendasi ditujukan kepada Ranger yang mengelola grup tersebut, disesuaikan dengan kondisi spesifik grup itu.
 
 Respond HANYA dengan JSON array berikut. Pastikan JSON valid — tidak ada trailing comma, tidak ada karakter khusus di dalam string. Tanpa penjelasan tambahan, tanpa markdown backticks:
 [
   {
-    "ranger": "nama ranger",
+    "wag": "nama WAG",
+    "ranger": "nama Ranger pengelola",
     "priority": "critical|warning|positive",
     "title": "judul rekomendasi singkat",
     "body": "analisis situasi dalam 2-3 kalimat spesifik berdasarkan data tanpa tanda kutip ganda di dalam teks",
@@ -52,41 +52,51 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
 
   try {
-    // Step 1: Fetch rangers
-    const { data: rangers, error: rangerError } = await supabase
-      .from('rangers')
-      .select('id, full_name, display_name, wags(id, name), weekly_metrics(week_key, active_days, total_messages, participation_rate, status)')
+    // Step 1: Fetch WAGs aktif beserta Ranger dan weekly_metrics-nya
+    // Pivot dari Rangers ke WAGs sebagai anchor — karena 1 Ranger bisa kelola N WAG,
+    // tapi tiap WAG punya tepat 1 Ranger (berdasarkan data aktual sistem).
+    const { data: wags, error: wagError } = await supabase
+      .from('wags')
+      .select(`
+        id,
+        name,
+        rangers!inner(id, full_name, display_name, status),
+        weekly_metrics(week_key, active_days, total_messages, participation_rate, status, ranger_id)
+      `)
       .eq('status', 'active')
+      .eq('rangers.status', 'active')
 
-    if (rangerError) throw new Error(`Fetch rangers error: ${rangerError.message}`)
-    if (!rangers || rangers.length === 0) {
-      return res.status(400).json({ error: 'Belum ada data Ranger' })
+    if (wagError) throw new Error(`Fetch WAGs error: ${wagError.message}`)
+    if (!wags || wags.length === 0) {
+      return res.status(400).json({ error: 'Belum ada data WAG aktif dengan Ranger terdaftar' })
     }
 
-    // Step 2: Build summaries — hanya 8 minggu terakhir
+    // Step 2: Build summaries per WAG
     const summaries = []
 
-    for (const r of rangers) {
-      const ranger = r as unknown as {
+    for (const w of wags) {
+      const wag = w as unknown as {
         id: string
-        full_name: string
-        display_name: string
-        wags: { id: string; name: string }
+        name: string
+        rangers: { id: string; full_name: string; display_name: string; status: string }[]
         weekly_metrics: {
           week_key: string
           active_days: number
           total_messages: number
           participation_rate: number
           status: string
+          ranger_id: string
         }[]
       }
 
-      const wagId = ranger.wags?.id
-      if (!wagId) continue
+      // Ambil ranger aktif yang kelola WAG ini (biasanya tepat 1)
+      const ranger = Array.isArray(wag.rangers) ? wag.rangers[0] : wag.rangers
+      if (!ranger) continue
 
+      // Ambil member dan pesan dari WAG ini
       const [memberRes, msgRes] = await Promise.all([
-        supabase.from('members').select('id, last_active_at, greeted_at').eq('wag_id', wagId),
-        supabase.from('messages').select('sender_name').eq('wag_id', wagId).eq('sender_type', 'member'),
+        supabase.from('members').select('id, last_active_at, greeted_at').eq('wag_id', wag.id),
+        supabase.from('messages').select('sender_name').eq('wag_id', wag.id).eq('sender_type', 'member'),
       ])
 
       const members = memberRes.data || []
@@ -109,15 +119,16 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         .sort((a, b) => b.total - a.total)
         .slice(0, 3)
 
-      // Ambil hanya WEEKS_WINDOW minggu terakhir
-      const sortedMetrics = [...(ranger.weekly_metrics || [])]
+      // Ambil hanya WEEKS_WINDOW minggu terakhir, filter by ranger_id WAG ini
+      const sortedMetrics = [...(wag.weekly_metrics || [])]
+        .filter(m => m.ranger_id === ranger.id)
         .sort((a, b) => a.week_key.localeCompare(b.week_key))
         .slice(-WEEKS_WINDOW)
 
       summaries.push({
-        full_name: ranger.full_name,
-        display_name: ranger.display_name,
-        wag_name: ranger.wags?.name,
+        wag_name: wag.name,
+        ranger_name: ranger.full_name,
+        ranger_display: ranger.display_name,
         total_members: members.length,
         ungreeted_count: ungretedCount,
         dormant_count: dormantCount,
@@ -127,16 +138,20 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       })
     }
 
-    // Step 3: Build prompt
-    const data = summaries.map(r => `
-Ranger: ${r.full_name} (${r.display_name})
-WAG: ${r.wag_name}
-Total agen: ${r.total_members}
-Agen belum disambut: ${r.ungreeted_count}
-Agen dormant lebih dari 14 hari tidak aktif: ${r.dormant_count}
-Top 3 agen paling aktif: ${r.top_members.map(m => `${m.display_name} (${m.total} pesan)`).join(', ') || 'tidak ada data'}
-Tren aktivitas ${r.weeks_analyzed} minggu terakhir:
-${r.metrics.map(m => `  ${m.week_key}: ${m.total_messages} pesan Ranger, ${m.active_days} hari aktif, participation ${m.participation_rate}%, status: ${m.status}`).join('\n')}
+    if (summaries.length === 0) {
+      return res.status(400).json({ error: 'Tidak ada data WAG yang bisa dianalisis' })
+    }
+
+    // Step 3: Build prompt — unit per WAG, Ranger sebagai atribut
+    const data = summaries.map(s => `
+WAG: ${s.wag_name}
+Ranger pengelola: ${s.ranger_name} (${s.ranger_display})
+Total anggota: ${s.total_members}
+Anggota belum disambut: ${s.ungreeted_count}
+Anggota dormant (tidak aktif >14 hari): ${s.dormant_count}
+Top 3 anggota paling aktif: ${s.top_members.map(m => `${m.display_name} (${m.total} pesan)`).join(', ') || 'tidak ada data'}
+Tren aktivitas Ranger di grup ini (${s.weeks_analyzed} minggu terakhir):
+${s.metrics.map(m => `  ${m.week_key}: ${m.total_messages} pesan Ranger, ${m.active_days} hari aktif, participation ${m.participation_rate}%, status: ${m.status}`).join('\n')}
 `).join('\n---\n')
 
     const prompt = PROMPT_TEMPLATE.replace('{{DATA}}', data)
@@ -150,7 +165,7 @@ ${r.metrics.map(m => `  ${m.week_key}: ${m.total_messages} pesan Ranger, ${m.act
         'anthropic-version': '2023-06-01',
       },
       body: JSON.stringify({
-        model: 'claude-sonnet-4-5',
+        model: 'claude-sonnet-4-6',
         max_tokens: 2000,
         messages: [{ role: 'user', content: prompt }],
       }),
