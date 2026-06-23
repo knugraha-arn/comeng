@@ -13,12 +13,12 @@ type Message = {
 type Wag = { id: string; name: string }
 
 const SUGGESTIONS = [
-  'Ranger mana yang paling konsisten minggu ini?',
+  'Mitra mana yang performanya paling bagus 14 hari terakhir?',
   'WAG mana yang perlu perhatian segera?',
-  'Bandingkan performa semua Ranger bulan ini',
-  'Agen mana yang paling aktif di semua WAG?',
+  'Berapa distribusi agen Productive, Moderate, dan Sporadic saat ini?',
+  'Ranger mana yang paling aktif di WAG-nya minggu ini?',
   'Apa tren participation rate 4 minggu terakhir?',
-  'Ranger mana yang proactive posts-nya paling tinggi?',
+  'Agen mana yang paling banyak transaksi 14 hari terakhir?',
 ]
 
 export default function AiAssistantPage() {
