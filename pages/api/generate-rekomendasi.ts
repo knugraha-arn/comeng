@@ -10,13 +10,6 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 )
 
-// Rekomendasi menggunakan 8 minggu terakhir per WAG.
-// Unit analisis adalah WAG (bukan Ranger) karena:
-// 1. 1 Ranger bisa kelola beberapa WAG — rekomendasi per-Ranger mengaburkan
-//    kondisi spesifik tiap grup.
-// 2. Tiap WAG punya dinamika komunitas berbeda — anggota, tingkat keaktifan,
-//    pola pesan — yang butuh insight terpisah.
-// 3. Ranger tetap disebutkan sebagai konteks ("dikelola oleh X"), bukan unit utama.
 const WEEKS_WINDOW = 8
 
 const PROMPT_TEMPLATE = `Kamu adalah sistem analisis komunitas untuk platform AMARIS — alat monitoring efektivitas Ranger dalam membina komunitas agen WhatsApp (WAG).
@@ -52,48 +45,54 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
 
   try {
-    // Step 1: Fetch WAGs aktif beserta Ranger dan weekly_metrics-nya
-    // Pivot dari Rangers ke WAGs sebagai anchor — karena 1 Ranger bisa kelola N WAG,
-    // tapi tiap WAG punya tepat 1 Ranger (berdasarkan data aktual sistem).
+    // Step 1: Fetch semua WAG aktif secara terpisah — tidak pakai nested join
+    // supaya tidak ada WAG yang ter-exclude karena masalah filter nested relation.
     const { data: wags, error: wagError } = await supabase
       .from('wags')
-      .select(`
-        id,
-        name,
-        rangers!inner(id, full_name, display_name, status),
-        weekly_metrics(week_key, active_days, total_messages, participation_rate, status, ranger_id)
-      `)
+      .select('id, name')
       .eq('status', 'active')
-      .eq('rangers.status', 'active')
+      .neq('name', 'Test WAG') // exclude Test WAG
 
     if (wagError) throw new Error(`Fetch WAGs error: ${wagError.message}`)
     if (!wags || wags.length === 0) {
-      return res.status(400).json({ error: 'Belum ada data WAG aktif dengan Ranger terdaftar' })
+      return res.status(400).json({ error: 'Belum ada WAG aktif' })
     }
 
-    // Step 2: Build summaries per WAG
+    // Step 2: Fetch semua Ranger aktif dengan wag_id-nya
+    const { data: rangers, error: rangerError } = await supabase
+      .from('rangers')
+      .select('id, full_name, display_name, wag_id')
+      .eq('status', 'active')
+
+    if (rangerError) throw new Error(`Fetch Rangers error: ${rangerError.message}`)
+
+    // Buat map: wag_id -> ranger (untuk lookup cepat)
+    const rangerByWag: Record<string, { id: string; full_name: string; display_name: string }> = {}
+    for (const r of rangers ?? []) {
+      rangerByWag[r.wag_id] = { id: r.id, full_name: r.full_name, display_name: r.display_name }
+    }
+
+    // Step 3: Fetch weekly_metrics semua WAG sekaligus
+    const wagIds = wags.map(w => w.id)
+    const { data: allMetrics } = await supabase
+      .from('weekly_metrics')
+      .select('wag_id, ranger_id, week_key, active_days, total_messages, participation_rate, status')
+      .in('wag_id', wagIds)
+
+    // Group metrics by wag_id
+    const metricsByWag: Record<string, typeof allMetrics> = {}
+    for (const m of allMetrics ?? []) {
+      if (!metricsByWag[m.wag_id]) metricsByWag[m.wag_id] = []
+      metricsByWag[m.wag_id]!.push(m)
+    }
+
+    // Step 4: Build summaries — satu per WAG, hanya WAG yang punya Ranger aktif
     const summaries = []
 
-    for (const w of wags) {
-      const wag = w as unknown as {
-        id: string
-        name: string
-        rangers: { id: string; full_name: string; display_name: string; status: string }[]
-        weekly_metrics: {
-          week_key: string
-          active_days: number
-          total_messages: number
-          participation_rate: number
-          status: string
-          ranger_id: string
-        }[]
-      }
+    for (const wag of wags) {
+      const ranger = rangerByWag[wag.id]
+      if (!ranger) continue // skip WAG tanpa Ranger aktif
 
-      // Ambil ranger aktif yang kelola WAG ini (biasanya tepat 1)
-      const ranger = Array.isArray(wag.rangers) ? wag.rangers[0] : wag.rangers
-      if (!ranger) continue
-
-      // Ambil member dan pesan dari WAG ini
       const [memberRes, msgRes] = await Promise.all([
         supabase.from('members').select('id, last_active_at, greeted_at').eq('wag_id', wag.id),
         supabase.from('messages').select('sender_name').eq('wag_id', wag.id).eq('sender_type', 'member'),
@@ -119,8 +118,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         .sort((a, b) => b.total - a.total)
         .slice(0, 3)
 
-      // Ambil hanya WEEKS_WINDOW minggu terakhir, filter by ranger_id WAG ini
-      const sortedMetrics = [...(wag.weekly_metrics || [])]
+      // Ambil metrics untuk WAG ini, dikelola Ranger ini, 8 minggu terakhir
+      const wagMetrics = (metricsByWag[wag.id] ?? [])
         .filter(m => m.ranger_id === ranger.id)
         .sort((a, b) => a.week_key.localeCompare(b.week_key))
         .slice(-WEEKS_WINDOW)
@@ -133,16 +132,16 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         ungreeted_count: ungretedCount,
         dormant_count: dormantCount,
         top_members: topMembers,
-        metrics: sortedMetrics,
-        weeks_analyzed: sortedMetrics.length,
+        metrics: wagMetrics,
+        weeks_analyzed: wagMetrics.length,
       })
     }
 
     if (summaries.length === 0) {
-      return res.status(400).json({ error: 'Tidak ada data WAG yang bisa dianalisis' })
+      return res.status(400).json({ error: 'Tidak ada WAG dengan Ranger aktif yang bisa dianalisis' })
     }
 
-    // Step 3: Build prompt — unit per WAG, Ranger sebagai atribut
+    // Step 5: Build prompt
     const data = summaries.map(s => `
 WAG: ${s.wag_name}
 Ranger pengelola: ${s.ranger_name} (${s.ranger_display})
@@ -151,12 +150,12 @@ Anggota belum disambut: ${s.ungreeted_count}
 Anggota dormant (tidak aktif >14 hari): ${s.dormant_count}
 Top 3 anggota paling aktif: ${s.top_members.map(m => `${m.display_name} (${m.total} pesan)`).join(', ') || 'tidak ada data'}
 Tren aktivitas Ranger di grup ini (${s.weeks_analyzed} minggu terakhir):
-${s.metrics.map(m => `  ${m.week_key}: ${m.total_messages} pesan Ranger, ${m.active_days} hari aktif, participation ${m.participation_rate}%, status: ${m.status}`).join('\n')}
+${s.metrics.map(m => `  ${m.week_key}: ${m.total_messages} pesan Ranger, ${m.active_days} hari aktif, participation ${m.participation_rate}%, status: ${m.status}`).join('\n') || '  (belum ada data metrik)'}
 `).join('\n---\n')
 
     const prompt = PROMPT_TEMPLATE.replace('{{DATA}}', data)
 
-    // Step 4: Call Claude API
+    // Step 6: Call Claude API
     const claudeRes = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: {
@@ -166,7 +165,7 @@ ${s.metrics.map(m => `  ${m.week_key}: ${m.total_messages} pesan Ranger, ${m.act
       },
       body: JSON.stringify({
         model: 'claude-sonnet-4-6',
-        max_tokens: 2000,
+        max_tokens: 3000,
         messages: [{ role: 'user', content: prompt }],
       }),
     })
@@ -174,7 +173,7 @@ ${s.metrics.map(m => `  ${m.week_key}: ${m.total_messages} pesan Ranger, ${m.act
     const claudeData = await claudeRes.json()
     const text = claudeData.content?.[0]?.text || ''
 
-    // Step 5: Parse JSON
+    // Step 7: Parse JSON
     const jsonMatch = text.match(/\[[\s\S]*\]/)
     if (!jsonMatch) throw new Error(`Response tidak mengandung JSON valid. Raw: ${text.slice(0, 200)}`)
 
@@ -189,7 +188,7 @@ ${s.metrics.map(m => `  ${m.week_key}: ${m.total_messages} pesan Ranger, ${m.act
       throw new Error(`JSON tidak valid: ${parseErr instanceof Error ? parseErr.message : 'unknown'}. Raw: ${cleanJson.slice(0, 300)}`)
     }
 
-    // Step 6: Simpan ke database
+    // Step 8: Simpan ke database
     const weekKey = new Date().toISOString().slice(0, 10)
     const userId = req.headers['x-user-id'] as string | undefined
 
