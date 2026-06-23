@@ -72,8 +72,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       rangerByWag[r.wag_id] = { id: r.id, full_name: r.full_name, display_name: r.display_name }
     }
 
-    // Step 3: Fetch weekly_metrics semua WAG sekaligus
+    // wagIds dipakai di Step 3 (weekly_metrics) dan Step 4 (members/messages)
     const wagIds = wags.map(w => w.id)
+
+    // Step 3: Fetch weekly_metrics semua WAG sekaligus
     const { data: allMetrics } = await supabase
       .from('weekly_metrics')
       .select('wag_id, ranger_id, week_key, active_days, total_messages, participation_rate, status')
@@ -86,20 +88,43 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       metricsByWag[m.wag_id]!.push(m)
     }
 
-    // Step 4: Build summaries — satu per WAG, hanya WAG yang punya Ranger aktif
+    // Step 4: Build summaries — fetch members dan messages semua WAG secara paralel
+    // sebelumnya pakai loop sequential (12 round-trip satu per satu) yang memakan
+    // ~3.5 detik dan memotong jatah waktu untuk Claude API.
+
+    const [allMembersRes, allMsgsRes] = await Promise.all([
+      supabase.from('members')
+        .select('id, wag_id, last_active_at, greeted_at')
+        .in('wag_id', wagIds),
+      supabase.from('messages')
+        .select('wag_id, sender_name')
+        .in('wag_id', wagIds)
+        .eq('sender_type', 'member'),
+    ])
+
+    const allMembers = allMembersRes.data ?? []
+    const allMsgs = allMsgsRes.data ?? []
+
+    // Group by wag_id untuk lookup cepat
+    const membersByWag: Record<string, typeof allMembers> = {}
+    const msgsByWag: Record<string, typeof allMsgs> = {}
+    for (const m of allMembers) {
+      if (!membersByWag[m.wag_id]) membersByWag[m.wag_id] = []
+      membersByWag[m.wag_id]!.push(m)
+    }
+    for (const m of allMsgs) {
+      if (!msgsByWag[m.wag_id]) msgsByWag[m.wag_id] = []
+      msgsByWag[m.wag_id]!.push(m)
+    }
+
     const summaries = []
 
     for (const wag of wags) {
       const ranger = rangerByWag[wag.id]
-      if (!ranger) continue // skip WAG tanpa Ranger aktif
+      if (!ranger) continue
 
-      const [memberRes, msgRes] = await Promise.all([
-        supabase.from('members').select('id, last_active_at, greeted_at').eq('wag_id', wag.id),
-        supabase.from('messages').select('sender_name').eq('wag_id', wag.id).eq('sender_type', 'member'),
-      ])
-
-      const members = memberRes.data || []
-      const msgs = msgRes.data || []
+      const members = membersByWag[wag.id] ?? []
+      const msgs = msgsByWag[wag.id] ?? []
 
       const dormantCount = members.filter(m => {
         if (!m.last_active_at) return true
@@ -118,7 +143,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         .sort((a, b) => b.total - a.total)
         .slice(0, 3)
 
-      // Ambil metrics untuk WAG ini, dikelola Ranger ini, 8 minggu terakhir
       const wagMetrics = (metricsByWag[wag.id] ?? [])
         .filter(m => m.ranger_id === ranger.id)
         .sort((a, b) => a.week_key.localeCompare(b.week_key))
