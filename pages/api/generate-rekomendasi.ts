@@ -2,7 +2,7 @@ import type { NextApiRequest, NextApiResponse } from 'next'
 import { createClient } from '@supabase/supabase-js'
 
 export const config = {
-  maxDuration: 30,
+  maxDuration: 60,
 }
 
 const supabase = createClient(
