@@ -12,9 +12,9 @@ type Wag = { id: string; name: string }
 
 const SUGGESTIONS = [
   'Ranger mana yang paling konsisten minggu ini?',
-  'WAG mana yang perlu perhatian segera?',
+  'Masalah apa yang paling mengemuka di semua WAG',
   'Bandingkan performa semua Ranger bulan ini',
-  'Agen mana yang paling aktif di semua WAG?',
+  'Agen mana yang potensi menjadi ambasador/champion dari semua WAG?',
   'Apa tren participation rate 4 minggu terakhir?',
   'Ranger mana yang proactive posts-nya paling tinggi?',
 ]
