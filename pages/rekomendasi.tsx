@@ -1,8 +1,10 @@
 import { useState, useEffect, useRef } from 'react'
-import Layout from '@/components/Layout'
-import { supabase } from '@/lib/supabase'
+import Head from 'next/head'
+import Layout from '../components/Layout'
+import { createBrowserClient } from '@supabase/ssr'
 
 type Recommendation = {
+  wag: string
   ranger: string
   priority: 'critical' | 'warning' | 'positive'
   title: string
@@ -18,16 +20,21 @@ type SavedRecommendation = {
 }
 
 const PROGRESS_STEPS = [
-  { pct: 10, label: 'Mengambil data Ranger...' },
-  { pct: 30, label: 'Membaca aktivitas WAG...' },
-  { pct: 50, label: 'Menyusun konteks analisis...' },
+  { pct: 10, label: 'Mengambil data WAG aktif...' },
+  { pct: 30, label: 'Membaca aktivitas tiap grup...' },
+  { pct: 50, label: 'Menyusun konteks analisis per WAG...' },
   { pct: 70, label: 'Mengirim ke Claude AI...' },
-  { pct: 85, label: 'Menganalisis pola perilaku...' },
+  { pct: 85, label: 'Menganalisis kondisi tiap grup...' },
   { pct: 95, label: 'Menyusun rekomendasi...' },
   { pct: 100, label: 'Selesai!' },
 ]
 
 export default function RekomendasiPage() {
+  const supabase = createBrowserClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+  )
+
   const [generating, setGenerating] = useState(false)
   const [progress, setProgress] = useState(0)
   const [progressLabel, setProgressLabel] = useState('')
@@ -111,23 +118,20 @@ export default function RekomendasiPage() {
   }
 
   const handleGenerate = () => {
-    if (thisWeekRec) {
-      setShowConfirm(true)
-    } else {
-      doGenerate()
-    }
+    if (thisWeekRec) { setShowConfirm(true) } else { doGenerate() }
   }
 
   const displayed = selectedId ? history.find(h => h.id === selectedId) : null
 
   const priorityConfig = {
     critical: { label: 'Perhatian Segera', bg: '#FDECEA', border: '#F09595', accent: '#B00020', dot: '🔴' },
-    warning: { label: 'Perlu Tindakan', bg: '#FFF3CD', border: '#FAC775', accent: '#856404', dot: '🟡' },
-    positive: { label: 'Praktik Baik', bg: '#EAF3DE', border: '#C0DD97', accent: '#27500A', dot: '🟢' },
+    warning:  { label: 'Perlu Tindakan',  bg: '#FFF3CD', border: '#FAC775', accent: '#856404', dot: '🟡' },
+    positive: { label: 'Praktik Baik',    bg: '#EAF3DE', border: '#C0DD97', accent: '#27500A', dot: '🟢' },
   }
 
   return (
-    <Layout title="Rekomendasi">
+    <Layout>
+      <Head><title>Rekomendasi AI — AMARIS</title></Head>
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 260px', gap: '16px', alignItems: 'start' }}>
 
         <div>
@@ -140,11 +144,7 @@ export default function RekomendasiPage() {
                     ? `Generate: ${new Date(displayed.generated_at).toLocaleString('id-ID')}`
                     : dataReady ? 'Data siap dianalisis' : 'Belum ada data — upload WAG dulu'}
                 </div>
-                <span style={{
-                  fontSize: '10px', padding: '2px 8px', borderRadius: '999px',
-                  background: '#0344D8',
-                  color: '#FFFFFF', fontWeight: '600', letterSpacing: '0.04em',
-                }}>
+                <span style={{ fontSize: '10px', padding: '2px 8px', borderRadius: '999px', background: '#0344D8', color: '#FFFFFF', fontWeight: '600', letterSpacing: '0.04em' }}>
                   ✦ AI Powered
                 </span>
               </div>
@@ -170,18 +170,12 @@ export default function RekomendasiPage() {
             </button>
           </div>
 
-          {/* Info 8 minggu */}
+          {/* Info */}
           {!generating && (
-            <div style={{
-              display: 'flex', alignItems: 'start', gap: '10px',
-              padding: '10px 14px', background: '#F0F5FF',
-              border: '1px solid #B5D4F4', borderRadius: '8px',
-              marginBottom: '16px', fontSize: '12px', color: '#0C447C',
-            }}>
-              <span style={{ fontSize: '14px', flexShrink: 0, marginTop: '1px' }}>ℹ</span>
+            <div style={{ display: 'flex', alignItems: 'start', gap: '10px', padding: '10px 14px', background: '#F0F5FF', border: '1px solid #B5D4F4', borderRadius: '8px', marginBottom: '16px', fontSize: '12px', color: '#0C447C' }}>
+              <span style={{ fontSize: '16px', marginTop: '1px' }}>ℹ</span>
               <div style={{ lineHeight: '1.6' }}>
-                <strong>Analisis berbasis 8 minggu terakhir.</strong> Rekomendasi hanya mempertimbangkan data 8 minggu terakhir per Ranger — bukan seluruh histori.
-                Alasannya: perilaku terkini lebih relevan untuk coaching, data historis terlalu panjang dapat mengaburkan kondisi saat ini, dan efisiensi penggunaan AI API.
+                <strong>Analisis berbasis WAG, 8 minggu terakhir.</strong> Rekomendasi dihasilkan per grup WhatsApp — bukan per Ranger — sehingga kondisi tiap grup bisa dianalisis secara terpisah, bahkan jika dikelola Ranger yang sama.
                 Data historis lengkap tersedia di halaman <strong>Tren</strong>.
               </div>
             </div>
@@ -189,11 +183,7 @@ export default function RekomendasiPage() {
 
           {/* Konfirmasi generate ulang */}
           {showConfirm && (
-            <div style={{
-              padding: '16px 20px', background: '#FFF3CD', border: '1px solid #FAC775',
-              borderRadius: '10px', marginBottom: '16px',
-              display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '16px',
-            }}>
+            <div style={{ padding: '16px 20px', background: '#FFF3CD', border: '1px solid #FAC775', borderRadius: '10px', marginBottom: '16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '16px' }}>
               <div>
                 <div style={{ fontSize: '13px', fontWeight: '500', color: '#633806' }}>Generate ulang rekomendasi?</div>
                 <div style={{ fontSize: '12px', color: '#854F0B', marginTop: '3px' }}>
@@ -201,14 +191,8 @@ export default function RekomendasiPage() {
                 </div>
               </div>
               <div style={{ display: 'flex', gap: '8px', flexShrink: 0 }}>
-                <button onClick={() => setShowConfirm(false)}
-                  style={{ padding: '7px 16px', borderRadius: '8px', border: '1px solid #e5e5e5', background: '#FFFFFF', fontSize: '12px', cursor: 'pointer' }}>
-                  Batal
-                </button>
-                <button onClick={doGenerate}
-                  style={{ padding: '7px 16px', borderRadius: '8px', border: 'none', background: '#0344D8', color: '#FFFFFF', fontSize: '12px', cursor: 'pointer', fontWeight: '500' }}>
-                  Generate Ulang
-                </button>
+                <button onClick={() => setShowConfirm(false)} style={{ padding: '7px 16px', borderRadius: '8px', border: '1px solid #e5e5e5', background: '#FFFFFF', fontSize: '12px', cursor: 'pointer' }}>Batal</button>
+                <button onClick={doGenerate} style={{ padding: '7px 16px', borderRadius: '8px', border: 'none', background: '#0344D8', color: '#FFFFFF', fontSize: '12px', cursor: 'pointer', fontWeight: '500' }}>Generate Ulang</button>
               </div>
             </div>
           )}
@@ -220,50 +204,29 @@ export default function RekomendasiPage() {
             </div>
           )}
 
-          {/* Generating dengan progress bar */}
+          {/* Progress */}
           {generating && (
             <div style={{ background: '#FFFFFF', border: '1px solid #e5e5e5', borderRadius: '10px', padding: '32px', marginBottom: '12px' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '20px' }}>
-                <div style={{
-                  width: '36px', height: '36px', borderRadius: '10px',
-                  background: '#0344D8',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  fontSize: '16px', flexShrink: 0, color: '#FFFFFF',
-                }}>✦</div>
+                <div style={{ width: '36px', height: '36px', borderRadius: '10px', background: '#0344D8', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '16px', flexShrink: 0, color: '#FFFFFF' }}>✦</div>
                 <div>
                   <div style={{ fontSize: '14px', fontWeight: '500' }}>Claude AI sedang bekerja</div>
                   <div style={{ fontSize: '12px', color: '#999', marginTop: '2px' }}>{progressLabel}</div>
                 </div>
-                <span style={{
-                  marginLeft: 'auto', fontSize: '10px', padding: '2px 8px', borderRadius: '999px',
-                  background: '#0344D8', color: '#FFFFFF', fontWeight: '600',
-                }}>
-                  ✦ AI Powered
-                </span>
+                <span style={{ marginLeft: 'auto', fontSize: '10px', padding: '2px 8px', borderRadius: '999px', background: '#0344D8', color: '#FFFFFF', fontWeight: '600' }}>✦ AI Powered</span>
               </div>
-
               <div style={{ marginBottom: '8px' }}>
                 <div style={{ height: '8px', background: '#F8F9FB', borderRadius: '4px', overflow: 'hidden' }}>
-                  <div style={{
-                    height: '100%', borderRadius: '4px',
-                    width: `${progress}%`,
-                    background: '#0344D8',
-                    transition: 'width 0.8s ease',
-                  }} />
+                  <div style={{ height: '100%', borderRadius: '4px', width: `${progress}%`, background: '#0344D8', transition: 'width 0.8s ease' }} />
                 </div>
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px', color: '#999' }}>
                 <span>{progressLabel}</span>
                 <span>{progress}%</span>
               </div>
-
               <div style={{ display: 'flex', gap: '4px', marginTop: '16px' }}>
                 {PROGRESS_STEPS.slice(0, -1).map((step, i) => (
-                  <div key={i} style={{
-                    flex: 1, height: '3px', borderRadius: '2px',
-                    background: progress >= step.pct ? '#0344D8' : '#F8F9FB',
-                    transition: 'background 0.4s',
-                  }} />
+                  <div key={i} style={{ flex: 1, height: '3px', borderRadius: '2px', background: progress >= step.pct ? '#0344D8' : '#F8F9FB', transition: 'background 0.4s' }} />
                 ))}
               </div>
             </div>
@@ -275,12 +238,12 @@ export default function RekomendasiPage() {
               <div style={{ fontSize: '32px', marginBottom: '12px' }}>✦</div>
               <div style={{ fontSize: '15px', fontWeight: '500', marginBottom: '8px' }}>Belum ada rekomendasi</div>
               <div style={{ fontSize: '13px', color: '#999', maxWidth: '360px', margin: '0 auto' }}>
-                Klik "Generate Rekomendasi AI" untuk mulai analisis berbasis AI.
+                Klik "Generate Rekomendasi AI" untuk mulai analisis berbasis AI per WAG.
               </div>
             </div>
           )}
 
-          {/* Recommendations */}
+          {/* Recommendations — per WAG */}
           {!generating && displayed && displayed.items.map((rec, i) => {
             const p = priorityConfig[rec.priority] || priorityConfig.warning
             return (
@@ -292,13 +255,22 @@ export default function RekomendasiPage() {
                 <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '10px' }}>
                   <span style={{ fontSize: '18px' }}>{p.dot}</span>
                   <div style={{ flex: 1 }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                      <span style={{ fontSize: '14px', fontWeight: '600', color: p.accent }}>{rec.ranger}</span>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                      {/* Nama WAG sebagai unit utama */}
+                      <span style={{ fontSize: '14px', fontWeight: '700', color: p.accent }}>
+                        {rec.wag ?? rec.ranger}
+                      </span>
                       <span style={{ fontSize: '10px', padding: '2px 8px', borderRadius: '999px', background: 'rgba(0,0,0,0.06)', color: p.accent, fontWeight: '500' }}>
                         {p.label}
                       </span>
                     </div>
-                    <div style={{ fontSize: '13px', fontWeight: '500', color: '#1A1F2E', marginTop: '2px' }}>{rec.title}</div>
+                    {/* Ranger sebagai sub-info */}
+                    {rec.ranger && rec.wag && (
+                      <div style={{ fontSize: '11px', color: p.accent, opacity: 0.7, marginTop: '2px' }}>
+                        Ranger: {rec.ranger}
+                      </div>
+                    )}
+                    <div style={{ fontSize: '13px', fontWeight: '500', color: '#1A1F2E', marginTop: '3px' }}>{rec.title}</div>
                   </div>
                 </div>
                 <div style={{ fontSize: '13px', color: '#333', lineHeight: '1.7', marginBottom: '14px', paddingLeft: '28px' }}>
@@ -341,13 +313,11 @@ export default function RekomendasiPage() {
                     {new Date(h.generated_at).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })}
                   </div>
                   {h.week_key === getThisWeekKey() && (
-                    <span style={{ fontSize: '9px', padding: '1px 6px', borderRadius: '999px', background: '#EAF3DE', color: '#27500A', fontWeight: '500' }}>
-                      Hari ini
-                    </span>
+                    <span style={{ fontSize: '9px', padding: '1px 6px', borderRadius: '999px', background: '#EAF3DE', color: '#27500A', fontWeight: '500' }}>Hari ini</span>
                   )}
                 </div>
                 <div style={{ fontSize: '11px', color: '#999', marginTop: '2px' }}>
-                  {new Date(h.generated_at).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })} · {h.items.length} Ranger
+                  {new Date(h.generated_at).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })} · {h.items.length} WAG
                 </div>
               </div>
             ))
