@@ -16,6 +16,8 @@ type SavedRecommendation = {
   id: string
   week_key: string
   generated_at: string
+  generated_by: string | null
+  users: { email: string } | null
   items: Recommendation[]
 }
 
@@ -60,11 +62,11 @@ export default function RekomendasiPage() {
   const fetchHistory = async () => {
     const { data } = await supabase
       .from('recommendations')
-      .select('id, week_key, generated_at, items')
+      .select('id, week_key, generated_at, generated_by, users(email), items')
       .order('generated_at', { ascending: false })
       .limit(10)
     if (data && data.length > 0) {
-      setHistory(data as SavedRecommendation[])
+      setHistory(data as unknown as SavedRecommendation[])
       setSelectedId(data[0].id)
     }
   }
@@ -319,6 +321,11 @@ export default function RekomendasiPage() {
                 <div style={{ fontSize: '11px', color: '#999', marginTop: '2px' }}>
                   {new Date(h.generated_at).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })} · {h.items.length} WAG
                 </div>
+                {h.users?.email && (
+                  <div style={{ fontSize: '10px', color: '#bbb', marginTop: '2px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    👤 {h.users.email.split('@')[0]}
+                  </div>
+                )}
               </div>
             ))
           )}
