@@ -10,8 +10,6 @@ type Message = {
   timestamp: Date
 }
 
-type Wag = { id: string; name: string }
-
 const SUGGESTIONS = [
   'Mitra mana yang performanya paling bagus 14 hari terakhir?',
   'WAG mana yang perlu perhatian segera?',
@@ -27,8 +25,8 @@ export default function AiAssistantPage() {
   const [loading, setLoading] = useState(false)
   const [remaining, setRemaining] = useState(30)
   const [userId, setUserId] = useState('')
-  const [selectedWagId, setSelectedWagId] = useState('')
-  const [wags, setWags] = useState<Wag[]>([])
+  const [generating, setGenerating] = useState(false)
+  const [progress, setProgress] = useState(0)
   const [error, setError] = useState('')
   const bottomRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
@@ -36,9 +34,6 @@ export default function AiAssistantPage() {
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
       if (session) setUserId(session.user.id)
-    })
-    supabase.from('wags').select('id, name').eq('status', 'active').then(({ data }) => {
-      if (data) setWags(data)
     })
   }, [])
 
@@ -65,7 +60,6 @@ export default function AiAssistantPage() {
         body: JSON.stringify({
           messages: history,
           userId,
-          wagId: selectedWagId || undefined,
         }),
       })
 
@@ -130,21 +124,6 @@ export default function AiAssistantPage() {
                 </button>
               )}
             </div>
-          </div>
-
-          {/* Filter WAG */}
-          <div style={{ padding: '10px 18px', borderBottom: '1px solid #f5f5f5', display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <span style={{ fontSize: '12px', color: '#999' }}>Fokus WAG:</span>
-            <select value={selectedWagId} onChange={e => setSelectedWagId(e.target.value)}
-              style={{ fontSize: '12px', padding: '4px 8px', borderRadius: '6px', border: '1px solid #e5e5e5', outline: 'none', background: '#FFFFFF' }}>
-              <option value="">Semua WAG</option>
-              {wags.map(w => <option key={w.id} value={w.id}>{w.name}</option>)}
-            </select>
-            {selectedWagId && (
-              <span style={{ fontSize: '11px', color: '#0344D8' }}>
-                Data pesan WAG ini akan di-load lebih detail
-              </span>
-            )}
           </div>
 
           {/* Messages */}
@@ -269,7 +248,7 @@ export default function AiAssistantPage() {
                 value={input}
                 onChange={e => setInput(e.target.value)}
                 onKeyDown={handleKeyDown}
-                placeholder="Tanya tentang data komunitas WAG kamu... (Enter untuk kirim, Shift+Enter untuk baris baru)"
+                placeholder="Tanya tentang WAG, Ranger, performa agen, transaksi... (Enter kirim, Shift+Enter baris baru)"
                 disabled={loading || remaining <= 0}
                 rows={1}
                 style={{
@@ -299,7 +278,7 @@ export default function AiAssistantPage() {
               </div>
             )}
             <div style={{ fontSize: '10px', color: '#bbb', marginTop: '6px' }}>
-              Scope terbatas pada data komunitas WAG di sistem AMARIS · Tidak dapat membuat kode atau artefak
+              Data WAG & transaksi agen tersedia dalam konteks · Tidak dapat membuat kode atau artefak
             </div>
           </div>
         </div>
@@ -327,11 +306,12 @@ export default function AiAssistantPage() {
           <div style={{ background: '#F8F9FB', border: '1px solid #e5e5e5', borderRadius: '10px', padding: '16px' }}>
             <div style={{ fontSize: '12px', fontWeight: '500', marginBottom: '10px' }}>Scope Data</div>
             {[
-              { icon: '✓', text: 'Performa Ranger', ok: true },
-              { icon: '✓', text: 'Data WAG & agen', ok: true },
-              { icon: '✓', text: 'Metrik mingguan', ok: true },
-              { icon: '✓', text: 'Pesan chat WAG', ok: true },
-              { icon: '✓', text: 'Rekomendasi AI', ok: true },
+              { icon: '✓', text: 'Performa Ranger & WAG', ok: true },
+              { icon: '✓', text: 'Metrik & pesan chat WAG', ok: true },
+              { icon: '✓', text: 'Rekomendasi AI terbaru', ok: true },
+              { icon: '✓', text: 'Transaksi agen EDC (14H)', ok: true },
+              { icon: '✓', text: 'Kinerja per Mitra & PIC', ok: true },
+              { icon: '✓', text: 'Distribusi Productive/Sporadic', ok: true },
               { icon: '✗', text: 'Data di luar AMARIS', ok: false },
               { icon: '✗', text: 'Generate kode/artefak', ok: false },
             ].map(item => (
@@ -346,8 +326,7 @@ export default function AiAssistantPage() {
           <div style={{ background: '#F0F5FF', border: '1px solid #B5D4F4', borderRadius: '10px', padding: '16px' }}>
             <div style={{ fontSize: '12px', fontWeight: '500', color: '#0C447C', marginBottom: '8px' }}>Tips</div>
             <div style={{ fontSize: '11px', color: '#0C447C', lineHeight: '1.7' }}>
-              Pilih WAG spesifik di atas untuk analisis yang lebih detail termasuk isi percakapan.
-              Tanpa filter, AI menggunakan 200 pesan terbaru dari semua WAG.
+              AI bisa menjawab pertanyaan tentang komunitas WAG, performa Ranger, maupun data transaksi agen EDC — atau keduanya sekaligus. Sertakan konteks spesifik dalam pertanyaanmu untuk hasil terbaik.
             </div>
           </div>
         </div>
