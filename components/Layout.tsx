@@ -8,7 +8,6 @@ const navItems = [
   { href: '/members', label: 'Member Alert', icon: '◈' },
   { href: '/trends', label: 'Tren', icon: '◈' },
   { href: '/rekomendasi', label: 'Rekomendasi', icon: '◈' },
-  { href: '/ai-assistant', label: 'AI Assistant', icon: '◈' },
 ]
 
 const analyticsNavItems = [
@@ -178,11 +177,15 @@ export default function Layout({ children, title }: { children: React.ReactNode;
         {/* Nav */}
         <nav style={{ padding: '10px 8px', flex: 1, overflowY: 'auto' }}>
 
-          {/* WAG */}
+          {/* AI Assistant — paling atas, berdiri sendiri */}
+          <NavItem href="/ai-assistant" label="AI Assistant" icon="✦" />
+          <div style={{ margin: '8px 4px', borderTop: '1px solid rgba(255,255,255,0.08)' }} />
+
+          {/* WAG Analytics */}
           <SectionLabel label="WAG ANALYTICS" />
           {navItems.map(item => <NavItem key={item.href} {...item} />)}
 
-          {/* Analytics */}
+          {/* TRX Analytics */}
           <SectionLabel label="TRX ANALYTICS" />
           {analyticsNavItems.map(item => <NavItem key={item.href} {...item} />)}
 
