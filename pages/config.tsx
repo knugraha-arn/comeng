@@ -19,7 +19,7 @@ type User = { id: string; email: string; full_name: string; role: string; last_l
 type Observer = { id: string; wag_id: string; display_name: string; note: string; created_at: string }
 
 export default function ConfigPage() {
-  const [tab, setTab] = useState<'wag' | 'ranger' | 'users' | 'observer' | 'matching'>('wag')
+  const [tab, setTab] = useState<'wag' | 'ranger' | 'users' | 'observer' | 'matching' | 'skill'>('wag')
   const [wags, setWags] = useState<Wag[]>([])
   const [rangers, setRangers] = useState<Ranger[]>([])
   const [users, setUsers] = useState<User[]>([])
@@ -41,7 +41,51 @@ export default function ConfigPage() {
   const [observerNote, setObserverNote] = useState('')
   const [observerWagId, setObserverWagId] = useState('')
 
-  useEffect(() => { fetchAll() }, [])
+  useEffect(() => {
+    fetchAll()
+    loadSkill()
+  }, [])
+
+  async function loadSkill() {
+    const { data } = await supabase
+      .from('am_ai_skill')
+      .select('id, name, content')
+      .eq('is_active', true)
+      .order('updated_at', { ascending: false })
+      .limit(1)
+      .single()
+    if (data) {
+      setSkillId(data.id)
+      setSkillName(data.name)
+      setSkillContent(data.content)
+    }
+  }
+
+  async function saveSkill() {
+    setSkillLoading(true)
+    setSkillSaved(false)
+    try {
+      if (skillId) {
+        await supabase.from('am_ai_skill').update({
+          name: skillName,
+          content: skillContent,
+          updated_at: new Date().toISOString(),
+        }).eq('id', skillId)
+      } else {
+        await supabase.from('am_ai_skill').insert({
+          name: skillName || 'AMARIS Context',
+          content: skillContent,
+          is_active: true,
+        })
+      }
+      setSkillSaved(true)
+      setTimeout(() => setSkillSaved(false), 3000)
+    } catch (err) {
+      setMessage({ text: err instanceof Error ? err.message : 'Gagal menyimpan', type: 'error' })
+    } finally {
+      setSkillLoading(false)
+    }
+  }
 
   const fetchAll = async () => {
     const [wagRes, rangerRes, userRes, observerRes] = await Promise.all([
@@ -154,12 +198,19 @@ export default function ConfigPage() {
   const [matchingLoading, setMatchingLoading] = useState(false)
   const [matchingDone, setMatchingDone] = useState(false)
 
+  const [skillContent, setSkillContent] = useState('')
+  const [skillName, setSkillName] = useState('')
+  const [skillId, setSkillId] = useState('')
+  const [skillLoading, setSkillLoading] = useState(false)
+  const [skillSaved, setSkillSaved] = useState(false)
+
   const tabs = [
     { key: 'wag', label: 'WAG' },
     { key: 'ranger', label: 'Ranger' },
     { key: 'observer', label: 'Observer' },
     { key: 'users', label: 'Akun Pengguna' },
     { key: 'matching', label: 'Agent Matching' },
+    { key: 'skill', label: 'AI Skill File' },
   ]
 
   async function runMatching() {
@@ -620,6 +671,62 @@ export default function ConfigPage() {
               </div>
             </>
           )}
+        </div>
+      )}
+
+      {/* AI Skill File Tab */}
+      {tab === 'skill' && (
+        <div>
+          <div style={{ marginBottom: '16px' }}>
+            <div style={{ fontSize: '13px', fontWeight: '500', marginBottom: '4px' }}>AI Skill File</div>
+            <div style={{ fontSize: '12px', color: '#999', lineHeight: '1.6' }}>
+              Konteks bisnis dan instruksi yang diinjeksi ke AI Assistant setiap kali ada percakapan.
+              Gunakan format Markdown. Isi ini menjadi fondasi pemahaman AI tentang bisnis Arranet.
+            </div>
+          </div>
+
+          <div style={{ marginBottom: '12px' }}>
+            <label style={{ fontSize: '11px', color: '#999', display: 'block', marginBottom: '4px' }}>Nama skill</label>
+            <input
+              value={skillName}
+              onChange={e => setSkillName(e.target.value)}
+              style={{ padding: '8px 12px', borderRadius: '8px', border: '1px solid #e5e5e5', fontSize: '13px', width: '300px', outline: 'none' }}
+            />
+          </div>
+
+          <div style={{ marginBottom: '12px' }}>
+            <label style={{ fontSize: '11px', color: '#999', display: 'block', marginBottom: '4px' }}>Konten (Markdown)</label>
+            <textarea
+              value={skillContent}
+              onChange={e => setSkillContent(e.target.value)}
+              rows={24}
+              style={{
+                width: '100%', padding: '12px 14px', borderRadius: '8px',
+                border: '1px solid #e5e5e5', fontSize: '12px', fontFamily: 'monospace',
+                lineHeight: '1.6', outline: 'none', resize: 'vertical', boxSizing: 'border-box',
+              }}
+            />
+          </div>
+
+          <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+            <button
+              onClick={saveSkill}
+              disabled={skillLoading}
+              style={{
+                padding: '9px 20px', borderRadius: '8px', border: 'none',
+                background: skillLoading ? '#999' : '#0344D8',
+                color: '#fff', fontSize: '13px', fontWeight: '500',
+                cursor: skillLoading ? 'not-allowed' : 'pointer',
+              }}
+            >
+              {skillLoading ? 'Menyimpan...' : 'Simpan'}
+            </button>
+            {skillSaved && (
+              <span style={{ fontSize: '12px', color: '#27500A', fontWeight: '500' }}>
+                ✓ Tersimpan — akan digunakan di percakapan AI berikutnya
+              </span>
+            )}
+          </div>
         </div>
       )}
 
