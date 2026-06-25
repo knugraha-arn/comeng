@@ -97,6 +97,8 @@ export default function TargetSimplePage() {
   const [savingMitra, setSavingMitra]       = useState(false)
   const [savedMitra, setSavedMitra]         = useState(false)
   const [deletingMitra, setDeletingMitra]   = useState('')
+  const [snapshotting, setSnapshotting]     = useState(false)
+  const [snapshotDone, setSnapshotDone]     = useState(false)
 
   // Mitra yang sudah ada target (untuk exclude dari dropdown)
   const mitraWithTarget = mitraProgress.map(p => p.mitra)
@@ -165,6 +167,23 @@ export default function TargetSimplePage() {
         .eq('period_month', selectedMonth)
       await loadMitraData()
     } finally { setDeletingMitra('') }
+  }
+
+  async function snapshotNow() {
+    setSnapshotting(true)
+    setSnapshotDone(false)
+    try {
+      const { error } = await supabase.rpc('snapshot_monthly_summary', {
+        p_year: selectedYear,
+        p_month: selectedMonth,
+      })
+      if (error) throw error
+      setSnapshotDone(true)
+      setTimeout(() => setSnapshotDone(false), 3000)
+      await loadMitraData()
+    } catch (err) {
+      console.error('Snapshot error:', err)
+    } finally { setSnapshotting(false) }
   }
 
   async function loadTarget() {
@@ -441,10 +460,18 @@ export default function TargetSimplePage() {
                   Hanya TRX Transfer (bukan Cek Saldo). Tambah Mitra yang ingin dipantau.
                 </div>
               </div>
+            <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+              <button onClick={snapshotNow} disabled={snapshotting}
+                title={`Simpan snapshot data ${MONTHS[selectedMonth-1]} ${selectedYear} ke riwayat bulanan — dipakai sebagai baseline target bulan depan`}
+                style={{ padding: '9px 14px', borderRadius: '8px', border: '1px solid #e5e7eb', backgroundColor: '#fff', color: snapshotting ? '#9ca3af' : '#374151', fontSize: '12px', fontWeight: '500', cursor: snapshotting ? 'not-allowed' : 'pointer' }}>
+                {snapshotting ? '⟳ Menyimpan...' : '📸 Snapshot Bulan Ini'}
+              </button>
+              {snapshotDone && <span style={{ fontSize: '11px', color: '#16a34a', fontWeight: '600' }}>✅ Tersimpan</span>}
               <button onClick={() => setShowAddForm(!showAddForm)}
                 style={{ padding: '9px 16px', borderRadius: '8px', border: 'none', backgroundColor: '#0344D8', color: '#fff', fontSize: '13px', fontWeight: '600', cursor: 'pointer' }}>
                 + Tambah Mitra
               </button>
+            </div>
             </div>
 
             {/* Form tambah target */}
