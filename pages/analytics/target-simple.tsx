@@ -46,8 +46,11 @@ export default function TargetSimplePage() {
   )
 
   const now = new Date()
+  const [activeTab, setActiveTab] = useState<'platform' | 'mitra'>('platform')
   const [selectedYear, setSelectedYear] = useState(now.getFullYear())
   const [selectedMonth, setSelectedMonth] = useState(now.getMonth() + 1)
+
+  // --- State Platform Target ---
   const [monthlyFee, setMonthlyFee] = useState<number | null>(null)
   const [rawFee, setRawFee] = useState('')
   const [agentGapThreshold, setAgentGapThreshold] = useState<number>(5)
@@ -56,7 +59,6 @@ export default function TargetSimplePage() {
   const [saved, setSaved] = useState(false)
   const [isNew, setIsNew] = useState(true)
   const [tooltip, setTooltip] = useState<{ text: string, x: number, y: number } | null>(null)
-
   const [monthStats, setMonthStats] = useState<{
     total_fee: number
     total_trx: number
@@ -64,6 +66,40 @@ export default function TargetSimplePage() {
     days_in_month: number
     avg_fee_per_trx: number
   } | null>(null)
+
+  // --- State Target Mitra ---
+  type MitraProgress = {
+    mitra: string
+    period_year: number
+    period_month: number
+    target_trx: number
+    actual_trx_mtd: number
+    achievement_pct: number
+    notes: string | null
+    days_elapsed: number
+    days_in_month: number
+    baseline_trx: number
+  }
+  type MitraBaseline = {
+    mitra: string
+    trx_transfer: number
+    trx_total: number
+    total_fee: number
+    active_agents: number
+  }
+  const [mitraProgress, setMitraProgress]   = useState<MitraProgress[]>([])
+  const [mitraBaseline, setMitraBaseline]   = useState<MitraBaseline[]>([])
+  const [loadingMitra, setLoadingMitra]     = useState(false)
+  const [showAddForm, setShowAddForm]       = useState(false)
+  const [newMitra, setNewMitra]             = useState('')
+  const [newTargetTrx, setNewTargetTrx]     = useState('')
+  const [newNotes, setNewNotes]             = useState('')
+  const [savingMitra, setSavingMitra]       = useState(false)
+  const [savedMitra, setSavedMitra]         = useState(false)
+  const [deletingMitra, setDeletingMitra]   = useState('')
+
+  // Mitra yang sudah ada target (untuk exclude dari dropdown)
+  const mitraWithTarget = mitraProgress.map(p => p.mitra)
 
   // Auth check — hanya admin/super_admin yang boleh akses
   useEffect(() => {
@@ -81,6 +117,55 @@ export default function TargetSimplePage() {
 
   useEffect(() => { loadTarget() }, [selectedYear, selectedMonth])
   useEffect(() => { loadMonthStats() }, [selectedYear, selectedMonth])
+  useEffect(() => { loadMitraData() }, [selectedYear, selectedMonth])
+
+  async function loadMitraData() {
+    setLoadingMitra(true)
+    try {
+      const [progressRes, baselineRes] = await Promise.all([
+        supabase.rpc('get_mitra_target_progress', { p_year: selectedYear, p_month: selectedMonth }),
+        supabase.rpc('get_mitra_summary_baseline', { p_year: selectedYear, p_month: selectedMonth }),
+      ])
+      setMitraProgress(progressRes.data ?? [])
+      setMitraBaseline(baselineRes.data ?? [])
+    } finally {
+      setLoadingMitra(false)
+    }
+  }
+
+  async function saveMitraTarget() {
+    if (!newMitra || !newTargetTrx) return
+    setSavingMitra(true)
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session) return
+      await supabase.from('am_mitra_targets').upsert({
+        mitra: newMitra,
+        period_year: selectedYear,
+        period_month: selectedMonth,
+        target_trx: parseInt(newTargetTrx.replace(/\./g, '')),
+        notes: newNotes || null,
+        created_by: session.user.id,
+        updated_at: new Date().toISOString(),
+      }, { onConflict: 'mitra,period_year,period_month' })
+      setNewMitra(''); setNewTargetTrx(''); setNewNotes('')
+      setShowAddForm(false)
+      setSavedMitra(true)
+      setTimeout(() => setSavedMitra(false), 2000)
+      await loadMitraData()
+    } finally { setSavingMitra(false) }
+  }
+
+  async function deleteMitraTarget(mitra: string) {
+    setDeletingMitra(mitra)
+    try {
+      await supabase.from('am_mitra_targets').delete()
+        .eq('mitra', mitra)
+        .eq('period_year', selectedYear)
+        .eq('period_month', selectedMonth)
+      await loadMitraData()
+    } finally { setDeletingMitra('') }
+  }
 
   async function loadTarget() {
     setLoading(true)
@@ -187,11 +272,24 @@ export default function TargetSimplePage() {
 
         <div style={{ marginBottom: '28px' }}>
           <div style={{ fontSize: '11px', fontWeight: '600', color: '#9ca3af', letterSpacing: '0.1em', marginBottom: '4px' }}>TARGET BULANAN</div>
-          <h1 style={{ fontSize: '24px', fontWeight: '800', color: '#111827', margin: 0, letterSpacing: '-0.02em' }}>Target Pendapatan</h1>
-          <p style={{ fontSize: '13px', color: '#6b7280', marginTop: '4px' }}>Set target fee bulanan — AMARIS hitung sisanya otomatis.</p>
+          <h1 style={{ fontSize: '24px', fontWeight: '800', color: '#111827', margin: 0, letterSpacing: '-0.02em' }}>Target Bisnis</h1>
+          <p style={{ fontSize: '13px', color: '#6b7280', marginTop: '4px' }}>Set target fee platform dan target TRX per Mitra.</p>
         </div>
 
-        {/* Period selector */}
+        {/* Tab switcher */}
+        <div style={{ display: 'flex', gap: '4px', marginBottom: '24px', backgroundColor: '#f3f4f6', padding: '4px', borderRadius: '10px', width: 'fit-content' }}>
+          {[
+            { key: 'platform', label: 'Target Platform' },
+            { key: 'mitra', label: 'Target Mitra' },
+          ].map(t => (
+            <button key={t.key} onClick={() => setActiveTab(t.key as 'platform' | 'mitra')}
+              style={{ padding: '8px 20px', borderRadius: '8px', border: 'none', cursor: 'pointer', fontSize: '13px', fontWeight: activeTab === t.key ? '600' : '400', background: activeTab === t.key ? '#fff' : 'transparent', color: activeTab === t.key ? '#111827' : '#6b7280', boxShadow: activeTab === t.key ? '0 1px 3px rgba(0,0,0,0.08)' : 'none', transition: 'all 0.15s' }}>
+              {t.label}
+            </button>
+          ))}
+        </div>
+
+        {/* Period selector — shared untuk kedua tab */}
         <div style={{ display: 'flex', gap: '12px', marginBottom: '24px', padding: '16px', backgroundColor: '#f9fafb', borderRadius: '10px', border: '1px solid #e5e7eb', alignItems: 'center' }}>
           <span style={{ fontSize: '13px', color: '#6b7280', fontWeight: '500' }}>Periode:</span>
           <select value={selectedMonth} onChange={e => setSelectedMonth(Number(e.target.value))}
@@ -202,7 +300,7 @@ export default function TargetSimplePage() {
             style={{ padding: '7px 12px', borderRadius: '8px', border: '1px solid #e5e7eb', fontSize: '13px', color: '#111827', backgroundColor: '#fff', cursor: 'pointer' }}>
             {[2025, 2026, 2027].map(y => <option key={y} value={y}>{y}</option>)}
           </select>
-          {isNew && (
+          {activeTab === 'platform' && isNew && (
             <span style={{ fontSize: '11px', padding: '3px 10px', borderRadius: '99px', backgroundColor: '#fef9c3', color: '#ca8a04', fontWeight: '600' }}>Belum ada target</span>
           )}
         </div>
@@ -329,6 +427,153 @@ export default function TargetSimplePage() {
             </div>
           </>
         )}
+
+        {/* ── Tab Target Mitra ─────────────────────────────────── */}
+        {activeTab === 'mitra' && (
+          <div>
+            {/* Header + tombol tambah */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+              <div>
+                <div style={{ fontSize: '13px', fontWeight: '600', color: '#111827' }}>
+                  Target TRX Transfer — {MONTHS[selectedMonth-1]} {selectedYear}
+                </div>
+                <div style={{ fontSize: '12px', color: '#9ca3af', marginTop: '2px' }}>
+                  Hanya TRX Transfer (bukan Cek Saldo). Tambah Mitra yang ingin dipantau.
+                </div>
+              </div>
+              <button onClick={() => setShowAddForm(!showAddForm)}
+                style={{ padding: '9px 16px', borderRadius: '8px', border: 'none', backgroundColor: '#0344D8', color: '#fff', fontSize: '13px', fontWeight: '600', cursor: 'pointer' }}>
+                + Tambah Mitra
+              </button>
+            </div>
+
+            {/* Form tambah target */}
+            {showAddForm && (
+              <div style={{ padding: '16px', border: '1px solid #e5e7eb', borderRadius: '10px', backgroundColor: '#f9fafb', marginBottom: '16px' }}>
+                <div style={{ fontSize: '12px', fontWeight: '600', color: '#374151', marginBottom: '12px' }}>Tambah Target Mitra</div>
+                <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 2fr', gap: '10px', marginBottom: '10px' }}>
+                  <div>
+                    <label style={{ fontSize: '11px', color: '#9ca3af', display: 'block', marginBottom: '4px' }}>Mitra</label>
+                    <select value={newMitra} onChange={e => {
+                      setNewMitra(e.target.value)
+                      // Auto-isi baseline dari bulan lalu sebagai saran
+                      const b = mitraBaseline.find(m => m.mitra === e.target.value)
+                      if (b) setNewTargetTrx(b.trx_transfer.toLocaleString('id'))
+                    }}
+                      style={{ width: '100%', padding: '8px 10px', borderRadius: '8px', border: '1px solid #e5e7eb', fontSize: '13px' }}>
+                      <option value="">Pilih Mitra...</option>
+                      {mitraBaseline
+                        .filter(m => !mitraWithTarget.includes(m.mitra))
+                        .map(m => (
+                          <option key={m.mitra} value={m.mitra}>{m.mitra}</option>
+                        ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label style={{ fontSize: '11px', color: '#9ca3af', display: 'block', marginBottom: '4px' }}>
+                      Target TRX Transfer
+                      {newMitra && mitraBaseline.find(m => m.mitra === newMitra) && (
+                        <span style={{ color: '#0344D8', marginLeft: '6px' }}>
+                          (Juni: {mitraBaseline.find(m => m.mitra === newMitra)!.trx_transfer.toLocaleString('id')})
+                        </span>
+                      )}
+                    </label>
+                    <input
+                      value={newTargetTrx}
+                      onChange={e => setNewTargetTrx(e.target.value)}
+                      placeholder="contoh: 65000"
+                      style={{ width: '100%', padding: '8px 10px', borderRadius: '8px', border: '1px solid #e5e7eb', fontSize: '13px', boxSizing: 'border-box' }}
+                    />
+                  </div>
+                  <div>
+                    <label style={{ fontSize: '11px', color: '#9ca3af', display: 'block', marginBottom: '4px' }}>Catatan (opsional)</label>
+                    <input value={newNotes} onChange={e => setNewNotes(e.target.value)} placeholder="misal: target naik 5% dari Juni"
+                      style={{ width: '100%', padding: '8px 10px', borderRadius: '8px', border: '1px solid #e5e7eb', fontSize: '13px', boxSizing: 'border-box' }} />
+                  </div>
+                </div>
+                <div style={{ display: 'flex', gap: '8px' }}>
+                  <button onClick={saveMitraTarget} disabled={savingMitra || !newMitra || !newTargetTrx}
+                    style={{ padding: '8px 16px', borderRadius: '8px', border: 'none', backgroundColor: !newMitra || !newTargetTrx ? '#e5e7eb' : '#0344D8', color: !newMitra || !newTargetTrx ? '#9ca3af' : '#fff', fontSize: '12px', fontWeight: '600', cursor: !newMitra || !newTargetTrx ? 'not-allowed' : 'pointer' }}>
+                    {savingMitra ? 'Menyimpan...' : 'Simpan'}
+                  </button>
+                  <button onClick={() => { setShowAddForm(false); setNewMitra(''); setNewTargetTrx(''); setNewNotes('') }}
+                    style={{ padding: '8px 16px', borderRadius: '8px', border: '1px solid #e5e7eb', backgroundColor: '#fff', color: '#6b7280', fontSize: '12px', cursor: 'pointer' }}>
+                    Batal
+                  </button>
+                  {savedMitra && <span style={{ fontSize: '12px', color: '#16a34a', fontWeight: '600', alignSelf: 'center' }}>✅ Tersimpan</span>}
+                </div>
+              </div>
+            )}
+
+            {/* Tabel progress */}
+            {loadingMitra ? (
+              <div style={{ padding: '40px', textAlign: 'center', color: '#9ca3af', fontSize: '13px' }}>Memuat...</div>
+            ) : mitraProgress.length === 0 ? (
+              <div style={{ padding: '48px', textAlign: 'center', backgroundColor: '#f9fafb', borderRadius: '10px', border: '1px dashed #e5e7eb' }}>
+                <div style={{ fontSize: '13px', color: '#9ca3af', marginBottom: '8px' }}>Belum ada target Mitra untuk {MONTHS[selectedMonth-1]} {selectedYear}</div>
+                <div style={{ fontSize: '12px', color: '#c4c4c4' }}>Klik "+ Tambah Mitra" untuk mulai set target</div>
+              </div>
+            ) : (
+              <div style={{ border: '1px solid #e5e7eb', borderRadius: '10px', overflow: 'hidden' }}>
+                {/* Header tabel */}
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 120px 120px 100px 28px', padding: '10px 16px', backgroundColor: '#f9fafb', borderBottom: '1px solid #e5e7eb', fontSize: '11px', fontWeight: '700', color: '#9ca3af', letterSpacing: '0.05em' }}>
+                  <div>MITRA</div>
+                  <div style={{ textAlign: 'right' }}>TARGET TRX</div>
+                  <div style={{ textAlign: 'right' }}>AKTUAL MTD</div>
+                  <div style={{ textAlign: 'center' }}>ACHIEVEMENT</div>
+                  <div />
+                </div>
+                {mitraProgress.map((p, i) => {
+                  const pct = Number(p.achievement_pct)
+                  const color = pct >= 80 ? '#166534' : pct >= 50 ? '#92400e' : '#dc2626'
+                  const bg    = pct >= 80 ? '#f0fdf4' : pct >= 50 ? '#fefce8' : '#fef2f2'
+                  // Proyeksi end-of-month
+                  const projected = p.days_elapsed > 0
+                    ? Math.round(p.actual_trx_mtd / p.days_elapsed * p.days_in_month)
+                    : 0
+                  return (
+                    <div key={p.mitra} style={{ display: 'grid', gridTemplateColumns: '1fr 120px 120px 100px 28px', padding: '12px 16px', borderBottom: i < mitraProgress.length - 1 ? '1px solid #f3f4f6' : 'none', alignItems: 'center', backgroundColor: '#fff' }}>
+                      <div>
+                        <div style={{ fontSize: '13px', fontWeight: '600', color: '#111827' }}>{p.mitra}</div>
+                        <div style={{ fontSize: '10px', color: '#9ca3af', marginTop: '1px' }}>
+                          Proyeksi akhir bulan: {projected.toLocaleString('id')} TRX
+                          {p.notes && ` · ${p.notes}`}
+                        </div>
+                        {/* Progress bar */}
+                        <div style={{ marginTop: '6px', height: '4px', backgroundColor: '#f3f4f6', borderRadius: '99px', overflow: 'hidden' }}>
+                          <div style={{ height: '100%', width: `${Math.min(pct, 100)}%`, backgroundColor: color, borderRadius: '99px', transition: 'width 0.5s' }} />
+                        </div>
+                      </div>
+                      <div style={{ textAlign: 'right', fontSize: '13px', fontWeight: '600', color: '#374151' }}>
+                        {p.target_trx.toLocaleString('id')}
+                      </div>
+                      <div style={{ textAlign: 'right', fontSize: '13px', color: '#374151' }}>
+                        {p.actual_trx_mtd.toLocaleString('id')}
+                      </div>
+                      <div style={{ textAlign: 'center' }}>
+                        <span style={{ padding: '3px 10px', borderRadius: '99px', fontSize: '12px', fontWeight: '700', backgroundColor: bg, color }}>
+                          {pct}%
+                        </span>
+                      </div>
+                      <button onClick={() => deleteMitraTarget(p.mitra)} disabled={deletingMitra === p.mitra}
+                        style={{ padding: '2px 6px', borderRadius: '6px', border: '1px solid #fee2e2', backgroundColor: '#fff', color: '#dc2626', fontSize: '11px', cursor: 'pointer', opacity: deletingMitra === p.mitra ? 0.5 : 1 }}>
+                        ✕
+                      </button>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+
+            {/* Info hari berjalan */}
+            {mitraProgress.length > 0 && (
+              <div style={{ marginTop: '12px', fontSize: '11px', color: '#9ca3af', textAlign: 'right' }}>
+                Hari berjalan: {mitraProgress[0].days_elapsed} dari {mitraProgress[0].days_in_month} hari
+              </div>
+            )}
+          </div>
+        )}
+
       </div>
     </Layout>
   )
