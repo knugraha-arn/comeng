@@ -19,6 +19,8 @@ export async function buildContext(wagId?: string): Promise<string> {
     { data: bucketRaw },
     { data: dateData },
     { data: skillFiles },
+    { data: mitraMtdStats },
+    { data: topAgentsPerMitra },
   ] = await Promise.all([
     supabase.from('wags').select('id, name, status, last_processed_at').eq('status', 'active'),
     supabase.from('rangers').select('id, full_name, display_name, phone_number, wag_id, wags(name)').eq('status', 'active'),
@@ -31,8 +33,34 @@ export async function buildContext(wagId?: string): Promise<string> {
     supabase.from('am_agent_daily_metrics').select('bucket').not('bucket', 'is', null),
     supabase.from('am_agent_daily_metrics').select('metric_date').order('metric_date', { ascending: false }).limit(1).single(),
     supabase.from('am_ai_skill').select('name, content').eq('is_active', true).order('updated_at', { ascending: false }),
+    // RPC untuk MTD — agregasi di DB, tidak kena batas 1000 baris client
+    supabase.rpc('get_mitra_mtd_summary'),
+    // RPC untuk top 5 agen per Mitra — idem
+    supabase.rpc('get_top_agents_per_mitra'),
   ])
 
+  // Build lookup MTD per Mitra dari RPC (sudah diagregasi di DB)
+  const mitraMtdMap: Record<string, { trx: number, fee: number, amount: number }> = {}
+  for (const row of mitraMtdStats ?? []) {
+    mitraMtdMap[row.mitra] = {
+      trx: Number(row.total_trx),
+      fee: Number(row.total_fee),
+      amount: Number(row.total_amount),
+    }
+  }
+
+  // Build lookup top agen per Mitra dari RPC (sudah diagregasi di DB)
+  const mitraAgentMap: Record<string, { serial_number: string, merchant_name: string, trx: number, amount: number, fee: number }[]> = {}
+  for (const row of topAgentsPerMitra ?? []) {
+    if (!mitraAgentMap[row.mitra]) mitraAgentMap[row.mitra] = []
+    mitraAgentMap[row.mitra].push({
+      serial_number: row.serial_number,
+      merchant_name: row.merchant_name,
+      trx: Number(row.total_trx),
+      amount: Number(row.total_amount),
+      fee: Number(row.total_fee),
+    })
+  }
   // Fetch messages terpisah karena ada kondisi wagId
   const msgQuery = supabase
     .from('messages')
@@ -44,46 +72,6 @@ export async function buildContext(wagId?: string): Promise<string> {
     msgQuery.limit(200)
   }
   const { data: messages } = await msgQuery
-
-  // Fetch top 5 agen per Mitra (by TRX) dari am_transactions langsung
-  // Ini yang memungkinkan AI jawab "top agen GMS", "top agen MAJU", dll
-  const { data: topPerMitraRaw } = await supabase
-    .from('am_transactions')
-    .select('serial_number, merchant_name, mitra, sharing_fee, amount')
-    .gte('transaction_date', dateData?.metric_date
-      ? new Date(new Date(dateData.metric_date).getTime() - 13 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10)
-      : new Date(Date.now() - 13 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10)
-    )
-    .not('serial_number', 'is', null)
-    .not('mitra', 'is', null)
-
-  // Agregasi top 5 per Mitra di sisi JavaScript
-  const mitraAgentMap: Record<string, Record<string, { merchant_name: string, trx: number, amount: number, fee: number }>> = {}
-  for (const row of topPerMitraRaw ?? []) {
-    const sn = (row.serial_number as string).toUpperCase()
-    if (!mitraAgentMap[row.mitra]) mitraAgentMap[row.mitra] = {}
-    if (!mitraAgentMap[row.mitra][sn]) mitraAgentMap[row.mitra][sn] = { merchant_name: row.merchant_name, trx: 0, amount: 0, fee: 0 }
-    mitraAgentMap[row.mitra][sn].trx += 1
-    mitraAgentMap[row.mitra][sn].amount += Number(row.amount || 0)
-    mitraAgentMap[row.mitra][sn].fee += Number(row.sharing_fee || 0)
-  }
-
-  // Fetch data MTD per Mitra
-  const now = new Date()
-  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().slice(0, 10)
-  const { data: mtdRaw } = await supabase
-    .from('am_transactions')
-    .select('mitra, sharing_fee, amount')
-    .gte('transaction_date', monthStart)
-    .not('mitra', 'is', null)
-
-  const mitraMtdMap: Record<string, { trx: number, fee: number, amount: number }> = {}
-  for (const row of mtdRaw ?? []) {
-    if (!mitraMtdMap[row.mitra]) mitraMtdMap[row.mitra] = { trx: 0, fee: 0, amount: 0 }
-    mitraMtdMap[row.mitra].trx += 1
-    mitraMtdMap[row.mitra].fee += Number(row.sharing_fee || 0)
-    mitraMtdMap[row.mitra].amount += Number(row.amount || 0)
-  }
 
   const bucketCount = (bucketRaw ?? []).reduce((acc: Record<string, number>, r) => {
     acc[r.bucket] = (acc[r.bucket] || 0) + 1
@@ -247,19 +235,17 @@ export async function buildContext(wagId?: string): Promise<string> {
       lines.push('')
     }
 
-    // Top 5 agen per Mitra — ini yang kritis untuk jawab "top agen GMS/MAJU/dll"
-    lines.push('Top 5 agen per Mitra — berdasarkan TRX (14H):')
-    for (const [mitraName, agents] of Object.entries(mitraAgentMap)) {
-      const top5 = Object.entries(agents)
-        .sort((a, b) => b[1].trx - a[1].trx)
-        .slice(0, 5)
-      if (top5.length === 0) continue
-      lines.push(`  ${mitraName}:`)
-      for (const [sn, data] of top5) {
-        lines.push(`    ${data.merchant_name} (${sn}) | ${data.trx} TRX | ${fmt(data.amount)} amount | ${fmt(data.fee)} fee`)
+    // Top 5 agen per Mitra — supaya AI bisa jawab "top agen GMS/MAJU/dll"
+    if (Object.keys(mitraAgentMap).length > 0) {
+      lines.push('Top 5 agen per Mitra — berdasarkan TRX (14H):')
+      for (const [mitraName, agents] of Object.entries(mitraAgentMap)) {
+        lines.push(`  ${mitraName}:`)
+        for (const a of agents) {
+          lines.push(`    ${a.merchant_name} (${a.serial_number}) | ${a.trx} TRX | ${fmt(a.amount)} amount | ${fmt(a.fee)} fee`)
+        }
       }
+      lines.push('')
     }
-    lines.push('')
   }
 
   return lines.join('\n')
