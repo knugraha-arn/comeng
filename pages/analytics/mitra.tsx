@@ -52,6 +52,14 @@ interface MitraMTD {
   end_date: string
 }
 
+interface MitraTarget {
+  target_trx: number
+  actual_trx_mtd: number
+  achievement_pct: number
+  days_elapsed: number
+  days_in_month: number
+}
+
 const MOMENTUM_CONFIG = {
   accelerating: { label: 'Akselerasi', icon: '↑', color: '#166534', bg: '#dcfce7', border: '#bbf7d0', tooltip: 'TRX W2 (7 hari terakhir) > 110% dari W1 (7 hari pertama). Jaringan mitra sedang tumbuh.' },
   stable:       { label: 'Stabil',     icon: '→', color: '#1e40af', bg: '#eff6ff', border: '#bfdbfe', tooltip: 'TRX W2 antara 90–110% dari W1. Volume konsisten.' },
@@ -115,6 +123,7 @@ export default function MitraPage() {
   const [detail, setDetail]               = useState<MitraDetail[]>([])
   const [churn, setChurn]                 = useState<MitraChurn | null>(null)
   const [mtd, setMtd]                     = useState<MitraMTD | null>(null)
+  const [mitraTarget, setMitraTarget]     = useState<MitraTarget | null>(null)
   const [loadingDrawer, setLoadingDrawer] = useState(false)
 
   useEffect(() => { loadMitras() }, [router.asPath])
@@ -134,16 +143,24 @@ export default function MitraPage() {
   }
 
   async function openDrawer(m: MitraRow) {
-    setSelected(m); setDetail([]); setChurn(null); setMtd(null); setLoadingDrawer(true)
+    setSelected(m); setDetail([]); setChurn(null); setMtd(null); setMitraTarget(null); setLoadingDrawer(true)
     try {
-      const [d, c, t] = await Promise.all([
-        supabase.rpc('get_mitra_detail',      { p_mitra: m.mitra }),
-        supabase.rpc('get_mitra_agent_churn', { p_mitra: m.mitra }),
-        supabase.rpc('get_mitra_mtd',         { p_mitra: m.mitra }),
+      const now = new Date()
+      const [d, c, t, tgt] = await Promise.all([
+        supabase.rpc('get_mitra_detail',        { p_mitra: m.mitra }),
+        supabase.rpc('get_mitra_agent_churn',   { p_mitra: m.mitra }),
+        supabase.rpc('get_mitra_mtd',           { p_mitra: m.mitra }),
+        supabase.rpc('get_mitra_target_progress', {
+          p_year:  now.getFullYear(),
+          p_month: now.getMonth() + 1,
+        }),
       ])
       setDetail(d.data ?? [])
       setChurn(c.data?.[0] ?? null)
       setMtd(t.data?.[0] ?? null)
+      // Filter hanya target untuk Mitra ini
+      const thisMitraTarget = (tgt.data ?? []).find((r: MitraTarget & { mitra: string }) => r.mitra === m.mitra)
+      setMitraTarget(thisMitraTarget ?? null)
     } finally { setLoadingDrawer(false) }
   }
 
@@ -396,6 +413,44 @@ export default function MitraPage() {
                         <span style={{ fontWeight: '400', color: '#9ca3af', marginLeft: '6px' }}>
                           ({formatNum(mtd.avg_trx_per_day_mtd)} vs {formatNum(mtd.avg_trx_per_day_14d)} TRX/hari)
                         </span>
+                      </div>
+                    </div>
+                  )
+                })()}
+
+                {/* Target Achievement — hanya tampil kalau Mitra ini punya target bulan ini */}
+                {mitraTarget && (() => {
+                  const pct = Number(mitraTarget.achievement_pct)
+                  const color  = pct >= 80 ? '#166534' : pct >= 50 ? '#92400e' : '#dc2626'
+                  const bg     = pct >= 80 ? '#f0fdf4' : pct >= 50 ? '#fefce8' : '#fef2f2'
+                  const border = pct >= 80 ? '#bbf7d0' : pct >= 50 ? '#fde68a' : '#fecaca'
+                  const projected = mitraTarget.days_elapsed > 0
+                    ? Math.round(mitraTarget.actual_trx_mtd / mitraTarget.days_elapsed * mitraTarget.days_in_month)
+                    : 0
+                  return (
+                    <div style={{ marginBottom: '24px' }}>
+                      <div style={{ fontSize: '11px', fontWeight: '700', color: '#9ca3af', letterSpacing: '0.08em', marginBottom: '12px' }}>
+                        TARGET TRX TRANSFER BULAN INI
+                        <span {...tip('Target TRX Transfer (bukan Cek Saldo) yang ditetapkan untuk Mitra ini. Achievement dihitung dari aktual MTD.')} style={{ marginLeft: '6px', cursor: 'default', fontWeight: '400' }}>ⓘ</span>
+                      </div>
+                      <div style={{ padding: '16px', backgroundColor: bg, borderRadius: '10px', border: `1px solid ${border}` }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
+                          <div style={{ fontSize: '28px', fontWeight: '800', color }}>{pct}%</div>
+                          <div style={{ textAlign: 'right' }}>
+                            <div style={{ fontSize: '12px', fontWeight: '600', color }}>
+                              {mitraTarget.actual_trx_mtd.toLocaleString('id')} / {mitraTarget.target_trx.toLocaleString('id')} TRX
+                            </div>
+                            <div style={{ fontSize: '11px', color: '#9ca3af', marginTop: '2px' }}>
+                              Proyeksi akhir bulan: {projected.toLocaleString('id')} TRX
+                            </div>
+                          </div>
+                        </div>
+                        <div style={{ height: '8px', backgroundColor: 'rgba(0,0,0,0.08)', borderRadius: '99px', overflow: 'hidden' }}>
+                          <div style={{ height: '100%', width: `${Math.min(pct, 100)}%`, backgroundColor: color, borderRadius: '99px', transition: 'width 0.5s' }} />
+                        </div>
+                        <div style={{ fontSize: '10px', color: '#9ca3af', marginTop: '6px' }}>
+                          Hari berjalan: {mitraTarget.days_elapsed} dari {mitraTarget.days_in_month} hari
+                        </div>
                       </div>
                     </div>
                   )
