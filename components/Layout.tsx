@@ -181,13 +181,13 @@ export default function Layout({ children, title }: { children: React.ReactNode;
           <NavItem href="/ai-assistant" label="AI Assistant" icon="✦" />
           <div style={{ margin: '8px 4px', borderTop: '1px solid rgba(255,255,255,0.08)' }} />
 
+          {/* TRX Analytics — di atas WAG */}
+          <SectionLabel label="TRX ANALYTICS" />
+          {analyticsNavItems.map(item => <NavItem key={item.href} {...item} />)}
+
           {/* WAG Analytics */}
           <SectionLabel label="WAG ANALYTICS" />
           {navItems.map(item => <NavItem key={item.href} {...item} />)}
-
-          {/* TRX Analytics */}
-          <SectionLabel label="TRX ANALYTICS" />
-          {analyticsNavItems.map(item => <NavItem key={item.href} {...item} />)}
 
           {/* Admin */}
           {isSuperAdmin && (
