@@ -112,8 +112,9 @@ export async function buildContext(wagId?: string): Promise<string> {
   lines.push('GMS = nama Mitra (CV. Griya Mitra Sejahtera), MAJU = PT. Meraki Jaya Usaha, SVD = nama Mitra')
   lines.push('TRX = jumlah transaksi, Fee = pendapatan sharing fee Arranet, Amount = nominal uang yang ditransfer agen')
   lines.push('Productive = agen aktif ≥8 hari dalam 14H, Moderate = aktif 1-7 hari + TRX cukup, Sporadic = agen kurang aktif')
-  lines.push('Ranger = freelancer yang membina komunitas agen di WAG')
-  lines.push('WAG = WhatsApp Group komunitas agen')
+  lines.push('Ranger = PIC (penanggung jawab agen) yang berada di bawah tiga Mitra Arranet: ARRANET, ARRANET ex Dinar, dan ARRANET ex SSDI. Ranger bertanggung jawab membina agen dan juga mengelola WAG komunitas sebagai salah satu aktivitasnya. Tidak semua PIC adalah Ranger — PIC dari Mitra lain (GMS, MAJU, SVD, dll) bukan Ranger.')
+  lines.push('PIC = penanggung jawab agen di semua Mitra, termasuk non-Arranet. Ranger adalah subset dari PIC, khusus dari tiga Mitra Arranet.')
+  lines.push('WAG = WhatsApp Group komunitas agen yang dikelola oleh Ranger')
   lines.push('Participation rate = % pesan Ranger dibanding total pesan di WAG')
   lines.push('')
 
