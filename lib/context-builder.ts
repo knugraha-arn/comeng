@@ -6,88 +6,115 @@ const supabase = createClient(
 )
 
 export async function buildContext(wagId?: string): Promise<string> {
-  // 1. Fetch semua WAG aktif
-  const { data: wags } = await supabase
-    .from('wags')
-    .select('id, name, status, last_processed_at')
-    .eq('status', 'active')
+  // Semua fetch dijalankan paralel untuk efisiensi
+  const [
+    { data: wags },
+    { data: rangers },
+    { data: metrics },
+    { data: members },
+    { data: observers },
+    { data: lastRec },
+    { data: mitraStats },
+    { data: topAgentsByTrx },
+    { data: bucketRaw },
+    { data: dateData },
+  ] = await Promise.all([
+    supabase.from('wags').select('id, name, status, last_processed_at').eq('status', 'active'),
+    supabase.from('rangers').select('id, full_name, display_name, phone_number, wag_id, wags(name)').eq('status', 'active'),
+    supabase.from('weekly_metrics').select('wag_id, ranger_id, week_key, active_days, total_messages, participation_rate, proactive_posts, dormant_rate, unresponded_rate, status').order('week_key', { ascending: false }),
+    supabase.from('members').select('wag_id, display_name, status, last_active_at, greeted_at, joined_at').order('last_active_at', { ascending: false }),
+    supabase.from('observers').select('wag_id, display_name, note'),
+    supabase.from('recommendations').select('week_key, generated_at, items').order('generated_at', { ascending: false }).limit(1).single(),
+    supabase.rpc('get_mitra_list'),
+    supabase.from('am_agent_daily_metrics').select('serial_number, merchant_name, mitra, pic, total_trx, total_fee, bucket, active_days_14, avg_transfer_per_active_day').order('total_trx', { ascending: false }).limit(10),
+    supabase.from('am_agent_daily_metrics').select('bucket').not('bucket', 'is', null),
+    supabase.from('am_agent_daily_metrics').select('metric_date').order('metric_date', { ascending: false }).limit(1).single(),
+  ])
 
-  // 2. Fetch semua Ranger aktif
-  const { data: rangers } = await supabase
-    .from('rangers')
-    .select('id, full_name, display_name, phone_number, wag_id, wags(name)')
-    .eq('status', 'active')
-
-  // 3. Fetch weekly metrics — 8 minggu terakhir per Ranger
-  const { data: metrics } = await supabase
-    .from('weekly_metrics')
-    .select('wag_id, ranger_id, week_key, active_days, total_messages, participation_rate, proactive_posts, dormant_rate, unresponded_rate, status')
-    .order('week_key', { ascending: false })
-
-  // 4. Fetch members
-  const { data: members } = await supabase
-    .from('members')
-    .select('wag_id, display_name, status, last_active_at, greeted_at, joined_at')
-    .order('last_active_at', { ascending: false })
-
-  // 5. Fetch raw messages — dibatasi per WAG kalau wagId ada, atau 500 pesan terbaru
+  // Fetch messages terpisah karena ada kondisi wagId
   const msgQuery = supabase
     .from('messages')
     .select('wag_id, sender_name, sender_type, content, sent_at, week_key')
     .order('sent_at', { ascending: false })
-
   if (wagId) {
     msgQuery.eq('wag_id', wagId).limit(300)
   } else {
     msgQuery.limit(200)
   }
-
   const { data: messages } = await msgQuery
 
-  // 6. Fetch rekomendasi terakhir
-  const { data: lastRec } = await supabase
-    .from('recommendations')
-    .select('week_key, generated_at, items')
-    .order('generated_at', { ascending: false })
-    .limit(1)
-    .single()
+  // Fetch top 5 agen per Mitra (by TRX) dari am_transactions langsung
+  // Ini yang memungkinkan AI jawab "top agen GMS", "top agen MAJU", dll
+  const { data: topPerMitraRaw } = await supabase
+    .from('am_transactions')
+    .select('serial_number, merchant_name, mitra, sharing_fee, amount')
+    .gte('transaction_date', dateData?.metric_date
+      ? new Date(new Date(dateData.metric_date).getTime() - 13 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10)
+      : new Date(Date.now() - 13 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10)
+    )
+    .not('serial_number', 'is', null)
+    .not('mitra', 'is', null)
 
-  // 7. Fetch observers
-  const { data: observers } = await supabase
-    .from('observers')
-    .select('wag_id, display_name, note')
+  // Agregasi top 5 per Mitra di sisi JavaScript
+  const mitraAgentMap: Record<string, Record<string, { merchant_name: string, trx: number, amount: number, fee: number }>> = {}
+  for (const row of topPerMitraRaw ?? []) {
+    const sn = (row.serial_number as string).toUpperCase()
+    if (!mitraAgentMap[row.mitra]) mitraAgentMap[row.mitra] = {}
+    if (!mitraAgentMap[row.mitra][sn]) mitraAgentMap[row.mitra][sn] = { merchant_name: row.merchant_name, trx: 0, amount: 0, fee: 0 }
+    mitraAgentMap[row.mitra][sn].trx += 1
+    mitraAgentMap[row.mitra][sn].amount += Number(row.amount || 0)
+    mitraAgentMap[row.mitra][sn].fee += Number(row.sharing_fee || 0)
+  }
 
-  // 8. Data transaksi agregat — ringkasan platform (bukan raw data, sudah pre-aggregated)
-  const { data: mitraStats } = await supabase.rpc('get_mitra_list')
+  // Fetch data MTD per Mitra
+  const now = new Date()
+  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().slice(0, 10)
+  const { data: mtdRaw } = await supabase
+    .from('am_transactions')
+    .select('mitra, sharing_fee, amount')
+    .gte('transaction_date', monthStart)
+    .not('mitra', 'is', null)
 
-  const { data: topAgents } = await supabase
-    .from('am_agent_daily_metrics')
-    .select('serial_number, merchant_name, mitra, pic, total_trx, total_fee, bucket, active_days_14, avg_transfer_per_active_day')
-    .order('total_trx', { ascending: false })
-    .limit(10)
-
-  const { data: bucketRaw } = await supabase
-    .from('am_agent_daily_metrics')
-    .select('bucket')
-    .not('bucket', 'is', null)
+  const mitraMtdMap: Record<string, { trx: number, fee: number, amount: number }> = {}
+  for (const row of mtdRaw ?? []) {
+    if (!mitraMtdMap[row.mitra]) mitraMtdMap[row.mitra] = { trx: 0, fee: 0, amount: 0 }
+    mitraMtdMap[row.mitra].trx += 1
+    mitraMtdMap[row.mitra].fee += Number(row.sharing_fee || 0)
+    mitraMtdMap[row.mitra].amount += Number(row.amount || 0)
+  }
 
   const bucketCount = (bucketRaw ?? []).reduce((acc: Record<string, number>, r) => {
     acc[r.bucket] = (acc[r.bucket] || 0) + 1
     return acc
   }, {})
 
-  const { data: dateData } = await supabase
-    .from('am_agent_daily_metrics')
-    .select('metric_date')
-    .order('metric_date', { ascending: false })
-    .limit(1)
-    .single()
+  const fmt = (n: number) => n >= 1_000_000_000
+    ? `Rp ${(n / 1_000_000_000).toFixed(2)}M`
+    : n >= 1_000_000
+    ? `Rp ${(n / 1_000_000).toFixed(1)}jt`
+    : n >= 1_000
+    ? `Rp ${(n / 1_000).toFixed(0)}rb`
+    : `Rp ${n}`
 
-  // Build context string
+  // ── Build context string ──────────────────────────────────────────────────
   const lines: string[] = []
 
   lines.push('=== DATA PLATFORM AMARIS ===')
   lines.push(`Diambil pada: ${new Date().toLocaleString('id-ID')}`)
+  lines.push('')
+
+  // Glossary istilah AMARIS — membantu AI interpretasi pertanyaan user
+  lines.push('--- GLOSSARY ISTILAH ---')
+  lines.push('MTD = Month-to-Date: akumulasi sejak awal bulan berjalan hingga tanggal data terakhir')
+  lines.push('14H = 14 hari terakhir (window analisis utama, bergulir otomatis)')
+  lines.push('W1 = 7 hari pertama dalam window 14H (hari 1-7)')
+  lines.push('W2 = 7 hari terakhir dalam window 14H (hari 8-14)')
+  lines.push('GMS = nama Mitra (CV. Griya Mitra Sejahtera), MAJU = PT. Meraki Jaya Usaha, SVD = nama Mitra')
+  lines.push('TRX = jumlah transaksi, Fee = pendapatan sharing fee Arranet, Amount = nominal uang yang ditransfer agen')
+  lines.push('Productive = agen aktif ≥8 hari dalam 14H, Moderate = aktif 1-7 hari + TRX cukup, Sporadic = agen kurang aktif')
+  lines.push('Ranger = freelancer yang membina komunitas agen di WAG')
+  lines.push('WAG = WhatsApp Group komunitas agen')
+  lines.push('Participation rate = % pesan Ranger dibanding total pesan di WAG')
   lines.push('')
 
   // WAG summary
@@ -114,10 +141,8 @@ export async function buildContext(wagId?: string): Promise<string> {
       .filter(m => m.ranger_id === ranger.id)
       .sort((a, b) => a.week_key.localeCompare(b.week_key))
       .slice(-8)
-
     const wagName = (ranger as unknown as { wags: { name: string } }).wags?.name || '—'
     lines.push(`Ranger: ${ranger.full_name} | WAG: ${wagName} | Display: ${ranger.display_name}`)
-
     if (rangerMetrics.length === 0) {
       lines.push('  Belum ada data metrik')
     } else {
@@ -169,42 +194,59 @@ export async function buildContext(wagId?: string): Promise<string> {
     lines.push('--- REKOMENDASI AI TERAKHIR ---')
     lines.push(`Generate: ${new Date(lastRec.generated_at).toLocaleString('id-ID')}`)
     for (const item of lastRec.items || []) {
-      lines.push(`${item.ranger} [${item.priority}]: ${item.title}`)
+      const unitName = item.wag || item.ranger
+      lines.push(`${unitName} [${item.priority}]: ${item.title}`)
       lines.push(`  ${item.body}`)
     }
     lines.push('')
   }
 
-  // Data Transaksi Agen (agregat — basis 14 hari terakhir)
+  // Data Transaksi — 14H
   if (dateData?.metric_date) {
-    const fmt = (n: number) => n >= 1000000
-      ? `Rp ${(n/1000000).toFixed(1)}jt`
-      : n >= 1000 ? `Rp ${(n/1000).toFixed(0)}rb` : `Rp ${n}`
-
-    lines.push('--- DATA TRANSAKSI AGEN (14 HARI TERAKHIR) ---')
+    lines.push('--- DATA TRANSAKSI AGEN (14H) ---')
     lines.push(`Data per: ${dateData.metric_date}`)
-    lines.push(`Distribusi bucket agen:`)
+    lines.push('Distribusi bucket agen:')
     lines.push(`  Productive: ${bucketCount['productive'] || 0} agen`)
     lines.push(`  Moderate:   ${bucketCount['moderate'] || 0} agen`)
     lines.push(`  Sporadic:   ${bucketCount['sporadic'] || 0} agen`)
-    lines.push(`  Total:      ${(bucketRaw ?? []).length} agen aktif dalam 14H`)
+    lines.push(`  Total agen aktif 14H: ${(bucketRaw ?? []).length}`)
     lines.push('')
 
+    // Performa per Mitra — 14H + MTD sekaligus
     if (mitraStats && mitraStats.length > 0) {
-      lines.push('Performa per Mitra (14H):')
+      lines.push('Performa per Mitra (14H dan MTD):')
       for (const m of mitraStats) {
-        lines.push(`  ${m.mitra}: ${m.active_agents_14d} agen aktif | ${m.total_trx_14d} TRX | ${fmt(m.total_fee_14d)} fee | Growing ${m.growing_pct}% | Declining ${m.declining_pct}%`)
+        const mtd = mitraMtdMap[m.mitra]
+        const mtdStr = mtd
+          ? ` | MTD: ${mtd.trx} TRX | ${fmt(mtd.fee)} fee | ${fmt(mtd.amount)} amount`
+          : ''
+        lines.push(`  ${m.mitra}: 14H → ${m.active_agents_14d} agen | ${m.total_trx_14d} TRX | ${fmt(m.total_fee_14d)} fee | Productive ${m.growing_pct}% | Sporadic ${m.declining_pct}%${mtdStr}`)
       }
       lines.push('')
     }
 
-    if (topAgents && topAgents.length > 0) {
-      lines.push('Top 10 agen paling aktif (berdasarkan TRX 14H):')
-      for (const a of topAgents) {
-        lines.push(`  ${a.merchant_name} (${a.serial_number}) | Mitra: ${a.mitra} | ${a.total_trx} TRX | ${fmt(a.total_fee)} fee | Bucket: ${a.bucket} | ${a.active_days_14} hari aktif`)
+    // Top 10 agen platform (by TRX)
+    if (topAgentsByTrx && topAgentsByTrx.length > 0) {
+      lines.push('Top 10 agen platform — paling banyak TRX (14H):')
+      for (const a of topAgentsByTrx) {
+        lines.push(`  ${a.merchant_name} (${a.serial_number}) | Mitra: ${a.mitra} | ${a.total_trx} TRX | ${fmt(a.total_fee)} fee | ${a.bucket} | ${a.active_days_14} hari aktif`)
       }
       lines.push('')
     }
+
+    // Top 5 agen per Mitra — ini yang kritis untuk jawab "top agen GMS/MAJU/dll"
+    lines.push('Top 5 agen per Mitra — berdasarkan TRX (14H):')
+    for (const [mitraName, agents] of Object.entries(mitraAgentMap)) {
+      const top5 = Object.entries(agents)
+        .sort((a, b) => b[1].trx - a[1].trx)
+        .slice(0, 5)
+      if (top5.length === 0) continue
+      lines.push(`  ${mitraName}:`)
+      for (const [sn, data] of top5) {
+        lines.push(`    ${data.merchant_name} (${sn}) | ${data.trx} TRX | ${fmt(data.amount)} amount | ${fmt(data.fee)} fee`)
+      }
+    }
+    lines.push('')
   }
 
   return lines.join('\n')
