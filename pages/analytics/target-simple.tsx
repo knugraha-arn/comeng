@@ -324,7 +324,8 @@ export default function TargetSimplePage() {
           )}
         </div>
 
-        {loading ? (
+        {/* ── Tab Target Platform ──────────────────────────────── */}
+        {activeTab === 'platform' && (loading ? (
           <div style={{ textAlign: 'center', padding: '60px', color: '#9ca3af', fontSize: '13px' }}>Memuat...</div>
         ) : (
           <>
@@ -445,7 +446,7 @@ export default function TargetSimplePage() {
               {saved && <div style={{ fontSize: '13px', color: '#16a34a', fontWeight: '600' }}>✅ Tersimpan</div>}
             </div>
           </>
-        )}
+        ))}
 
         {/* ── Tab Target Mitra ─────────────────────────────────── */}
         {activeTab === 'mitra' && (
