@@ -18,6 +18,7 @@ export async function buildContext(wagId?: string): Promise<string> {
     { data: topAgentsByTrx },
     { data: bucketRaw },
     { data: dateData },
+    { data: skillFiles },
   ] = await Promise.all([
     supabase.from('wags').select('id, name, status, last_processed_at').eq('status', 'active'),
     supabase.from('rangers').select('id, full_name, display_name, phone_number, wag_id, wags(name)').eq('status', 'active'),
@@ -29,6 +30,7 @@ export async function buildContext(wagId?: string): Promise<string> {
     supabase.from('am_agent_daily_metrics').select('serial_number, merchant_name, mitra, pic, total_trx, total_fee, bucket, active_days_14, avg_transfer_per_active_day').order('total_trx', { ascending: false }).limit(10),
     supabase.from('am_agent_daily_metrics').select('bucket').not('bucket', 'is', null),
     supabase.from('am_agent_daily_metrics').select('metric_date').order('metric_date', { ascending: false }).limit(1).single(),
+    supabase.from('am_ai_skill').select('name, content').eq('is_active', true).order('updated_at', { ascending: false }),
   ])
 
   // Fetch messages terpisah karena ada kondisi wagId
@@ -102,6 +104,16 @@ export async function buildContext(wagId?: string): Promise<string> {
   lines.push('=== DATA PLATFORM AMARIS ===')
   lines.push(`Diambil pada: ${new Date().toLocaleString('id-ID')}`)
   lines.push('')
+
+  // Skill file — konteks bisnis yang bisa diedit admin lewat Konfigurasi
+  // Diinjeksi paling awal supaya jadi fondasi interpretasi AI sebelum data apapun
+  if (skillFiles && skillFiles.length > 0) {
+    lines.push('--- KONTEKS BISNIS (SKILL FILE) ---')
+    for (const sf of skillFiles) {
+      lines.push(sf.content)
+    }
+    lines.push('')
+  }
 
   // Glossary istilah AMARIS — membantu AI interpretasi pertanyaan user
   lines.push('--- GLOSSARY ISTILAH ---')
