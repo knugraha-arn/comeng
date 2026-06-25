@@ -44,6 +44,9 @@ export default function ConfigPage() {
   useEffect(() => {
     fetchAll()
     loadSkill()
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (session?.user?.email) setCurrentUserEmail(session.user.email)
+    })
   }, [])
 
   async function loadSkill() {
@@ -203,6 +206,9 @@ export default function ConfigPage() {
   const [skillId, setSkillId] = useState('')
   const [skillLoading, setSkillLoading] = useState(false)
   const [skillSaved, setSkillSaved] = useState(false)
+  const [currentUserEmail, setCurrentUserEmail] = useState('')
+
+  const canEditSkill = currentUserEmail === 'knugraha@arranetwork.com'
 
   const tabs = [
     { key: 'wag', label: 'WAG' },
@@ -680,20 +686,34 @@ export default function ConfigPage() {
 
           {/* Editor */}
           <div>
-            <div style={{ marginBottom: '16px' }}>
-              <div style={{ fontSize: '13px', fontWeight: '500', marginBottom: '4px' }}>AI Skill File</div>
-              <div style={{ fontSize: '12px', color: '#999', lineHeight: '1.6' }}>
-                Konteks bisnis yang diinjeksi ke AI Assistant setiap kali ada percakapan baru.
-                Edit kapan saja — berlaku langsung di percakapan berikutnya.
+            <div style={{ marginBottom: '16px', display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
+              <div>
+                <div style={{ fontSize: '13px', fontWeight: '500', marginBottom: '4px' }}>AI Skill File</div>
+                <div style={{ fontSize: '12px', color: '#999', lineHeight: '1.6' }}>
+                  Konteks bisnis yang diinjeksi ke AI Assistant setiap kali ada percakapan baru.
+                  {canEditSkill ? ' Edit kapan saja — berlaku langsung di percakapan berikutnya.' : ''}
+                </div>
               </div>
+              {!canEditSkill && (
+                <span style={{ fontSize: '11px', padding: '4px 10px', borderRadius: '6px', background: '#F8F9FB', border: '1px solid #e5e5e5', color: '#999', whiteSpace: 'nowrap' }}>
+                  🔒 Read only
+                </span>
+              )}
             </div>
 
             <div style={{ marginBottom: '12px' }}>
               <label style={{ fontSize: '11px', color: '#999', display: 'block', marginBottom: '4px' }}>Nama</label>
               <input
                 value={skillName}
-                onChange={e => setSkillName(e.target.value)}
-                style={{ padding: '8px 12px', borderRadius: '8px', border: '1px solid #e5e5e5', fontSize: '13px', width: '300px', outline: 'none' }}
+                readOnly={!canEditSkill}
+                onChange={canEditSkill ? e => setSkillName(e.target.value) : undefined}
+                style={{
+                  padding: '8px 12px', borderRadius: '8px', border: '1px solid #e5e5e5',
+                  fontSize: '13px', width: '300px', outline: 'none',
+                  background: canEditSkill ? '#fff' : '#F8F9FB',
+                  color: canEditSkill ? '#111' : '#999',
+                  cursor: canEditSkill ? 'text' : 'default',
+                }}
               />
             </div>
 
@@ -701,35 +721,47 @@ export default function ConfigPage() {
               <label style={{ fontSize: '11px', color: '#999', display: 'block', marginBottom: '4px' }}>Konten (format Markdown)</label>
               <textarea
                 value={skillContent}
-                onChange={e => setSkillContent(e.target.value)}
+                readOnly={!canEditSkill}
+                onChange={canEditSkill ? e => setSkillContent(e.target.value) : undefined}
                 rows={28}
                 style={{
                   width: '100%', padding: '12px 14px', borderRadius: '8px',
                   border: '1px solid #e5e5e5', fontSize: '12px', fontFamily: 'monospace',
                   lineHeight: '1.7', outline: 'none', resize: 'vertical', boxSizing: 'border-box',
+                  background: canEditSkill ? '#fff' : '#F8F9FB',
+                  color: canEditSkill ? '#111' : '#555',
+                  cursor: canEditSkill ? 'text' : 'default',
                 }}
               />
             </div>
 
-            <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
-              <button
-                onClick={saveSkill}
-                disabled={skillLoading}
-                style={{
-                  padding: '9px 20px', borderRadius: '8px', border: 'none',
-                  background: skillLoading ? '#999' : '#0344D8',
-                  color: '#fff', fontSize: '13px', fontWeight: '500',
-                  cursor: skillLoading ? 'not-allowed' : 'pointer',
-                }}
-              >
-                {skillLoading ? 'Menyimpan...' : 'Simpan'}
-              </button>
-              {skillSaved && (
-                <span style={{ fontSize: '12px', color: '#27500A', fontWeight: '500' }}>
-                  ✓ Tersimpan — berlaku di percakapan AI berikutnya
-                </span>
-              )}
-            </div>
+            {canEditSkill && (
+              <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+                <button
+                  onClick={saveSkill}
+                  disabled={skillLoading}
+                  style={{
+                    padding: '9px 20px', borderRadius: '8px', border: 'none',
+                    background: skillLoading ? '#999' : '#0344D8',
+                    color: '#fff', fontSize: '13px', fontWeight: '500',
+                    cursor: skillLoading ? 'not-allowed' : 'pointer',
+                  }}
+                >
+                  {skillLoading ? 'Menyimpan...' : 'Simpan'}
+                </button>
+                {skillSaved && (
+                  <span style={{ fontSize: '12px', color: '#27500A', fontWeight: '500' }}>
+                    ✓ Tersimpan — berlaku di percakapan AI berikutnya
+                  </span>
+                )}
+              </div>
+            )}
+
+            {!canEditSkill && (
+              <div style={{ fontSize: '11px', color: '#999', padding: '10px 14px', background: '#F8F9FB', borderRadius: '8px', border: '1px solid #e5e5e5' }}>
+                Hanya administrator tertentu yang dapat mengubah skill file ini.
+              </div>
+            )}
           </div>
 
           {/* Panduan */}
