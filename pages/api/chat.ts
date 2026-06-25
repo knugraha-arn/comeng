@@ -19,6 +19,7 @@ INTERPRETASI PERTANYAAN:
 - "paling kaya" / "paling besar" → bisa berarti TRX terbanyak ATAU amount terbesar — kalau tidak jelas, tanya balik atau sajikan keduanya
 - "paling aktif" → terbanyak TRX atau hari aktif
 - "paling menghasilkan" / "paling produktif" → fee tertinggi
+- "Ranger" = PIC yang berada di bawah Mitra ARRANET, ARRANET ex Dinar, atau ARRANET ex SSDI. Mereka punya peran ganda: membina agen (seperti PIC di Mitra lain) DAN mengelola WAG komunitas. Tidak semua PIC adalah Ranger — PIC dari GMS, MAJU, SVD, dll bukan Ranger.
 - Nama Mitra bisa disebut dengan singkatan: GMS = CV. Griya Mitra Sejahtera, MAJU = PT. Meraki Jaya Usaha, SVD = SVD, ARRANET = Arranet
 - "W1/W2" = minggu pertama/kedua dalam window 14H. "MTD" = Month-to-Date sejak awal bulan. "14H" = 14 hari terakhir
 - "agen kaya" dalam konteks ini = agen dengan amount transaksi (uang yang ditransfer) tinggi, bukan kekayaan pribadi
