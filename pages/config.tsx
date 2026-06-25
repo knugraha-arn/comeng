@@ -676,56 +676,104 @@ export default function ConfigPage() {
 
       {/* AI Skill File Tab */}
       {tab === 'skill' && (
-        <div>
-          <div style={{ marginBottom: '16px' }}>
-            <div style={{ fontSize: '13px', fontWeight: '500', marginBottom: '4px' }}>AI Skill File</div>
-            <div style={{ fontSize: '12px', color: '#999', lineHeight: '1.6' }}>
-              Konteks bisnis dan instruksi yang diinjeksi ke AI Assistant setiap kali ada percakapan.
-              Gunakan format Markdown. Isi ini menjadi fondasi pemahaman AI tentang bisnis Arranet.
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 280px', gap: '20px', alignItems: 'start' }}>
+
+          {/* Editor */}
+          <div>
+            <div style={{ marginBottom: '16px' }}>
+              <div style={{ fontSize: '13px', fontWeight: '500', marginBottom: '4px' }}>AI Skill File</div>
+              <div style={{ fontSize: '12px', color: '#999', lineHeight: '1.6' }}>
+                Konteks bisnis yang diinjeksi ke AI Assistant setiap kali ada percakapan baru.
+                Edit kapan saja — berlaku langsung di percakapan berikutnya.
+              </div>
+            </div>
+
+            <div style={{ marginBottom: '12px' }}>
+              <label style={{ fontSize: '11px', color: '#999', display: 'block', marginBottom: '4px' }}>Nama</label>
+              <input
+                value={skillName}
+                onChange={e => setSkillName(e.target.value)}
+                style={{ padding: '8px 12px', borderRadius: '8px', border: '1px solid #e5e5e5', fontSize: '13px', width: '300px', outline: 'none' }}
+              />
+            </div>
+
+            <div style={{ marginBottom: '12px' }}>
+              <label style={{ fontSize: '11px', color: '#999', display: 'block', marginBottom: '4px' }}>Konten (format Markdown)</label>
+              <textarea
+                value={skillContent}
+                onChange={e => setSkillContent(e.target.value)}
+                rows={28}
+                style={{
+                  width: '100%', padding: '12px 14px', borderRadius: '8px',
+                  border: '1px solid #e5e5e5', fontSize: '12px', fontFamily: 'monospace',
+                  lineHeight: '1.7', outline: 'none', resize: 'vertical', boxSizing: 'border-box',
+                }}
+              />
+            </div>
+
+            <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+              <button
+                onClick={saveSkill}
+                disabled={skillLoading}
+                style={{
+                  padding: '9px 20px', borderRadius: '8px', border: 'none',
+                  background: skillLoading ? '#999' : '#0344D8',
+                  color: '#fff', fontSize: '13px', fontWeight: '500',
+                  cursor: skillLoading ? 'not-allowed' : 'pointer',
+                }}
+              >
+                {skillLoading ? 'Menyimpan...' : 'Simpan'}
+              </button>
+              {skillSaved && (
+                <span style={{ fontSize: '12px', color: '#27500A', fontWeight: '500' }}>
+                  ✓ Tersimpan — berlaku di percakapan AI berikutnya
+                </span>
+              )}
             </div>
           </div>
 
-          <div style={{ marginBottom: '12px' }}>
-            <label style={{ fontSize: '11px', color: '#999', display: 'block', marginBottom: '4px' }}>Nama skill</label>
-            <input
-              value={skillName}
-              onChange={e => setSkillName(e.target.value)}
-              style={{ padding: '8px 12px', borderRadius: '8px', border: '1px solid #e5e5e5', fontSize: '13px', width: '300px', outline: 'none' }}
-            />
-          </div>
+          {/* Panduan */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
 
-          <div style={{ marginBottom: '12px' }}>
-            <label style={{ fontSize: '11px', color: '#999', display: 'block', marginBottom: '4px' }}>Konten (Markdown)</label>
-            <textarea
-              value={skillContent}
-              onChange={e => setSkillContent(e.target.value)}
-              rows={24}
-              style={{
-                width: '100%', padding: '12px 14px', borderRadius: '8px',
-                border: '1px solid #e5e5e5', fontSize: '12px', fontFamily: 'monospace',
-                lineHeight: '1.6', outline: 'none', resize: 'vertical', boxSizing: 'border-box',
-              }}
-            />
-          </div>
+            <div style={{ background: '#F0F5FF', border: '1px solid #B5D4F4', borderRadius: '10px', padding: '16px' }}>
+              <div style={{ fontSize: '12px', fontWeight: '600', color: '#0C447C', marginBottom: '10px' }}>Cara Kerja</div>
+              <div style={{ fontSize: '11px', color: '#0C447C', lineHeight: '1.7' }}>
+                Isi skill file ini dikirimkan ke AI <strong>setiap kali ada percakapan baru</strong> — sebelum data transaksi dan data WAG. AI akan membaca konteks ini lebih dulu sebelum menjawab pertanyaan apapun.
+              </div>
+            </div>
 
-          <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
-            <button
-              onClick={saveSkill}
-              disabled={skillLoading}
-              style={{
-                padding: '9px 20px', borderRadius: '8px', border: 'none',
-                background: skillLoading ? '#999' : '#0344D8',
-                color: '#fff', fontSize: '13px', fontWeight: '500',
-                cursor: skillLoading ? 'not-allowed' : 'pointer',
-              }}
-            >
-              {skillLoading ? 'Menyimpan...' : 'Simpan'}
-            </button>
-            {skillSaved && (
-              <span style={{ fontSize: '12px', color: '#27500A', fontWeight: '500' }}>
-                ✓ Tersimpan — akan digunakan di percakapan AI berikutnya
-              </span>
-            )}
+            <div style={{ background: '#F8F9FB', border: '1px solid #e5e5e5', borderRadius: '10px', padding: '16px' }}>
+              <div style={{ fontSize: '12px', fontWeight: '600', color: '#333', marginBottom: '10px' }}>Apa yang Sebaiknya Ditulis</div>
+              {[
+                { title: 'Konteks bisnis', desc: 'Siapa Arranet, bagaimana model bisnisnya, apa tujuan platform AMARIS' },
+                { title: 'Definisi istilah', desc: 'Arti kata-kata internal yang spesifik: Ranger, PIC, bucket, fee, lini 3.500, dll' },
+                { title: 'Struktur organisasi', desc: 'Hierarki Mitra → PIC/Ranger → Agen, siapa yang bertanggung jawab apa' },
+                { title: 'Singkatan Mitra', desc: 'GMS = CV. Griya Mitra Sejahtera, MAJU = PT. Meraki Jaya Usaha, dll' },
+                { title: 'Aturan interpretasi', desc: 'Kalau ditanya "agen paling produktif" artinya apa, dll' },
+                { title: 'Info yang tidak ada di data', desc: 'Target bulanan, kebijakan fee baru, konteks khusus periode tertentu' },
+              ].map(item => (
+                <div key={item.title} style={{ marginBottom: '10px' }}>
+                  <div style={{ fontSize: '11px', fontWeight: '600', color: '#374151' }}>{item.title}</div>
+                  <div style={{ fontSize: '11px', color: '#999', marginTop: '2px', lineHeight: '1.5' }}>{item.desc}</div>
+                </div>
+              ))}
+            </div>
+
+            <div style={{ background: '#F8F9FB', border: '1px solid #e5e5e5', borderRadius: '10px', padding: '16px' }}>
+              <div style={{ fontSize: '12px', fontWeight: '600', color: '#333', marginBottom: '10px' }}>Tips Format</div>
+              <div style={{ fontSize: '11px', color: '#555', lineHeight: '1.7', fontFamily: 'monospace', background: '#fff', padding: '10px', borderRadius: '6px', border: '1px solid #e5e5e5' }}>
+                {'# Judul Bagian'}<br />
+                {'## Sub-bagian'}<br />
+                {'- Poin penting'}<br />
+                {'- **Teks tebal** untuk istilah'}<br />
+                <br />
+                {'Deskripsi biasa di sini...'}
+              </div>
+              <div style={{ fontSize: '11px', color: '#999', marginTop: '8px', lineHeight: '1.5' }}>
+                Gunakan heading (#, ##) untuk struktur yang jelas. AI membaca konten ini dari atas ke bawah.
+              </div>
+            </div>
+
           </div>
         </div>
       )}
