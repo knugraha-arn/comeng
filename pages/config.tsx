@@ -1,6 +1,23 @@
 import { useState, useEffect } from 'react'
+import { useRouter } from 'next/router'
 import Layout from '@/components/Layout'
 import { supabase } from '@/lib/supabase'
+
+type AgentDetail = {
+  serial_number: string
+  merchant_name: string | null
+  mitra: string | null
+  pic: string | null
+  bucket: string
+  trend: string
+  total_trx_14: number
+  total_fee_14: number
+  total_amount_14: number
+  active_days_14: number
+  total_trx_mtd: number
+  total_fee_mtd: number
+  total_amount_mtd: number
+}
 
 type MatchingResult = {
   member_name: string
@@ -19,6 +36,7 @@ type User = { id: string; email: string; full_name: string; role: string; last_l
 type Observer = { id: string; wag_id: string; display_name: string; note: string; created_at: string }
 
 export default function ConfigPage() {
+  const router = useRouter()
   const [tab, setTab] = useState<'wag' | 'ranger' | 'users' | 'observer' | 'matching' | 'skill'>('wag')
   const [wags, setWags] = useState<Wag[]>([])
   const [rangers, setRangers] = useState<Ranger[]>([])
@@ -30,6 +48,10 @@ export default function ConfigPage() {
   const [loading, setLoading] = useState(false)
   const [message, setMessage] = useState({ text: '', type: '' })
   const [confirmArchive, setConfirmArchive] = useState<string | null>(null)
+
+  // Drawer agen — untuk tab Agent Matching
+  const [drawerAgent, setDrawerAgent] = useState<AgentDetail | null>(null)
+  const [loadingDrawer, setLoadingDrawer] = useState(false)
 
   const [wagName, setWagName] = useState('')
   const [wagDesc, setWagDesc] = useState('')
@@ -262,6 +284,17 @@ export default function ConfigPage() {
     matched:   { label: 'Matched',   bg: '#EAF3DE', color: '#27500A', border: '#C0DD97' },
     ambiguous: { label: 'Ambiguous', bg: '#FFF3CD', color: '#856404', border: '#FAC775' },
     no_match:  { label: 'No Match',  bg: '#F8F9FB', color: '#999',    border: '#e5e5e5' },
+  }
+
+  async function openAgentDrawer(sn: string) {
+    setDrawerAgent(null)
+    setLoadingDrawer(true)
+    try {
+      const { data } = await supabase.rpc('get_agent_profile', { p_serial: sn })
+      setDrawerAgent(data?.[0] ?? null)
+    } finally {
+      setLoadingDrawer(false)
+    }
   }
 
   const activeWags = wags.filter(w => w.status === 'active')
@@ -662,7 +695,17 @@ export default function ConfigPage() {
                         <div style={{ color: '#bbb', fontSize: '10px', marginTop: '2px' }}>{r.match_type} · {r.candidate_count} kandidat</div>
                       </div>
                       <div style={{ color: '#555', fontSize: '11px' }}>{r.r_wag_name}</div>
-                      <div style={{ textAlign: 'center', fontFamily: 'monospace', fontSize: '10px', color: '#555' }}>{r.r_serial_number ?? '—'}</div>
+                      <div style={{ textAlign: 'center', fontFamily: 'monospace', fontSize: '10px' }}>
+                        {r.r_serial_number ? (
+                          <span
+                            onClick={() => openAgentDrawer(r.r_serial_number!)}
+                            style={{ color: '#0344D8', cursor: 'pointer', textDecoration: 'underline' }}
+                            title="Klik untuk lihat detail agen"
+                          >
+                            {r.r_serial_number}
+                          </span>
+                        ) : '—'}
+                      </div>
                       <div style={{ textAlign: 'center' }}>
                         <span style={{ padding: '2px 8px', borderRadius: '999px', fontSize: '10px', fontWeight: '600', background: cfg.bg, color: cfg.color, border: `1px solid ${cfg.border}` }}>
                           {cfg.label}
@@ -806,6 +849,112 @@ export default function ConfigPage() {
               </div>
             </div>
 
+          </div>
+        </div>
+      )}
+
+      {/* Drawer — Agent Detail dari Matching */}
+      {(drawerAgent || loadingDrawer) && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 1000, display: 'flex', justifyContent: 'flex-end' }}>
+          <div onClick={() => { setDrawerAgent(null); setLoadingDrawer(false) }}
+            style={{ position: 'absolute', inset: 0, backgroundColor: 'rgba(0,0,0,0.3)' }} />
+          <div style={{ position: 'relative', width: '420px', height: '100%', backgroundColor: '#fff', boxShadow: '-4px 0 24px rgba(0,0,0,0.12)', display: 'flex', flexDirection: 'column', overflowY: 'auto' }}>
+
+            {/* Header drawer */}
+            <div style={{ padding: '20px 24px', borderBottom: '1px solid #f3f4f6', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', position: 'sticky', top: 0, backgroundColor: '#fff', zIndex: 1 }}>
+              <div>
+                <div style={{ fontSize: '16px', fontWeight: '700', color: '#111827' }}>
+                  {loadingDrawer ? 'Memuat...' : (drawerAgent?.merchant_name ?? '—')}
+                </div>
+                <div style={{ fontSize: '11px', color: '#9ca3af', marginTop: '2px' }}>
+                  {drawerAgent?.serial_number}
+                </div>
+              </div>
+              <button onClick={() => { setDrawerAgent(null); setLoadingDrawer(false) }}
+                style={{ padding: '6px 10px', borderRadius: '8px', border: '1px solid #e5e7eb', backgroundColor: '#fff', color: '#6b7280', fontSize: '18px', cursor: 'pointer', lineHeight: 1 }}>✕</button>
+            </div>
+
+            {loadingDrawer && (
+              <div style={{ padding: '40px', textAlign: 'center', color: '#9ca3af', fontSize: '13px' }}>Memuat data agen...</div>
+            )}
+
+            {drawerAgent && !loadingDrawer && (() => {
+              const bucketColor: Record<string, string> = { productive: '#166534', moderate: '#ca8a04', sporadic: '#dc2626' }
+              const bucketBg: Record<string, string> = { productive: '#dcfce7', moderate: '#fef9c3', sporadic: '#fee2e2' }
+              const trendLabel: Record<string, string> = { growing: '↑ Growing', declining: '↓ Declining', consistent: '→ Konsisten' }
+              const fmt = (n: number) => n >= 1_000_000 ? `Rp ${(n/1_000_000).toFixed(1)}jt` : n >= 1_000 ? `Rp ${(n/1_000).toFixed(0)}rb` : `Rp ${n}`
+
+              return (
+                <div style={{ padding: '20px 24px' }}>
+                  {/* Chip bucket + trend */}
+                  <div style={{ display: 'flex', gap: '8px', marginBottom: '20px', flexWrap: 'wrap' }}>
+                    <span style={{ padding: '3px 10px', borderRadius: '99px', fontSize: '11px', fontWeight: '700', backgroundColor: bucketBg[drawerAgent.bucket] ?? '#f3f4f6', color: bucketColor[drawerAgent.bucket] ?? '#374151' }}>
+                      {drawerAgent.bucket}
+                    </span>
+                    <span style={{ padding: '3px 10px', borderRadius: '99px', fontSize: '11px', fontWeight: '600', backgroundColor: '#f3f4f6', color: '#374151' }}>
+                      {trendLabel[drawerAgent.trend] ?? drawerAgent.trend}
+                    </span>
+                  </div>
+
+                  {/* Info dasar */}
+                  <div style={{ marginBottom: '20px' }}>
+                    <div style={{ fontSize: '11px', fontWeight: '700', color: '#9ca3af', letterSpacing: '0.08em', marginBottom: '10px' }}>INFO AGEN</div>
+                    {[
+                      { label: 'Mitra', value: drawerAgent.mitra },
+                      { label: 'PIC', value: drawerAgent.pic },
+                    ].filter(r => r.value).map(r => (
+                      <div key={r.label} style={{ display: 'flex', gap: '12px', padding: '7px 0', borderBottom: '1px solid #f9fafb' }}>
+                        <span style={{ fontSize: '12px', color: '#9ca3af', minWidth: '70px' }}>{r.label}</span>
+                        <span style={{ fontSize: '12px', color: '#111827', fontWeight: '500' }}>{r.value}</span>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Performa 14H */}
+                  <div style={{ marginBottom: '20px' }}>
+                    <div style={{ fontSize: '11px', fontWeight: '700', color: '#9ca3af', letterSpacing: '0.08em', marginBottom: '10px' }}>PERFORMA 14H</div>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+                      {[
+                        { label: 'Hari Aktif', value: `${drawerAgent.active_days_14} hari` },
+                        { label: 'Total TRX', value: drawerAgent.total_trx_14.toLocaleString('id') },
+                        { label: 'Total Fee', value: fmt(drawerAgent.total_fee_14) },
+                        { label: 'Total Amount', value: fmt(drawerAgent.total_amount_14) },
+                      ].map(s => (
+                        <div key={s.label} style={{ padding: '10px 12px', backgroundColor: '#f9fafb', borderRadius: '8px', textAlign: 'center' }}>
+                          <div style={{ fontSize: '14px', fontWeight: '700', color: '#111827' }}>{s.value}</div>
+                          <div style={{ fontSize: '10px', color: '#9ca3af', marginTop: '2px' }}>{s.label}</div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Performa MTD */}
+                  <div style={{ marginBottom: '24px' }}>
+                    <div style={{ fontSize: '11px', fontWeight: '700', color: '#9ca3af', letterSpacing: '0.08em', marginBottom: '10px' }}>PERFORMA MTD</div>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '8px' }}>
+                      {[
+                        { label: 'Total TRX', value: drawerAgent.total_trx_mtd.toLocaleString('id') },
+                        { label: 'Total Fee', value: fmt(drawerAgent.total_fee_mtd) },
+                        { label: 'Total Amount', value: fmt(drawerAgent.total_amount_mtd) },
+                      ].map(s => (
+                        <div key={s.label} style={{ padding: '10px 12px', backgroundColor: '#f9fafb', borderRadius: '8px', textAlign: 'center' }}>
+                          <div style={{ fontSize: '13px', fontWeight: '700', color: '#111827' }}>{s.value}</div>
+                          <div style={{ fontSize: '10px', color: '#9ca3af', marginTop: '2px' }}>{s.label}</div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Link ke Cari Agen */}
+                  <button
+                    onClick={() => router.push(`/analytics/agent-profile?sn=${drawerAgent.serial_number}`)}
+                    style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #e5e7eb', backgroundColor: '#fff', color: '#0344D8', fontSize: '13px', fontWeight: '600', cursor: 'pointer' }}
+                  >
+                    Lihat Profil Lengkap →
+                  </button>
+                </div>
+              )
+            })()}
           </div>
         </div>
       )}
