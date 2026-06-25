@@ -10,6 +10,11 @@ type Message = {
   timestamp: Date
 }
 
+// Module-level state — persist selama session browser, tidak reset saat ganti halaman
+// Mengikuti pola sessionChecked/sessionApproved di Layout.tsx
+let persistedMessages: Message[] = []
+let persistedRemaining = 30
+
 const SUGGESTIONS = [
   'Mitra mana yang performanya paling bagus 14 hari terakhir?',
   'WAG mana yang perlu perhatian segera?',
@@ -20,10 +25,10 @@ const SUGGESTIONS = [
 ]
 
 export default function AiAssistantPage() {
-  const [messages, setMessages] = useState<Message[]>([])
+  const [messages, setMessages] = useState<Message[]>(persistedMessages)
   const [input, setInput] = useState('')
   const [loading, setLoading] = useState(false)
-  const [remaining, setRemaining] = useState(30)
+  const [remaining, setRemaining] = useState(persistedRemaining)
   const [userId, setUserId] = useState('')
   const [generating, setGenerating] = useState(false)
   const [progress, setProgress] = useState(0)
@@ -37,6 +42,25 @@ export default function AiAssistantPage() {
     })
   }, [])
 
+  // Helper yang sync ke module-level state supaya persistent saat ganti halaman
+  const updateMessages = (updater: (prev: Message[]) => Message[]) => {
+    setMessages(prev => {
+      const next = updater(prev)
+      persistedMessages = next
+      return next
+    })
+  }
+
+  const updateRemaining = (val: number) => {
+    persistedRemaining = val
+    setRemaining(val)
+  }
+
+  const clearChat = () => {
+    persistedMessages = []
+    setMessages([])
+  }
+
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages])
@@ -46,7 +70,7 @@ export default function AiAssistantPage() {
     if (!content || loading) return
 
     const userMsg: Message = { role: 'user', content, timestamp: new Date() }
-    setMessages(prev => [...prev, userMsg])
+    updateMessages(prev => [...prev, userMsg])
     setInput('')
     setLoading(true)
     setError('')
@@ -66,8 +90,8 @@ export default function AiAssistantPage() {
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || 'Gagal mendapat respons')
 
-      setRemaining(data.remaining)
-      setMessages(prev => [...prev, {
+      updateRemaining(data.remaining)
+      updateMessages(prev => [...prev, {
         role: 'assistant',
         content: data.reply,
         timestamp: new Date(),
@@ -87,11 +111,6 @@ export default function AiAssistantPage() {
     }
   }
 
-  const clearChat = () => {
-    setMessages([])
-    setError('')
-  }
-
   return (
     <Layout title="AI Assistant">
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 240px', gap: '16px', height: 'calc(100vh - 100px)', alignItems: 'start' }}>
@@ -107,7 +126,7 @@ export default function AiAssistantPage() {
               </div>
               <div>
                 <div style={{ fontSize: '13px', fontWeight: '500' }}>AMARIS AI Assistant</div>
-                <div style={{ fontSize: '11px', color: '#999' }}>Berbasis data komunitas WAG</div>
+                <div style={{ fontSize: '11px', color: '#999' }}>Berbasis data WAG & transaksi agen</div>
               </div>
               <span style={{ fontSize: '10px', padding: '2px 8px', borderRadius: '999px', background: '#0344D8', color: '#FFFFFF', fontWeight: '600' }}>
                 ✦ AI Powered
@@ -133,7 +152,7 @@ export default function AiAssistantPage() {
               <div style={{ textAlign: 'center', color: '#999', marginTop: '40px' }}>
                 <div style={{ fontSize: '32px', marginBottom: '12px' }}>✦</div>
                 <div style={{ fontSize: '14px', fontWeight: '500', marginBottom: '6px' }}>Tanya apa saja tentang komunitas WAG kamu</div>
-                <div style={{ fontSize: '12px', marginBottom: '24px' }}>Berbasis data real dari sistem AMARIS</div>
+                <div style={{ fontSize: '12px', marginBottom: '24px' }}>Berbasis data WAG & transaksi agen Arranet</div>
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', justifyContent: 'center', maxWidth: '480px', margin: '0 auto' }}>
                   {SUGGESTIONS.map(s => (
                     <button key={s} onClick={() => sendMessage(s)}
