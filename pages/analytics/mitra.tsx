@@ -58,6 +58,8 @@ interface MitraTarget {
   achievement_pct: number
   days_elapsed: number
   days_in_month: number
+  avg_trx_current_dekade: number
+  dekade_number: number
 }
 
 const MOMENTUM_CONFIG = {
@@ -424,9 +426,9 @@ export default function MitraPage() {
                   const color  = pct >= 80 ? '#166534' : pct >= 50 ? '#92400e' : '#dc2626'
                   const bg     = pct >= 80 ? '#f0fdf4' : pct >= 50 ? '#fefce8' : '#fef2f2'
                   const border = pct >= 80 ? '#bbf7d0' : pct >= 50 ? '#fde68a' : '#fecaca'
-                  const projected = mitraTarget.days_elapsed > 0
-                    ? Math.round(mitraTarget.actual_trx_mtd / mitraTarget.days_elapsed * mitraTarget.days_in_month)
-                    : 0
+                  const projected = mitraTarget.avg_trx_current_dekade > 0
+                    ? Math.round(mitraTarget.actual_trx_mtd + mitraTarget.avg_trx_current_dekade * (mitraTarget.days_in_month - mitraTarget.days_elapsed))
+                    : Math.round(mitraTarget.actual_trx_mtd / Math.max(mitraTarget.days_elapsed, 1) * mitraTarget.days_in_month)
                   return (
                     <div style={{ marginBottom: '24px' }}>
                       <div style={{ fontSize: '11px', fontWeight: '700', color: '#9ca3af', letterSpacing: '0.08em', marginBottom: '12px' }}>
