@@ -311,7 +311,7 @@ export default function UploadCenter() {
       // Compute metrics TIDAK lagi dipanggil otomatis di sini — lihat handleComputeMetrics,
       // dipicu manual via tombol di step 2 setelah upload selesai (server-side, lebih reliable
       // daripada RPC langsung dari browser yang sebelumnya sering timeout/gagal diam-diam).
-      try { await supabase.rpc('am_purge_old_data') } catch {}
+
 
       setProgress(100)
       setStage('success')
