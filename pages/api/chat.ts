@@ -89,18 +89,27 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const context = await buildContext(wagId)
     const systemPrompt = SYSTEM_PROMPT.replace('{{CONTEXT}}', context)
 
-    // Call Claude
+    // Call Claude dengan prompt caching
+    // System prompt di-cache 5 menit — hemat ~90% biaya token untuk context
+    // yang sama (WAG data, transaksi, skill file) di percakapan berikutnya
     const claudeRes = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'x-api-key': process.env.ANTHROPIC_API_KEY!,
         'anthropic-version': '2023-06-01',
+        'anthropic-beta': 'prompt-caching-2024-07-31',
       },
       body: JSON.stringify({
         model: 'claude-sonnet-4-6',
         max_tokens: 1024,
-        system: systemPrompt,
+        system: [
+          {
+            type: 'text',
+            text: systemPrompt,
+            cache_control: { type: 'ephemeral' },
+          }
+        ],
         messages: messages.slice(-10), // max 10 turn history
       }),
     })
