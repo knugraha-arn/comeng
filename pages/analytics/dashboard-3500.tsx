@@ -48,6 +48,9 @@ interface MonthlyProgress {
   days_in_month: number
   month_start: string
   end_date: string
+  fee_projected_conservative?: number
+  fee_projected_optimistic?: number
+  dekade_number?: number
 }
 
 interface ReturningAgent3500 {
@@ -435,7 +438,9 @@ export default function Dashboard3500Page() {
   const totalPages   = Math.ceil(currentTotal / PAGE_SIZE)
   const isLoadingTable = activeTab === 'returning' ? loadingReturning : activeTab === 'lost_w2' ? loadingLost : loading
   const feeProgress  = progress && monthlyTarget ? Math.min(100, Math.round(progress.total_fee / monthlyTarget * 100)) : null
-  const projectedFee = progress && progress.days_elapsed > 0 ? Math.round(progress.total_fee / progress.days_elapsed * progress.days_in_month) : null
+  const projectedFeeConservative = progress?.fee_projected_conservative
+    ?? (progress && progress.days_elapsed > 0 ? Math.round(progress.total_fee / progress.days_elapsed * progress.days_in_month) : null)
+  const projectedFeeOptimistic = progress?.fee_projected_optimistic ?? projectedFeeConservative
   const currentMonth = progress ? MONTHS[new Date(progress.end_date).getMonth()] : ''
   const currentYear  = progress ? new Date(progress.end_date).getFullYear() : ''
   const filteredPics = filterMitra ? pics.filter(p => agents.some(a => a.mitra === filterMitra && a.pic === p)) : pics
@@ -500,9 +505,16 @@ export default function Dashboard3500Page() {
                   })() : `Hari ke-${progress.days_elapsed} dari ${progress.days_in_month}`}
                 </div>
               </div>
-              {projectedFee && monthlyTarget && (
-                <div style={{ padding: '6px 14px', borderRadius: '99px', fontSize: '12px', fontWeight: '700', backgroundColor: projectedFee >= monthlyTarget ? '#dcfce7' : '#fee2e2', color: projectedFee >= monthlyTarget ? '#166534' : '#dc2626' }}>
-                  Proyeksi: {formatFee(projectedFee)} {projectedFee >= monthlyTarget ? '✓' : '↓'}
+              {projectedFeeConservative && monthlyTarget && (
+                <div style={{ display: 'flex', gap: '6px' }}>
+                  <div style={{ padding: '5px 10px', borderRadius: '99px', fontSize: '11px', fontWeight: '700', backgroundColor: projectedFeeConservative >= monthlyTarget ? '#dcfce7' : '#fee2e2', color: projectedFeeConservative >= monthlyTarget ? '#166534' : '#dc2626' }}>
+                    {projectedFeeConservative >= monthlyTarget ? '✓' : '↓'} {formatFee(projectedFeeConservative)}
+                  </div>
+                  {projectedFeeOptimistic && projectedFeeOptimistic !== projectedFeeConservative && (
+                    <div style={{ padding: '5px 10px', borderRadius: '99px', fontSize: '11px', fontWeight: '600', backgroundColor: projectedFeeOptimistic >= monthlyTarget ? '#f0fdf4' : '#fefce8', color: projectedFeeOptimistic >= monthlyTarget ? '#166534' : '#92400e' }}>
+                      {projectedFeeOptimistic >= monthlyTarget ? '✓' : '↑'} {formatFee(projectedFeeOptimistic)}
+                    </div>
+                  )}
                 </div>
               )}
             </div>
