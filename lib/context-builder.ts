@@ -254,11 +254,12 @@ export async function buildContext(wagId?: string): Promise<string> {
     if (mitraTargetProgress && mitraTargetProgress.length > 0) {
       lines.push('Target TRX Transfer per Mitra bulan ini (hanya Mitra yang ada target):')
       for (const t of mitraTargetProgress) {
-        const projected = t.days_elapsed > 0
-          ? Math.round(t.actual_trx_mtd / t.days_elapsed * t.days_in_month)
-          : 0
+        const avgDekade = Number(t.avg_trx_current_dekade ?? 0)
+        const projected = avgDekade > 0
+          ? Math.round(t.actual_trx_mtd + avgDekade * (t.days_in_month - t.days_elapsed))
+          : Math.round(t.actual_trx_mtd / Math.max(t.days_elapsed, 1) * t.days_in_month)
         const willAchieve = projected >= t.target_trx
-        lines.push(`  ${t.mitra}: target ${t.target_trx.toLocaleString()} TRX | aktual MTD ${t.actual_trx_mtd.toLocaleString()} TRX | achievement ${t.achievement_pct}% | proyeksi akhir bulan ${projected.toLocaleString()} TRX | prediksi: ${willAchieve ? 'TERCAPAI ✅' : 'TIDAK TERCAPAI ⚠️'} | hari berjalan ${t.days_elapsed}/${t.days_in_month}`)
+        lines.push(`  ${t.mitra}: target ${t.target_trx.toLocaleString()} TRX | aktual MTD ${t.actual_trx_mtd.toLocaleString()} TRX | achievement ${t.achievement_pct}% | proyeksi akhir bulan ${projected.toLocaleString()} TRX (Dekade ${t.dekade_number}-based) | prediksi: ${willAchieve ? 'TERCAPAI ✅' : 'TIDAK TERCAPAI ⚠️'} | hari berjalan ${t.days_elapsed}/${t.days_in_month}`)
       }
       lines.push('')
     }
