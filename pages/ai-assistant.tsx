@@ -128,9 +128,14 @@ export default function AiAssistantPage() {
                 <div style={{ fontSize: '13px', fontWeight: '500' }}>AMARIS AI Assistant</div>
                 <div style={{ fontSize: '11px', color: '#999' }}>Berbasis data WAG & transaksi agen</div>
               </div>
-              <span style={{ fontSize: '10px', padding: '2px 8px', borderRadius: '999px', background: '#0344D8', color: '#FFFFFF', fontWeight: '600' }}>
-                ✦ AI Powered
-              </span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <span style={{ fontSize: '10px', padding: '2px 8px', borderRadius: '999px', background: '#0344D8', color: '#FFFFFF', fontWeight: '600' }}>
+                  ✦ AI Powered
+                </span>
+                <span style={{ fontSize: '10px', padding: '2px 8px', borderRadius: '999px', background: '#f3f4f6', color: '#6b7280', fontWeight: '500', fontFamily: 'monospace' }}>
+                  claude-sonnet-4-6
+                </span>
+              </div>
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
               <span style={{ fontSize: '11px', color: remaining <= 5 ? '#B00020' : '#999' }}>
