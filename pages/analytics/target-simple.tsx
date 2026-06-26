@@ -79,6 +79,8 @@ export default function TargetSimplePage() {
     days_elapsed: number
     days_in_month: number
     baseline_trx: number
+    avg_trx_current_dekade: number
+    dekade_number: number
   }
   type MitraBaseline = {
     mitra: string
@@ -565,9 +567,9 @@ export default function TargetSimplePage() {
                   const pct = Number(p.achievement_pct)
                   const color = pct >= 80 ? '#166534' : pct >= 50 ? '#92400e' : '#dc2626'
                   const bg    = pct >= 80 ? '#f0fdf4' : pct >= 50 ? '#fefce8' : '#fef2f2'
-                  const projected = p.days_elapsed > 0
-                    ? Math.round(p.actual_trx_mtd / p.days_elapsed * p.days_in_month)
-                    : 0
+                  const projected = p.avg_trx_current_dekade > 0
+                    ? Math.round(p.actual_trx_mtd + p.avg_trx_current_dekade * (p.days_in_month - p.days_elapsed))
+                    : Math.round(p.actual_trx_mtd / Math.max(p.days_elapsed, 1) * p.days_in_month)
                   const willAchieve = projected >= p.target_trx
                   return (
                     <div key={p.mitra} style={{ display: 'grid', gridTemplateColumns: '1fr 120px 120px 100px 90px 28px', padding: '12px 16px', borderBottom: i < mitraProgress.length - 1 ? '1px solid #f3f4f6' : 'none', alignItems: 'center', backgroundColor: '#fff' }}>
