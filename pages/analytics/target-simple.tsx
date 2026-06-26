@@ -86,6 +86,7 @@ export default function TargetSimplePage() {
     trx_total: number
     total_fee: number
     active_agents: number
+    is_current_month: boolean
   }
   const [mitraProgress, setMitraProgress]   = useState<MitraProgress[]>([])
   const [mitraBaseline, setMitraBaseline]   = useState<MitraBaseline[]>([])
@@ -500,11 +501,14 @@ export default function TargetSimplePage() {
                   <div>
                     <label style={{ fontSize: '11px', color: '#9ca3af', display: 'block', marginBottom: '4px' }}>
                       Target TRX Transfer
-                      {newMitra && mitraBaseline.find(m => m.mitra === newMitra) && (
-                        <span style={{ color: '#0344D8', marginLeft: '6px' }}>
-                          (Juni: {mitraBaseline.find(m => m.mitra === newMitra)!.trx_transfer.toLocaleString('id')})
-                        </span>
-                      )}
+                      {newMitra && mitraBaseline.find(m => m.mitra === newMitra) && (() => {
+                        const b = mitraBaseline.find(m => m.mitra === newMitra)!
+                        return (
+                          <span style={{ color: b.is_current_month ? '#ca8a04' : '#0344D8', marginLeft: '6px' }}>
+                            ({b.is_current_month ? 'Ref bulan ini' : 'Bulan lalu'}: {b.trx_transfer.toLocaleString('id')})
+                          </span>
+                        )
+                      })()}
                     </label>
                     <input
                       value={newTargetTrx}
