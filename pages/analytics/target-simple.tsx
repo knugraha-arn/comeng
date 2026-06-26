@@ -553,30 +553,30 @@ export default function TargetSimplePage() {
             ) : (
               <div style={{ border: '1px solid #e5e7eb', borderRadius: '10px', overflow: 'hidden' }}>
                 {/* Header tabel */}
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 120px 120px 100px 28px', padding: '10px 16px', backgroundColor: '#f9fafb', borderBottom: '1px solid #e5e7eb', fontSize: '11px', fontWeight: '700', color: '#9ca3af', letterSpacing: '0.05em' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 120px 120px 100px 90px 28px', padding: '10px 16px', backgroundColor: '#f9fafb', borderBottom: '1px solid #e5e7eb', fontSize: '11px', fontWeight: '700', color: '#9ca3af', letterSpacing: '0.05em' }}>
                   <div>MITRA</div>
                   <div style={{ textAlign: 'right' }}>TARGET TRX</div>
                   <div style={{ textAlign: 'right' }}>AKTUAL MTD</div>
                   <div style={{ textAlign: 'center' }}>ACHIEVEMENT</div>
+                  <div style={{ textAlign: 'center' }}>PREDIKSI</div>
                   <div />
                 </div>
                 {mitraProgress.map((p, i) => {
                   const pct = Number(p.achievement_pct)
                   const color = pct >= 80 ? '#166534' : pct >= 50 ? '#92400e' : '#dc2626'
                   const bg    = pct >= 80 ? '#f0fdf4' : pct >= 50 ? '#fefce8' : '#fef2f2'
-                  // Proyeksi end-of-month
                   const projected = p.days_elapsed > 0
                     ? Math.round(p.actual_trx_mtd / p.days_elapsed * p.days_in_month)
                     : 0
+                  const willAchieve = projected >= p.target_trx
                   return (
-                    <div key={p.mitra} style={{ display: 'grid', gridTemplateColumns: '1fr 120px 120px 100px 28px', padding: '12px 16px', borderBottom: i < mitraProgress.length - 1 ? '1px solid #f3f4f6' : 'none', alignItems: 'center', backgroundColor: '#fff' }}>
+                    <div key={p.mitra} style={{ display: 'grid', gridTemplateColumns: '1fr 120px 120px 100px 90px 28px', padding: '12px 16px', borderBottom: i < mitraProgress.length - 1 ? '1px solid #f3f4f6' : 'none', alignItems: 'center', backgroundColor: '#fff' }}>
                       <div>
                         <div style={{ fontSize: '13px', fontWeight: '600', color: '#111827' }}>{p.mitra}</div>
                         <div style={{ fontSize: '10px', color: '#9ca3af', marginTop: '1px' }}>
-                          Proyeksi akhir bulan: {projected.toLocaleString('id')} TRX
+                          Proyeksi: {projected.toLocaleString('id')} TRX
                           {p.notes && ` · ${p.notes}`}
                         </div>
-                        {/* Progress bar */}
                         <div style={{ marginTop: '6px', height: '4px', backgroundColor: '#f3f4f6', borderRadius: '99px', overflow: 'hidden' }}>
                           <div style={{ height: '100%', width: `${Math.min(pct, 100)}%`, backgroundColor: color, borderRadius: '99px', transition: 'width 0.5s' }} />
                         </div>
@@ -590,6 +590,11 @@ export default function TargetSimplePage() {
                       <div style={{ textAlign: 'center' }}>
                         <span style={{ padding: '3px 10px', borderRadius: '99px', fontSize: '12px', fontWeight: '700', backgroundColor: bg, color }}>
                           {pct}%
+                        </span>
+                      </div>
+                      <div style={{ textAlign: 'center' }}>
+                        <span style={{ padding: '3px 8px', borderRadius: '99px', fontSize: '11px', fontWeight: '600', backgroundColor: willAchieve ? '#f0fdf4' : '#fef9c3', color: willAchieve ? '#166534' : '#92400e' }}>
+                          {willAchieve ? '✅ On track' : '⚠️ At risk'}
                         </span>
                       </div>
                       <button onClick={() => deleteMitraTarget(p.mitra)} disabled={deletingMitra === p.mitra}
