@@ -21,6 +21,7 @@ export async function buildContext(wagId?: string): Promise<string> {
     { data: skillFiles },
     { data: mitraMtdStats },
     { data: topAgentsPerMitra },
+    { data: mitraTargetProgress },
   ] = await Promise.all([
     supabase.from('wags').select('id, name, status, last_processed_at').eq('status', 'active'),
     supabase.from('rangers').select('id, full_name, display_name, phone_number, wag_id, wags(name)').eq('status', 'active'),
@@ -37,6 +38,8 @@ export async function buildContext(wagId?: string): Promise<string> {
     supabase.rpc('get_mitra_mtd_summary'),
     // RPC untuk top 5 agen per Mitra — idem
     supabase.rpc('get_top_agents_per_mitra'),
+    // Target Mitra bulan ini
+    supabase.rpc('get_mitra_target_progress'),
   ])
 
   // Build lookup MTD per Mitra dari RPC (sudah diagregasi di DB)
@@ -243,6 +246,19 @@ export async function buildContext(wagId?: string): Promise<string> {
         for (const a of agents) {
           lines.push(`    ${a.merchant_name} (${a.serial_number}) | ${a.trx} TRX | ${fmt(a.amount)} amount | ${fmt(a.fee)} fee`)
         }
+      }
+      lines.push('')
+    }
+
+    // Target TRX Transfer per Mitra bulan ini — hanya Mitra yang ada targetnya
+    if (mitraTargetProgress && mitraTargetProgress.length > 0) {
+      lines.push('Target TRX Transfer per Mitra bulan ini (hanya Mitra yang ada target):')
+      for (const t of mitraTargetProgress) {
+        const projected = t.days_elapsed > 0
+          ? Math.round(t.actual_trx_mtd / t.days_elapsed * t.days_in_month)
+          : 0
+        const willAchieve = projected >= t.target_trx
+        lines.push(`  ${t.mitra}: target ${t.target_trx.toLocaleString()} TRX | aktual MTD ${t.actual_trx_mtd.toLocaleString()} TRX | achievement ${t.achievement_pct}% | proyeksi akhir bulan ${projected.toLocaleString()} TRX | prediksi: ${willAchieve ? 'TERCAPAI ✅' : 'TIDAK TERCAPAI ⚠️'} | hari berjalan ${t.days_elapsed}/${t.days_in_month}`)
       }
       lines.push('')
     }
