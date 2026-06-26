@@ -43,9 +43,12 @@ interface PulseSummary {
   fee_mtd: number
   fee_target: number
   fee_projected: number
+  fee_projected_conservative: number
+  fee_projected_optimistic: number
   trx_mtd: number
   trx_avg_daily_mtd: number
   trx_avg_daily_14d: number
+  dekade_number: number
 }
 
 interface HourlySlot {
@@ -82,10 +85,14 @@ function buildEmailHtml(
   appDistribution: AppDistribution[],
   feeBreakdown: FeeBreakdown[]
 ): string {
-  const feeGap = s.fee_target - s.fee_projected
-  const feePct = Math.round((s.fee_mtd / s.fee_target) * 100)
-  const gapColor = feeGap > 0 ? '#dc2626' : '#16a34a'
-  const gapLabel = feeGap > 0 ? `Gap ${formatFee(feeGap)}` : `Surplus ${formatFee(Math.abs(feeGap))}`
+  const conservative = s.fee_projected_conservative ?? s.fee_projected
+  const optimistic   = s.fee_projected_optimistic   ?? s.fee_projected
+  const feeGap       = s.fee_target - conservative
+  const feePct       = Math.round((s.fee_mtd / s.fee_target) * 100)
+  const gapColor     = feeGap > 0 ? '#dc2626' : '#16a34a'
+  const gapLabel     = feeGap > 0 ? `Gap ${formatFee(feeGap)}` : `Surplus ${formatFee(Math.abs(feeGap))}`
+  const bothOnTrack  = conservative >= s.fee_target
+  const onlyOptOnTrack = !bothOnTrack && optimistic >= s.fee_target
 
   // Baris persentase sederhana — dipakai untuk 4 section breakdown tambahan.
   // Tanpa bar/chart visual karena tidak konsisten render-nya lintas email client (Gmail/Outlook).
@@ -155,10 +162,11 @@ function buildEmailHtml(
 
           <tr>
             <td style="padding:20px 28px 8px 28px;">
-              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:${feeGap > 0 ? '#fef2f2' : '#f0fdf4'};border:1px solid ${feeGap > 0 ? '#fecaca' : '#bbf7d0'};border-radius:8px;">
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:${bothOnTrack ? '#f0fdf4' : onlyOptOnTrack ? '#fefce8' : '#fef2f2'};border:1px solid ${bothOnTrack ? '#bbf7d0' : onlyOptOnTrack ? '#fde68a' : '#fecaca'};border-radius:8px;">
                 <tr>
-                  <td style="padding:12px 16px;font-size:13px;color:${gapColor};font-weight:600;">
-                    Proyeksi fee ${formatFee(s.fee_projected)} — ${gapLabel} dari target
+                  <td style="padding:12px 16px;font-size:13px;color:${bothOnTrack ? '#166534' : onlyOptOnTrack ? '#92400e' : '#dc2626'};font-weight:600;">
+                    ${bothOnTrack ? '✓ Keduanya on track' : onlyOptOnTrack ? '⚠️ Hanya skenario optimistis on track' : '↓ Keduanya di bawah target'}
+                    — Proyeksi: ${formatFee(conservative)} – ${formatFee(optimistic)} (Dekade ${s.dekade_number}-based)
                   </td>
                 </tr>
               </table>
@@ -169,7 +177,7 @@ function buildEmailHtml(
             <td style="padding:8px 28px;">
               <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
                 <tr>
-                  <td width="50%" style="padding:8px;">
+                  <td width="33%" style="padding:8px;">
                     <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#f9fafb;border-radius:8px;">
                       <tr><td style="padding:14px 16px;">
                         <span style="font-size:10px;color:#9ca3af;font-weight:700;letter-spacing:0.05em;">FEE MTD</span><br/>
@@ -178,12 +186,21 @@ function buildEmailHtml(
                       </td></tr>
                     </table>
                   </td>
-                  <td width="50%" style="padding:8px;">
+                  <td width="33%" style="padding:8px;">
                     <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#f9fafb;border-radius:8px;">
                       <tr><td style="padding:14px 16px;">
-                        <span style="font-size:10px;color:#9ca3af;font-weight:700;letter-spacing:0.05em;">PROYEKSI AKHIR BULAN</span><br/>
-                        <span style="font-size:18px;font-weight:800;color:#111827;">${formatFee(s.fee_projected)}</span><br/>
-                        <span style="font-size:11px;color:${gapColor};">${gapLabel}</span>
+                        <span style="font-size:10px;color:#9ca3af;font-weight:700;letter-spacing:0.05em;">PROYEKSI KONSERVATIF</span><br/>
+                        <span style="font-size:16px;font-weight:800;color:${conservative >= s.fee_target ? '#166534' : '#dc2626'};">${formatFee(conservative)}</span><br/>
+                        <span style="font-size:11px;color:${conservative >= s.fee_target ? '#166534' : '#dc2626'};">${conservative >= s.fee_target ? '✓ On track' : `Gap ${formatFee(s.fee_target - conservative)}`}</span>
+                      </td></tr>
+                    </table>
+                  </td>
+                  <td width="33%" style="padding:8px;">
+                    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#f9fafb;border-radius:8px;">
+                      <tr><td style="padding:14px 16px;">
+                        <span style="font-size:10px;color:#9ca3af;font-weight:700;letter-spacing:0.05em;">PROYEKSI OPTIMISTIS</span><br/>
+                        <span style="font-size:16px;font-weight:800;color:${optimistic >= s.fee_target ? '#166534' : '#92400e'};">${formatFee(optimistic)}</span><br/>
+                        <span style="font-size:11px;color:${optimistic >= s.fee_target ? '#166534' : '#92400e'};">${optimistic >= s.fee_target ? '✓ On track' : `Gap ${formatFee(s.fee_target - optimistic)}`}</span>
                       </td></tr>
                     </table>
                   </td>
