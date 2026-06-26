@@ -318,7 +318,7 @@ export default function UploadCenter() {
       setProgress(90)
       setProgressLabel('Membersihkan data lama...')
 
-      try { await supabase.rpc('am_purge_old_data') } catch {}
+
 
       setProgress(100)
       setStage('success')
