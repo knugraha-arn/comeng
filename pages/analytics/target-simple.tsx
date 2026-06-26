@@ -87,6 +87,7 @@ export default function TargetSimplePage() {
     total_fee: number
     active_agents: number
     is_current_month: boolean
+    snapshotted_at: string
   }
   const [mitraProgress, setMitraProgress]   = useState<MitraProgress[]>([])
   const [mitraBaseline, setMitraBaseline]   = useState<MitraBaseline[]>([])
@@ -503,9 +504,13 @@ export default function TargetSimplePage() {
                       Target TRX Transfer
                       {newMitra && mitraBaseline.find(m => m.mitra === newMitra) && (() => {
                         const b = mitraBaseline.find(m => m.mitra === newMitra)!
+                        const snapDate = new Date(b.snapshotted_at).toLocaleDateString('id-ID', { day: 'numeric', month: 'short' })
+                        const label = b.is_current_month
+                          ? `MTD s/d ${snapDate}`
+                          : `Full ${MONTHS[selectedMonth - 2] ?? MONTHS[11]}`
                         return (
                           <span style={{ color: b.is_current_month ? '#ca8a04' : '#0344D8', marginLeft: '6px' }}>
-                            ({b.is_current_month ? 'Ref bulan ini' : 'Bulan lalu'}: {b.trx_transfer.toLocaleString('id')})
+                            ({label}: {b.trx_transfer.toLocaleString('id')})
                           </span>
                         )
                       })()}
