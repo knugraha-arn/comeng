@@ -12,6 +12,8 @@ interface PulseSummary {
   fee_mtd: number
   fee_target: number
   fee_projected: number
+  fee_projected_conservative: number
+  fee_projected_optimistic: number
   fee_avg_daily: number
   fee_needed_per_day: number
   trx_mtd: number
@@ -22,6 +24,7 @@ interface PulseSummary {
   productive_count: number
   moderate_count: number
   sporadic_count: number
+  dekade_number: number
 }
 
 interface DailyFee {
@@ -142,9 +145,15 @@ export default function PulsePage() {
   // Signals
   const signals: { type: 'red' | 'yellow' | 'green', text: string }[] = []
   if (summary) {
-    const feeGap = summary.fee_target - summary.fee_projected
-    if (feeGap > 0) signals.push({ type: 'red', text: `Proyeksi fee ${formatFee(summary.fee_projected)} — gap ${formatFee(feeGap)} dari target` })
-    else signals.push({ type: 'green', text: `Proyeksi fee ${formatFee(summary.fee_projected)} — on track ✓` })
+    const feeGapConservative = summary.fee_target - summary.fee_projected_conservative
+    const feeGapOptimistic   = summary.fee_target - summary.fee_projected_optimistic
+    if (feeGapConservative > 0 && feeGapOptimistic > 0) {
+      signals.push({ type: 'red', text: `Proyeksi fee Rp ${formatFee(summary.fee_projected_conservative)}–${formatFee(summary.fee_projected_optimistic)} — keduanya di bawah target` })
+    } else if (feeGapConservative > 0) {
+      signals.push({ type: 'yellow', text: `Proyeksi fee ${formatFee(summary.fee_projected_conservative)}–${formatFee(summary.fee_projected_optimistic)} — skenario optimistis on track` })
+    } else {
+      signals.push({ type: 'green', text: `Proyeksi fee ${formatFee(summary.fee_projected_conservative)}–${formatFee(summary.fee_projected_optimistic)} — on track ✓` })
+    }
 
     if (summary.trx_avg_daily_mtd < summary.trx_avg_daily_14d * 0.9)
       signals.push({ type: 'yellow', text: `TRX/hari bulan ini (${formatNum(summary.trx_avg_daily_mtd)}) lebih rendah dari rata-rata 14H (${formatNum(summary.trx_avg_daily_14d)})` })
@@ -157,7 +166,8 @@ export default function PulsePage() {
   const currentMonth = summary ? MONTHS[new Date(summary.end_date).getMonth()] : ''
   const currentYear  = summary ? new Date(summary.end_date).getFullYear() : ''
   const feeProgress  = summary && summary.fee_target > 0 ? Math.min(100, Math.round(summary.fee_mtd / summary.fee_target * 100)) : 0
-  const isOnTrack    = summary ? summary.fee_projected >= summary.fee_target : false
+  const isOnTrack    = summary ? summary.fee_projected_optimistic >= summary.fee_target : false
+  const isDefinitelyOnTrack = summary ? summary.fee_projected_conservative >= summary.fee_target : false
 
   // Chart helpers
   const maxCumFee    = dailyFee.length > 0 ? Math.max(...dailyFee.map(d => Math.max(d.cumulative_fee, d.cumulative_target))) : 1
@@ -230,17 +240,33 @@ export default function PulsePage() {
             )}
           </div>
 
-          {/* Proyeksi */}
-          <div {...tip('Estimasi total fee akhir bulan dihitung dari: fee MTD ÷ hari berjalan × total hari dalam bulan. Berbasis data MTD, bukan 14H.')}
-            style={{ backgroundColor: isOnTrack ? '#f0fdf4' : '#fef2f2', border: `1px solid ${isOnTrack ? '#bbf7d0' : '#fecaca'}`, borderRadius: '12px', padding: '16px 20px', cursor: 'default' }}>
+          {/* Proyeksi — dua chip: konservatif (D3) dan optimistis (D2) */}
+          <div {...tip(`Proyeksi berdasarkan rata-rata dekade. Konservatif = rata-rata dekade ${summary?.dekade_number ?? 3} (sedang berjalan). Optimistis = rata-rata dekade sebelumnya yang biasanya lebih tinggi.`)}
+            style={{ backgroundColor: isDefinitelyOnTrack ? '#f0fdf4' : isOnTrack ? '#fefce8' : '#fef2f2', border: `1px solid ${isDefinitelyOnTrack ? '#bbf7d0' : isOnTrack ? '#fde68a' : '#fecaca'}`, borderRadius: '12px', padding: '16px 20px', cursor: 'default' }}>
             {loading ? <Skeleton width="80%" height={28} /> : (
               <>
-                <div style={{ fontSize: '11px', color: isOnTrack ? '#166534' : '#dc2626', fontWeight: '600', marginBottom: '6px' }}>PROYEKSI AKHIR BULAN</div>
-                <div style={{ fontSize: '22px', fontWeight: '800', color: isOnTrack ? '#166534' : '#dc2626' }}>{formatFee(summary?.fee_projected ?? 0)}</div>
-                <div style={{ fontSize: '11px', color: isOnTrack ? '#166534' : '#dc2626', marginTop: '8px' }}>
-                  {isOnTrack ? '✓ On track' : `↓ Gap ${formatFee((summary?.fee_target ?? 0) - (summary?.fee_projected ?? 0))}`}
+                <div style={{ fontSize: '11px', color: '#9ca3af', fontWeight: '600', marginBottom: '8px' }}>
+                  PROYEKSI AKHIR BULAN
+                  <span style={{ marginLeft: '6px', fontWeight: '400' }}>(Dekade {summary?.dekade_number ?? 3})</span>
                 </div>
-                <div style={{ fontSize: '10px', color: '#9ca3af', marginTop: '2px' }}>Perlu {formatFee(summary?.fee_needed_per_day ?? 0)}/hari (MTD)</div>
+                <div style={{ display: 'flex', gap: '8px', marginBottom: '8px' }}>
+                  <div style={{ flex: 1, padding: '8px 12px', borderRadius: '8px', backgroundColor: 'rgba(0,0,0,0.04)', textAlign: 'center' }}>
+                    <div style={{ fontSize: '10px', color: '#9ca3af', marginBottom: '3px', fontWeight: '600' }}>KONSERVATIF</div>
+                    <div style={{ fontSize: '16px', fontWeight: '800', color: summary?.fee_projected_conservative! >= (summary?.fee_target ?? 0) ? '#166534' : '#dc2626' }}>
+                      {formatFee(summary?.fee_projected_conservative ?? 0)}
+                    </div>
+                  </div>
+                  <div style={{ flex: 1, padding: '8px 12px', borderRadius: '8px', backgroundColor: 'rgba(0,0,0,0.04)', textAlign: 'center' }}>
+                    <div style={{ fontSize: '10px', color: '#9ca3af', marginBottom: '3px', fontWeight: '600' }}>OPTIMISTIS</div>
+                    <div style={{ fontSize: '16px', fontWeight: '800', color: summary?.fee_projected_optimistic! >= (summary?.fee_target ?? 0) ? '#166534' : '#dc2626' }}>
+                      {formatFee(summary?.fee_projected_optimistic ?? 0)}
+                    </div>
+                  </div>
+                </div>
+                <div style={{ fontSize: '11px', color: isDefinitelyOnTrack ? '#166534' : isOnTrack ? '#92400e' : '#dc2626', fontWeight: '600' }}>
+                  {isDefinitelyOnTrack ? '✓ Keduanya on track' : isOnTrack ? '⚠️ Hanya optimistis on track' : '↓ Keduanya di bawah target'}
+                </div>
+                <div style={{ fontSize: '10px', color: '#9ca3af', marginTop: '2px' }}>Perlu {formatFee(summary?.fee_needed_per_day ?? 0)}/hari</div>
               </>
             )}
           </div>
