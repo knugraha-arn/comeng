@@ -16,7 +16,5 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const { data: { user }, error: authError } = await supabase.auth.getUser(token)
   if (authError || !user) return res.status(401).json({ error: 'Unauthorized' })
 
-  await supabase.rpc('am_purge_old_data')
-
   return res.status(200).json({ success: true })
 }
