@@ -18,6 +18,7 @@ const analyticsNavItems = [
   { href: '/analytics/mitra',           label: 'Kekuatan Mitra',  icon: '◈' },
   { href: '/analytics/pic',             label: 'Kekuatan PIC',    icon: '◈' },
   { href: '/analytics/dashboard-3500',  label: 'Lite & Plus',     icon: '◈' },
+  { href: '/analytics/agent-summary',   label: 'Agent Summary',   icon: '◈' },
   { href: '/analytics/agent-profile',   label: 'Cari Agen',       icon: '◈' },
 ]
 
