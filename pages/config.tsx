@@ -695,7 +695,7 @@ export default function ConfigPage() {
                         <div style={{ color: '#bbb', fontSize: '10px', marginTop: '2px' }}>{r.match_type} · {r.candidate_count} kandidat</div>
                       </div>
                       <div style={{ color: '#555', fontSize: '11px' }}>{r.r_wag_name}</div>
-                      <div style={{ textAlign: 'center', fontFamily: 'monospace', fontSize: '10px' }}>
+                      <div style={{ textAlign: 'center', fontSize: '11px' }}>
                         {r.r_serial_number ? (
                           <span
                             onClick={() => openAgentDrawer(r.r_serial_number!)}
