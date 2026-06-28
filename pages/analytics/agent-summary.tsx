@@ -156,6 +156,7 @@ export default function AgentSummaryPage() {
 
   const [mitraList, setMitraList]     = useState<string[]>([])
   const [picList, setPicList]         = useState<string[]>([])
+  const [loadingPic, setLoadingPic]   = useState(false)
 
   const [windowStart, setWindowStart] = useState('')
   const [windowEnd, setWindowEnd]     = useState('')
@@ -174,12 +175,14 @@ export default function AgentSummaryPage() {
   async function initPage() {
     setLoading(true)
     try {
-      const [filterRes, countsRes, agentsRes] = await Promise.all([
+      const [filterRes, picRes, countsRes, agentsRes] = await Promise.all([
         supabase.rpc('get_mitra_list'),
-        supabase.rpc('get_agent_reach_out_count', { p_mitra: '', p_kelompok: '' }),
-        supabase.rpc('get_agent_reach_out', { p_mitra: '', p_kelompok: '', p_limit: PAGE_SIZE, p_offset: 0 }),
+        supabase.rpc('get_pic_by_mitra', { p_mitra: '' }),
+        supabase.rpc('get_agent_reach_out_count', { p_mitra: '', p_pic: '', p_kelompok: '' }),
+        supabase.rpc('get_agent_reach_out', { p_mitra: '', p_pic: '', p_kelompok: '', p_limit: PAGE_SIZE, p_offset: 0 }),
       ])
       if (filterRes.data) setMitraList(filterRes.data.map((m: { mitra: string }) => m.mitra).sort())
+      if (picRes.data) setPicList(picRes.data.map((p: { pic: string }) => p.pic))
       if (countsRes.data?.[0]) { setCounts(countsRes.data[0]); setTotalCount(Number(countsRes.data[0].total_count)) }
       if (agentsRes.data?.length > 0) {
         setAgents(agentsRes.data)
@@ -193,8 +196,8 @@ export default function AgentSummaryPage() {
     setLoading(true)
     try {
       const [agentsRes, countsRes] = await Promise.all([
-        supabase.rpc('get_agent_reach_out', { p_mitra: mitra, p_kelompok: kel, p_limit: PAGE_SIZE, p_offset: newPage * PAGE_SIZE }),
-        supabase.rpc('get_agent_reach_out_count', { p_mitra: mitra, p_kelompok: kel }),
+        supabase.rpc('get_agent_reach_out', { p_mitra: mitra, p_pic: pic, p_kelompok: kel, p_limit: PAGE_SIZE, p_offset: newPage * PAGE_SIZE }),
+        supabase.rpc('get_agent_reach_out_count', { p_mitra: mitra, p_pic: pic, p_kelompok: kel }),
       ])
       if (agentsRes.data) {
         setAgents(agentsRes.data)
@@ -206,14 +209,11 @@ export default function AgentSummaryPage() {
 
   async function handleMitraChange(mitra: string) {
     setFilterMitra(mitra); setFilterPic(''); setPage(0)
-    // Update PIC list berdasarkan Mitra yang dipilih
-    if (mitra) {
-      const { data } = await supabase.rpc('get_agent_reach_out', { p_mitra: mitra, p_kelompok: '', p_limit: 9999, p_offset: 0 })
-      const pics = [...new Set((data ?? []).map((a: AgentSummaryRow) => a.pic).filter(Boolean))].sort() as string[]
-      setPicList(pics)
-    } else {
-      setPicList([])
-    }
+    setLoadingPic(true)
+    try {
+      const { data } = await supabase.rpc('get_pic_by_mitra', { p_mitra: mitra })
+      setPicList((data ?? []).map((p: { pic: string }) => p.pic))
+    } finally { setLoadingPic(false) }
     await loadAgents(0, mitra, '', filterKel)
   }
 
@@ -229,7 +229,12 @@ export default function AgentSummaryPage() {
   }
 
   async function handleReset() {
-    setFilterMitra(''); setFilterPic(''); setFilterKel(''); setPage(0); setPicList([])
+    setFilterMitra(''); setFilterPic(''); setFilterKel(''); setPage(0)
+    setLoadingPic(true)
+    try {
+      const { data } = await supabase.rpc('get_pic_by_mitra', { p_mitra: '' })
+      setPicList((data ?? []).map((p: { pic: string }) => p.pic))
+    } finally { setLoadingPic(false) }
     await loadAgents(0, '', '', '')
   }
 
@@ -253,7 +258,7 @@ export default function AgentSummaryPage() {
   async function handleExport() {
     setExporting(true)
     try {
-      const { data } = await supabase.rpc('get_agent_reach_out', { p_mitra: filterMitra, p_kelompok: filterKel, p_limit: 9999, p_offset: 0 })
+      const { data } = await supabase.rpc('get_agent_reach_out', { p_mitra: filterMitra, p_pic: filterPic, p_kelompok: filterKel, p_limit: 9999, p_offset: 0 })
       if (!data || data.length === 0) return
       const KEL_LABEL: Record<string, string> = { sehat: 'Sehat', baru_aktif: 'Baru Aktif', kurang_sehat: 'Kurang Sehat' }
       const sorted = [...data].sort((a: AgentSummaryRow, b: AgentSummaryRow) => {
@@ -341,13 +346,11 @@ export default function AgentSummaryPage() {
             <option value="">Semua Mitra</option>
             {mitraList.map(m => <option key={m} value={m}>{m}</option>)}
           </select>
-          {picList.length > 0 && (
-            <select value={filterPic} onChange={e => handlePicChange(e.target.value)}
-              style={{ padding: '7px 12px', borderRadius: '8px', border: '1px solid #e5e7eb', fontSize: '12px', color: '#374151', backgroundColor: '#fff', cursor: 'pointer', maxWidth: '180px' }}>
-              <option value="">Semua PIC</option>
-              {picList.map(p => <option key={p} value={p}>{p}</option>)}
-            </select>
-          )}
+          <select value={filterPic} onChange={e => handlePicChange(e.target.value)} disabled={loadingPic}
+            style={{ padding: '7px 12px', borderRadius: '8px', border: '1px solid #e5e7eb', fontSize: '12px', color: '#374151', backgroundColor: loadingPic ? '#f9fafb' : '#fff', cursor: loadingPic ? 'wait' : 'pointer', minWidth: '160px' }}>
+            <option value="">{loadingPic ? 'Memuat...' : 'Semua PIC'}</option>
+            {picList.map(p => <option key={p} value={p}>{p}</option>)}
+          </select>
           {(filterMitra || filterPic || filterKel) && (
             <button onClick={handleReset} style={{ padding: '7px 12px', borderRadius: '8px', border: '1px solid #e5e7eb', backgroundColor: '#fff', color: '#6b7280', fontSize: '12px', cursor: 'pointer' }}>✕ Reset</button>
           )}
