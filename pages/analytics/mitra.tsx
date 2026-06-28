@@ -115,11 +115,13 @@ export default function MitraPage() {
 
   const [mitras, setMitras]     = useState<MitraRow[]>([])
   const [loading, setLoading]   = useState(true)
+  const [pageTab, setPageTab]   = useState<'ranking' | 'achievement' | 'heatmap' | 'bubble' | 'kategori'>('ranking')
   const [activeTab, setActiveTab] = useState<'accelerating' | 'stable' | 'decelerating' | ''>('')
   const [tooltip, setTooltip]   = useState<{ text: string, x: number, y: number } | null>(null)
   const [exporting, setExporting] = useState(false)
   const [windowStart, setWindowStart] = useState('')
   const [windowEnd, setWindowEnd]     = useState('')
+  const [targetProgress, setTargetProgress] = useState<(MitraTarget & { mitra: string })[]>([])
 
   const [selected, setSelected]           = useState<MitraRow | null>(null)
   const [detail, setDetail]               = useState<MitraDetail[]>([])
@@ -133,12 +135,17 @@ export default function MitraPage() {
   async function loadMitras() {
     setLoading(true)
     try {
-      const { data } = await supabase.rpc('get_mitra_list')
-      setMitras(data ?? [])
-      if (data && data.length > 0) {
-        setWindowStart(data[0].window_start)
-        setWindowEnd(data[0].window_end)
+      const now = new Date()
+      const [mitraRes, tgtRes] = await Promise.all([
+        supabase.rpc('get_mitra_list'),
+        supabase.rpc('get_mitra_target_progress', { p_year: now.getFullYear(), p_month: now.getMonth() + 1 }),
+      ])
+      setMitras(mitraRes.data ?? [])
+      if (mitraRes.data && mitraRes.data.length > 0) {
+        setWindowStart(mitraRes.data[0].window_start)
+        setWindowEnd(mitraRes.data[0].window_end)
       }
+      setTargetProgress(tgtRes.data ?? [])
     } finally {
       setLoading(false)
     }
@@ -235,6 +242,25 @@ export default function MitraPage() {
           </p>
         </div>
 
+        {/* Page Tab Switcher */}
+        <div style={{ display: 'flex', gap: '4px', marginBottom: '24px', backgroundColor: '#f3f4f6', padding: '4px', borderRadius: '10px', width: 'fit-content', flexWrap: 'wrap' }}>
+          {([
+            { key: 'ranking',     label: '📊 Ranking' },
+            { key: 'achievement', label: '🎯 Achievement' },
+            { key: 'heatmap',    label: '🔥 Heatmap' },
+            { key: 'bubble',     label: '🫧 Volume vs Kualitas' },
+            { key: 'kategori',   label: '⭐ Kategori' },
+          ] as { key: 'ranking'|'achievement'|'heatmap'|'bubble'|'kategori', label: string }[]).map(t => (
+            <button key={t.key} onClick={() => setPageTab(t.key)}
+              style={{ padding: '7px 14px', borderRadius: '8px', border: 'none', cursor: 'pointer', fontSize: '12px', fontWeight: pageTab === t.key ? '600' : '400', background: pageTab === t.key ? '#fff' : 'transparent', color: pageTab === t.key ? '#111827' : '#6b7280', boxShadow: pageTab === t.key ? '0 1px 3px rgba(0,0,0,0.08)' : 'none', transition: 'all 0.15s', whiteSpace: 'nowrap' }}>
+              {t.label}
+            </button>
+          ))}
+        </div>
+
+        {/* ── TAB: RANKING ─────────────────────────────────────────── */}
+        {pageTab === 'ranking' && <div>
+
         {/* Momentum Tabs */}
         <div style={{ display: 'flex', gap: '8px', marginBottom: '16px', flexWrap: 'wrap', alignItems: 'center' }}>
           {(['accelerating', 'stable', 'decelerating'] as const).map(tab => {
@@ -326,7 +352,222 @@ export default function MitraPage() {
             ))}
           </div>
         )}
-      </div>
+        </div>} {/* end tab ranking */}
+
+        {/* ── TAB: ACHIEVEMENT ──────────────────────────────────────── */}
+        {pageTab === 'achievement' && (() => {
+          const now = new Date()
+          const bulan = ['Januari','Februari','Maret','April','Mei','Juni','Juli','Agustus','September','Oktober','November','Desember'][now.getMonth()]
+          const tahun = now.getFullYear()
+          const targetMap = Object.fromEntries(targetProgress.map(t => [t.mitra, t]))
+          return (
+            <div>
+              <div style={{ fontSize: '13px', color: '#6b7280', marginBottom: '16px' }}>
+                Achievement TRX Transfer vs target {bulan} {tahun}. Semua Mitra ditampilkan — yang belum ada target ditandai abu-abu.
+              </div>
+              <div style={{ border: '1px solid #e5e7eb', borderRadius: '10px', overflow: 'hidden' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 70px 100px 100px 110px 110px', padding: '10px 16px', backgroundColor: '#f9fafb', borderBottom: '1px solid #e5e7eb', fontSize: '11px', fontWeight: '700', color: '#9ca3af', letterSpacing: '0.05em' }}>
+                  <div>MITRA</div>
+                  <div style={{ textAlign: 'right' }}>AGEN</div>
+                  <div style={{ textAlign: 'right' }}>TRX MTD</div>
+                  <div style={{ textAlign: 'right' }}>TARGET</div>
+                  <div style={{ textAlign: 'center' }}>ACHIEVEMENT</div>
+                  <div style={{ textAlign: 'center' }}>PREDIKSI</div>
+                </div>
+                {loading ? (
+                  <div style={{ padding: '32px', textAlign: 'center', color: '#9ca3af' }}>Memuat...</div>
+                ) : mitras.map((m, i) => {
+                  const tgt = targetMap[m.mitra]
+                  const hasTarget = !!tgt
+                  const pct = hasTarget ? Number(tgt.achievement_pct) : null
+                  const avgD = hasTarget ? Number(tgt.avg_trx_current_dekade ?? 0) : 0
+                  const projected = hasTarget
+                    ? (avgD > 0 ? Math.round(tgt.actual_trx_mtd + avgD * (tgt.days_in_month - tgt.days_elapsed)) : Math.round(tgt.actual_trx_mtd / Math.max(tgt.days_elapsed, 1) * tgt.days_in_month))
+                    : null
+                  const willAchieve = projected !== null && tgt ? projected >= tgt.target_trx : false
+                  const pc = pct === null ? '#9ca3af' : pct >= 80 ? '#166534' : pct >= 50 ? '#92400e' : '#dc2626'
+                  const pb = pct === null ? '#f9fafb' : pct >= 80 ? '#f0fdf4' : pct >= 50 ? '#fefce8' : '#fef2f2'
+                  return (
+                    <div key={m.mitra} style={{ display: 'grid', gridTemplateColumns: '1fr 70px 100px 100px 110px 110px', padding: '12px 16px', borderBottom: i < mitras.length - 1 ? '1px solid #f3f4f6' : 'none', alignItems: 'center', backgroundColor: '#fff' }}>
+                      <div>
+                        <div style={{ fontSize: '13px', fontWeight: '600', color: '#111827' }}>{m.mitra}</div>
+                        {!hasTarget
+                          ? <div style={{ fontSize: '11px', color: '#9ca3af', fontStyle: 'italic', marginTop: '2px' }}>Target {bulan} {tahun} belum ditetapkan</div>
+                          : pct !== null && <div style={{ marginTop: '5px', height: '3px', backgroundColor: '#f3f4f6', borderRadius: '99px', overflow: 'hidden', maxWidth: '150px' }}><div style={{ height: '100%', width: `${Math.min(pct, 100)}%`, backgroundColor: pc, borderRadius: '99px' }} /></div>
+                        }
+                      </div>
+                      <div style={{ textAlign: 'right', fontSize: '12px', color: '#374151' }}>{m.total_agents.toLocaleString('id')}</div>
+                      <div style={{ textAlign: 'right', fontSize: '12px', color: '#374151' }}>{hasTarget ? tgt.actual_trx_mtd.toLocaleString('id') : <span style={{ color: '#d1d5db' }}>—</span>}</div>
+                      <div style={{ textAlign: 'right', fontSize: '12px', fontWeight: '600', color: '#374151' }}>{hasTarget ? tgt.target_trx.toLocaleString('id') : <span style={{ color: '#d1d5db' }}>—</span>}</div>
+                      <div style={{ textAlign: 'center' }}>{hasTarget && pct !== null ? <span style={{ padding: '3px 10px', borderRadius: '99px', fontSize: '12px', fontWeight: '700', backgroundColor: pb, color: pc }}>{pct}%</span> : <span style={{ color: '#d1d5db' }}>—</span>}</div>
+                      <div style={{ textAlign: 'center' }}>{hasTarget && projected !== null ? <span style={{ padding: '3px 8px', borderRadius: '99px', fontSize: '11px', fontWeight: '600', backgroundColor: willAchieve ? '#f0fdf4' : '#fef9c3', color: willAchieve ? '#166534' : '#92400e' }}>{willAchieve ? '✅ On track' : '⚠️ At risk'}</span> : <span style={{ color: '#d1d5db' }}>—</span>}</div>
+                    </div>
+                  )
+                })}
+              </div>
+              {targetProgress.length > 0 && <div style={{ marginTop: '8px', fontSize: '11px', color: '#9ca3af', textAlign: 'right' }}>Hari ke-{targetProgress[0].days_elapsed} dari {targetProgress[0].days_in_month} · Proyeksi Dekade {targetProgress[0].dekade_number}-based</div>}
+            </div>
+          )
+        })()}
+
+        {/* ── TAB: HEATMAP ──────────────────────────────────────────── */}
+        {pageTab === 'heatmap' && (() => {
+          const COLS: { key: keyof MitraRow, label: string, fmt: (v: number) => string, thresholds: [number, number], invert?: boolean }[] = [
+            { key: 'health_score',        label: 'Health',      fmt: v => String(v),               thresholds: [65, 50] },
+            { key: 'growing_pct',         label: 'Growing %',   fmt: v => `${v}%`,                 thresholds: [25, 15] },
+            { key: 'declining_pct',       label: 'Declining %', fmt: v => `${v}%`,                 thresholds: [20, 30], invert: true },
+            { key: 'liquidity_lemah_pct', label: 'Liq Lemah',   fmt: v => `${v}%`,                 thresholds: [10, 20], invert: true },
+            { key: 'fee_per_agent',       label: 'Fee/Agen',    fmt: v => `${Math.round(v/1000)}rb`, thresholds: [100000, 60000] },
+            { key: 'momentum_pct',        label: 'Momentum',    fmt: v => `${v > 0 ? '+' : ''}${v}%`, thresholds: [5, -5] },
+          ]
+          const cellStyle = (val: number, t: [number,number], inv = false) => {
+            const ok = !inv ? val >= t[0] : val <= t[0]
+            const warn = !inv ? val >= t[1] : val <= t[1]
+            return ok ? { bg: '#dcfce7', c: '#166534' } : warn ? { bg: '#fefce8', c: '#92400e' } : { bg: '#fee2e2', c: '#dc2626' }
+          }
+          return (
+            <div>
+              <div style={{ fontSize: '13px', color: '#6b7280', marginBottom: '16px' }}>🟢 Baik · 🟡 Perlu perhatian · 🔴 Bermasalah. Diurutkan berdasarkan Health Score.</div>
+              <div style={{ overflowX: 'auto' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px' }}>
+                  <thead>
+                    <tr style={{ backgroundColor: '#f9fafb' }}>
+                      <th style={{ padding: '10px 16px', textAlign: 'left', fontSize: '11px', fontWeight: '700', color: '#9ca3af', borderBottom: '1px solid #e5e7eb' }}>MITRA</th>
+                      <th style={{ padding: '10px 12px', textAlign: 'center', fontSize: '11px', fontWeight: '700', color: '#9ca3af', borderBottom: '1px solid #e5e7eb' }}>AGEN</th>
+                      {COLS.map(c => <th key={String(c.key)} style={{ padding: '10px 12px', textAlign: 'center', fontSize: '11px', fontWeight: '700', color: '#9ca3af', borderBottom: '1px solid #e5e7eb', whiteSpace: 'nowrap' }}>{c.label.toUpperCase()}</th>)}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {[...mitras].sort((a, b) => b.health_score - a.health_score).map((m, i) => (
+                      <tr key={m.mitra} style={{ borderBottom: '1px solid #f3f4f6', backgroundColor: i % 2 === 0 ? '#fff' : '#fafafa' }}>
+                        <td style={{ padding: '10px 16px', fontWeight: '600', color: '#111827', fontSize: '12px' }}>{m.mitra.length > 28 ? m.mitra.slice(0, 28) + '…' : m.mitra}</td>
+                        <td style={{ padding: '10px 12px', textAlign: 'center', color: '#374151' }}>{m.total_agents}</td>
+                        {COLS.map(c => {
+                          const val = Number(m[c.key])
+                          const { bg, c: col } = cellStyle(val, c.thresholds, c.invert)
+                          return <td key={String(c.key)} style={{ padding: '8px 12px', textAlign: 'center' }}><span style={{ padding: '3px 8px', borderRadius: '6px', backgroundColor: bg, color: col, fontWeight: '600', fontSize: '12px' }}>{c.fmt(val)}</span></td>
+                        })}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )
+        })()}
+
+        {/* ── TAB: BUBBLE CHART ─────────────────────────────────────── */}
+        {pageTab === 'bubble' && (() => {
+          const sig = mitras.filter(m => m.total_agents >= 10)
+          const small = mitras.filter(m => m.total_agents < 10)
+          const maxA = Math.max(...sig.map(m => m.total_agents), 1)
+          const maxF = Math.max(...sig.map(m => Number(m.fee_per_agent)), 1)
+          const W = 680, H = 360, P = 56
+          const mc: Record<string, string> = { accelerating: '#16a34a', stable: '#6b7280', decelerating: '#dc2626' }
+          const ml: Record<string, string> = { accelerating: '↑ Accelerating', stable: '→ Stable', decelerating: '↓ Decelerating' }
+          return (
+            <div>
+              <div style={{ fontSize: '13px', color: '#6b7280', marginBottom: '16px' }}>X = Fee/Agen · Y = Health Score · Ukuran = Jumlah agen · Warna = Momentum. Mitra {'<'}10 agen dikecualikan.</div>
+              <div style={{ backgroundColor: '#fff', border: '1px solid #e5e7eb', borderRadius: '12px', padding: '20px', overflowX: 'auto' }}>
+                <svg width={W} height={H} style={{ display: 'block', margin: '0 auto' }}>
+                  {[0,25,50,75,100].map(y => (
+                    <g key={y}>
+                      <line x1={P} y1={P+(1-y/100)*(H-P*2)} x2={W-P/2} y2={P+(1-y/100)*(H-P*2)} stroke='#f3f4f6' strokeWidth={1} />
+                      <text x={P-6} y={P+(1-y/100)*(H-P*2)+4} fontSize={10} fill='#9ca3af' textAnchor='end'>{y}</text>
+                    </g>
+                  ))}
+                  <text x={W/2} y={H-6} fontSize={11} fill='#6b7280' textAnchor='middle'>Fee per Agen (Rp ribu)</text>
+                  <text x={12} y={H/2} fontSize={11} fill='#6b7280' textAnchor='middle' transform={`rotate(-90,12,${H/2})`}>Health Score</text>
+                  {sig.map(m => {
+                    const x = P + (Number(m.fee_per_agent)/maxF)*(W-P*2-P/2)
+                    const y = P + (1-m.health_score/100)*(H-P*2)
+                    const r = Math.max(8, Math.sqrt(m.total_agents/maxA)*42)
+                    const col = mc[m.momentum] ?? '#6b7280'
+                    const nm = m.mitra.replace(/CV\.|PT\.|PT |cv\./gi,'').replace(/\(.*?\)/g,'').trim().slice(0,10)
+                    return (
+                      <g key={m.mitra}>
+                        <circle cx={x} cy={y} r={r} fill={col} fillOpacity={0.2} stroke={col} strokeWidth={2} />
+                        <text x={x} y={y+4} fontSize={9} fill='#374151' textAnchor='middle' fontWeight='600'>{nm}</text>
+                      </g>
+                    )
+                  })}
+                  {[0,50,100,150,200].map(v => {
+                    const x = P+(v*1000/maxF)*(W-P*2-P/2)
+                    return x <= W-P/2 ? <text key={v} x={x} y={H-P+18} fontSize={10} fill='#9ca3af' textAnchor='middle'>{v}rb</text> : null
+                  })}
+                </svg>
+                <div style={{ display: 'flex', gap: '16px', justifyContent: 'center', marginTop: '10px', flexWrap: 'wrap' }}>
+                  {Object.entries(mc).map(([k,col]) => <div key={k} style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '11px', color: '#6b7280' }}><div style={{ width: '10px', height: '10px', borderRadius: '50%', backgroundColor: col }} />{ml[k]}</div>)}
+                </div>
+                {small.length > 0 && <div style={{ marginTop: '8px', fontSize: '11px', color: '#9ca3af', textAlign: 'center' }}>Tidak ditampilkan ({'<'}10 agen): {small.map(m => m.mitra.split('(')[0].trim()).join(', ')}</div>}
+              </div>
+            </div>
+          )
+        })()}
+
+        {/* ── TAB: KATEGORI ─────────────────────────────────────────── */}
+        {pageTab === 'kategori' && (() => {
+          const sig = mitras.filter(m => m.total_agents >= 10)
+          const small = mitras.filter(m => m.total_agents < 10)
+          const avgF = sig.reduce((s,m) => s+Number(m.fee_per_agent),0) / Math.max(sig.length,1)
+          const avgH = sig.reduce((s,m) => s+m.health_score,0) / Math.max(sig.length,1)
+          type CatKey = 'star'|'atrisk'|'potential'|'lagging'
+          const cats: Record<CatKey, { label: string, desc: string, color: string, bg: string, border: string, mitras: MitraRow[] }> = {
+            star:      { label: '⭐ Star',      desc: 'Fee/Agen tinggi + Health tinggi',    color: '#166534', bg: '#f0fdf4', border: '#bbf7d0', mitras: [] },
+            atrisk:    { label: '⚠️ At Risk',   desc: 'Fee/Agen tinggi tapi Health rendah', color: '#92400e', bg: '#fefce8', border: '#fde68a', mitras: [] },
+            potential: { label: '🌱 Potential', desc: 'Fee/Agen rendah tapi Health tinggi', color: '#1e40af', bg: '#eff6ff', border: '#bfdbfe', mitras: [] },
+            lagging:   { label: '💀 Lagging',   desc: 'Fee/Agen rendah + Health rendah',   color: '#dc2626', bg: '#fef2f2', border: '#fecaca', mitras: [] },
+          }
+          sig.forEach(m => {
+            const hF = Number(m.fee_per_agent) >= avgF
+            const hH = m.health_score >= avgH
+            if (hF && hH)       cats.star.mitras.push(m)
+            else if (hF && !hH) cats.atrisk.mitras.push(m)
+            else if (!hF && hH) cats.potential.mitras.push(m)
+            else                cats.lagging.mitras.push(m)
+          })
+          return (
+            <div>
+              <div style={{ fontSize: '13px', color: '#6b7280', marginBottom: '4px' }}>Pengelompokan otomatis berdasarkan Fee/Agen dan Health Score vs rata-rata jaringan.</div>
+              <div style={{ fontSize: '11px', color: '#9ca3af', marginBottom: '20px' }}>Rata-rata Fee/Agen: Rp {Math.round(avgF/1000)}rb · Health Score rata-rata: {Math.round(avgH)}/100 · Mitra {'<'}10 agen dikecualikan</div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+                {(Object.keys(cats) as CatKey[]).map(key => {
+                  const cat = cats[key]
+                  return (
+                    <div key={key} style={{ padding: '20px', borderRadius: '12px', backgroundColor: cat.bg, border: `1px solid ${cat.border}` }}>
+                      <div style={{ fontSize: '15px', fontWeight: '700', color: cat.color, marginBottom: '2px' }}>{cat.label}</div>
+                      <div style={{ fontSize: '11px', color: cat.color, opacity: 0.8, marginBottom: '14px' }}>{cat.desc}</div>
+                      {cat.mitras.length === 0
+                        ? <div style={{ fontSize: '12px', color: '#9ca3af', fontStyle: 'italic' }}>Tidak ada Mitra</div>
+                        : cat.mitras.sort((a,b) => Number(b.fee_per_agent)-Number(a.fee_per_agent)).map(m => (
+                          <div key={m.mitra} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 0', borderBottom: '1px solid rgba(0,0,0,0.05)' }}>
+                            <div>
+                              <div style={{ fontSize: '12px', fontWeight: '600', color: '#111827' }}>{m.mitra.length > 28 ? m.mitra.slice(0,28)+'…' : m.mitra}</div>
+                              <div style={{ fontSize: '10px', color: '#9ca3af', marginTop: '1px' }}>{m.total_agents} agen · {m.momentum === 'accelerating' ? '↑' : m.momentum === 'decelerating' ? '↓' : '→'} {m.momentum}</div>
+                            </div>
+                            <div style={{ textAlign: 'right' }}>
+                              <div style={{ fontSize: '12px', fontWeight: '700', color: cat.color }}>H:{m.health_score}</div>
+                              <div style={{ fontSize: '10px', color: '#9ca3af' }}>Rp {Math.round(Number(m.fee_per_agent)/1000)}rb/agen</div>
+                            </div>
+                          </div>
+                        ))}
+                    </div>
+                  )
+                })}
+              </div>
+              {small.length > 0 && (
+                <div style={{ marginTop: '16px', padding: '12px 16px', backgroundColor: '#f9fafb', borderRadius: '8px', border: '1px solid #e5e7eb' }}>
+                  <div style={{ fontSize: '11px', fontWeight: '600', color: '#9ca3af', marginBottom: '6px' }}>MITRA KECIL (dikecualikan)</div>
+                  <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                    {small.map(m => <span key={m.mitra} style={{ fontSize: '11px', padding: '2px 8px', borderRadius: '99px', backgroundColor: '#fff', border: '1px solid #e5e7eb', color: '#6b7280' }}>{m.mitra.split('(')[0].trim()} ({m.total_agents})</span>)}
+                  </div>
+                </div>
+              )}
+            </div>
+          )
+        })()}
+
+      </div> {/* end maxWidth */}
 
       {/* Drawer */}
       {selected && (
