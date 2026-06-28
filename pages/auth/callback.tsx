@@ -36,7 +36,7 @@ export default function AuthCallback() {
         return
       }
 
-      router.replace('/')
+      router.replace('/analytics/pulse')
     }, 1000)
   }, [router])
 
