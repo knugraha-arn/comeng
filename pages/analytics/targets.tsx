@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import Head from 'next/head'
+import { useRouter } from 'next/router'
 import Layout from '../../components/Layout'
 import { createBrowserClient } from '@supabase/ssr'
 
@@ -112,6 +113,7 @@ function Section({ title, icon, children }: { title: string, icon: string, child
 // ────────────────────────────────────────────────────────────────────────────
 
 export default function TargetsPage() {
+  const router = useRouter()
   const supabase = createBrowserClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
@@ -125,6 +127,20 @@ export default function TargetsPage() {
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
   const [isNew, setIsNew] = useState(true)
+
+  // Auth check — hanya admin/super_admin yang boleh akses
+  useEffect(() => {
+    async function checkRole() {
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session) { router.replace('/login'); return }
+      const { data: userData } = await supabase
+        .from('users').select('role').eq('id', session.user.id).single()
+      if (!['admin', 'super_admin'].includes(userData?.role ?? '')) {
+        router.replace('/unauthorized')
+      }
+    }
+    checkRole()
+  }, [])
 
   useEffect(() => { loadTarget() }, [selectedYear, selectedMonth])
 
