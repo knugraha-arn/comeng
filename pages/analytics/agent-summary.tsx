@@ -248,6 +248,7 @@ export default function AgentSummaryPage() {
   return (
     <Layout>
       <Head><title>Agent Summary — AMARIS</title></Head>
+      <div style={{ maxWidth: '1200px', margin: '0 auto', padding: '32px 24px' }}>
 
       {/* Header */}
       <div style={{ marginBottom: '20px' }}>
@@ -305,12 +306,14 @@ export default function AgentSummaryPage() {
 
       {/* Tabel */}
       <div style={{ border: '1px solid #e5e7eb', borderRadius: '10px', overflow: 'hidden', marginBottom: '16px' }}>
-        <div style={{ display: 'grid', gridTemplateColumns: '6px 1fr 160px 150px 140px 80px', padding: '10px 16px', backgroundColor: '#f9fafb', borderBottom: '1px solid #e5e7eb', fontSize: '11px', fontWeight: '700', color: '#9ca3af', letterSpacing: '0.05em' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: '6px 1fr 160px 140px 90px 100px 80px 80px', padding: '10px 16px', backgroundColor: '#f9fafb', borderBottom: '1px solid #e5e7eb', fontSize: '11px', fontWeight: '700', color: '#9ca3af', letterSpacing: '0.05em' }}>
           <div />
           <div>AGEN</div>
           <div>MITRA</div>
           <div>PIC</div>
-          <div style={{ textAlign: 'center' }}>BUCKET · TREND · W2</div>
+          <div style={{ textAlign: 'center' }}>BUCKET</div>
+          <div style={{ textAlign: 'center' }}>TREND</div>
+          <div style={{ textAlign: 'center' }}>W2</div>
           <div style={{ textAlign: 'right' }}>TRX</div>
         </div>
 
@@ -324,7 +327,7 @@ export default function AgentSummaryPage() {
           const trd = TREND_CFG[a.trend as keyof typeof TREND_CFG] ?? TREND_CFG.consistent
           const w2  = W2_CFG[a.w2_status] ?? W2_CFG.retained
           return (
-            <div key={a.serial_number} style={{ display: 'grid', gridTemplateColumns: '6px 1fr 160px 150px 140px 80px', borderBottom: i < agents.length - 1 ? '1px solid #f3f4f6' : 'none', alignItems: 'center', backgroundColor: '#fff' }}>
+            <div key={a.serial_number} style={{ display: 'grid', gridTemplateColumns: '6px 1fr 160px 140px 90px 100px 80px 80px', borderBottom: i < agents.length - 1 ? '1px solid #f3f4f6' : 'none', alignItems: 'center', backgroundColor: '#fff' }}>
               {/* Strip warna kelompok */}
               <div style={{ width: '6px', height: '100%', backgroundColor: kel.strip, alignSelf: 'stretch' }} />
               {/* Agen */}
@@ -342,11 +345,17 @@ export default function AgentSummaryPage() {
               <div style={{ padding: '11px 8px', fontSize: '11px', color: '#374151' }}>{a.mitra ?? '—'}</div>
               {/* PIC */}
               <div style={{ padding: '11px 8px', fontSize: '11px', color: '#374151' }}>{a.pic ?? '—'}</div>
-              {/* Status chips */}
-              <div style={{ padding: '11px 8px', display: 'flex', gap: '4px', flexWrap: 'wrap', alignItems: 'center' }}>
-                <span style={{ padding: '1px 6px', borderRadius: '99px', fontSize: '10px', fontWeight: '600', backgroundColor: bkt.bg, color: bkt.color, border: `1px solid ${bkt.border}`, whiteSpace: 'nowrap' }}>{bkt.label}</span>
-                <span style={{ padding: '1px 6px', borderRadius: '99px', fontSize: '10px', fontWeight: '600', backgroundColor: trd.bg, color: trd.color, border: `1px solid ${trd.border}`, whiteSpace: 'nowrap' }}>{trd.icon} {trd.label}</span>
-                <span style={{ padding: '1px 6px', borderRadius: '99px', fontSize: '10px', fontWeight: '600', backgroundColor: w2.bg, color: w2.color, whiteSpace: 'nowrap' }}>{w2.label}</span>
+              {/* Bucket */}
+              <div style={{ padding: '11px 8px', textAlign: 'center' }}>
+                <span style={{ padding: '2px 8px', borderRadius: '99px', fontSize: '10px', fontWeight: '600', backgroundColor: bkt.bg, color: bkt.color, border: `1px solid ${bkt.border}`, whiteSpace: 'nowrap' }}>{bkt.label}</span>
+              </div>
+              {/* Trend */}
+              <div style={{ padding: '11px 8px', textAlign: 'center' }}>
+                <span style={{ padding: '2px 8px', borderRadius: '99px', fontSize: '10px', fontWeight: '600', backgroundColor: trd.bg, color: trd.color, border: `1px solid ${trd.border}`, whiteSpace: 'nowrap' }}>{trd.icon} {trd.label}</span>
+              </div>
+              {/* W2 */}
+              <div style={{ padding: '11px 8px', textAlign: 'center' }}>
+                <span style={{ padding: '2px 8px', borderRadius: '99px', fontSize: '10px', fontWeight: '600', backgroundColor: w2.bg, color: w2.color, whiteSpace: 'nowrap' }}>{w2.label}</span>
               </div>
               {/* TRX Transfer */}
               <div style={{ padding: '11px 12px', textAlign: 'right', fontSize: '13px', fontWeight: '600', color: '#374151' }}>
@@ -371,6 +380,8 @@ export default function AgentSummaryPage() {
           </button>
         </div>
       )}
+
+      </div> {/* end wrapper */}
 
       {/* ── Drawer Agent Detail ─────────────────────────────────────────────── */}
       {selectedAgent && (
