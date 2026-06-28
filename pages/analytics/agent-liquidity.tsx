@@ -298,9 +298,9 @@ export default function AgentLiquidityPage() {
         {/* Summary Cards */}
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '12px', marginBottom: '24px' }}>
           {([
-            { status: 'lemah',   count: statusCounts.lemah,   cfg: LIQUIDITY_CONFIG.lemah },
-            { status: 'menurun', count: statusCounts.menurun, cfg: LIQUIDITY_CONFIG.menurun },
             { status: 'kuat',    count: statusCounts.kuat,    cfg: LIQUIDITY_CONFIG.kuat },
+            { status: 'menurun', count: statusCounts.menurun, cfg: LIQUIDITY_CONFIG.menurun },
+            { status: 'lemah',   count: statusCounts.lemah,   cfg: LIQUIDITY_CONFIG.lemah },
           ] as const).map(({ status, count, cfg }) => (
             <button key={status}
               onClick={() => handleStatusChange(status)}
