@@ -60,6 +60,8 @@ interface MitraTarget {
   days_in_month: number
   avg_trx_current_dekade: number
   dekade_number: number
+  ontrack_threshold: number
+  atrisk_threshold: number
 }
 
 const MOMENTUM_CONFIG = {
@@ -384,7 +386,23 @@ export default function MitraPage() {
                   const projected = hasTarget
                     ? (avgD > 0 ? Math.round(tgt.actual_trx_mtd + avgD * (tgt.days_in_month - tgt.days_elapsed)) : Math.round(tgt.actual_trx_mtd / Math.max(tgt.days_elapsed, 1) * tgt.days_in_month))
                     : null
-                  const willAchieve = projected !== null && tgt ? projected >= tgt.target_trx : false
+                  // Threshold dinamis dari am_targets — fallback 90/70
+                  const ontrackThr = hasTarget ? Number(tgt.ontrack_threshold ?? 90) : 90
+                  const atriskThr  = hasTarget ? Number(tgt.atrisk_threshold  ?? 70) : 70
+                  const projectedPct = projected !== null && tgt && tgt.target_trx > 0
+                    ? Math.round(projected / tgt.target_trx * 100) : null
+                  const predLabel = projectedPct === null ? null
+                    : projectedPct >= ontrackThr ? '✅ On track'
+                    : projectedPct >= atriskThr  ? '⚠️ At risk'
+                    : '↓ Jauh dari target'
+                  const predColor = projectedPct === null ? '#9ca3af'
+                    : projectedPct >= ontrackThr ? '#166534'
+                    : projectedPct >= atriskThr  ? '#92400e'
+                    : '#dc2626'
+                  const predBg = projectedPct === null ? '#f9fafb'
+                    : projectedPct >= ontrackThr ? '#f0fdf4'
+                    : projectedPct >= atriskThr  ? '#fefce8'
+                    : '#fef2f2'
                   const pc = pct === null ? '#9ca3af' : pct >= 80 ? '#166534' : pct >= 50 ? '#92400e' : '#dc2626'
                   const pb = pct === null ? '#f9fafb' : pct >= 80 ? '#f0fdf4' : pct >= 50 ? '#fefce8' : '#fef2f2'
                   return (
@@ -400,12 +418,12 @@ export default function MitraPage() {
                       <div style={{ textAlign: 'right', fontSize: '12px', color: '#374151' }}>{hasTarget ? tgt.actual_trx_mtd.toLocaleString('id') : <span style={{ color: '#d1d5db' }}>—</span>}</div>
                       <div style={{ textAlign: 'right', fontSize: '12px', fontWeight: '600', color: '#374151' }}>{hasTarget ? tgt.target_trx.toLocaleString('id') : <span style={{ color: '#d1d5db' }}>—</span>}</div>
                       <div style={{ textAlign: 'center' }}>{hasTarget && pct !== null ? <span style={{ padding: '3px 10px', borderRadius: '99px', fontSize: '12px', fontWeight: '700', backgroundColor: pb, color: pc }}>{pct}%</span> : <span style={{ color: '#d1d5db' }}>—</span>}</div>
-                      <div style={{ textAlign: 'center' }}>{hasTarget && projected !== null ? <span style={{ padding: '3px 8px', borderRadius: '99px', fontSize: '11px', fontWeight: '600', backgroundColor: willAchieve ? '#f0fdf4' : '#fef9c3', color: willAchieve ? '#166534' : '#92400e' }}>{willAchieve ? '✅ On track' : '⚠️ At risk'}</span> : <span style={{ color: '#d1d5db' }}>—</span>}</div>
+                      <div style={{ textAlign: 'center' }}>{hasTarget && predLabel ? <span style={{ padding: '3px 8px', borderRadius: '99px', fontSize: '11px', fontWeight: '600', backgroundColor: predBg, color: predColor }}>{predLabel}</span> : <span style={{ color: '#d1d5db' }}>—</span>}</div>
                     </div>
                   )
                 })}
               </div>
-              {targetProgress.length > 0 && <div style={{ marginTop: '8px', fontSize: '11px', color: '#9ca3af', textAlign: 'right' }}>Hari ke-{targetProgress[0].days_elapsed} dari {targetProgress[0].days_in_month} · Proyeksi Dekade {targetProgress[0].dekade_number}-based</div>}
+              {targetProgress.length > 0 && <div style={{ marginTop: '8px', fontSize: '11px', color: '#9ca3af', textAlign: 'right' }}>Hari ke-{targetProgress[0].days_elapsed} dari {targetProgress[0].days_in_month} · Dekade {targetProgress[0].dekade_number} · On track ≥{targetProgress[0].ontrack_threshold}% · At risk {targetProgress[0].atrisk_threshold}–{targetProgress[0].ontrack_threshold}%</div>}
             </div>
           )
         })()}
