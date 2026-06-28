@@ -126,7 +126,10 @@ export default function Layout({ children, title }: { children: React.ReactNode;
   )
 
   function NavItem({ href, label, icon }: { href: string, label: string, icon: string }) {
-    const isActive = router.pathname === href || (href !== '/' && href !== '/analytics' && router.pathname.startsWith(href))
+    // isActive: exact match untuk semua halaman
+    // startsWith hanya untuk route yang punya sub-route dinamis (/ranger/[id])
+    const isActive = router.pathname === href ||
+      (href === '/ranger' && router.pathname.startsWith('/ranger/'))
     return (
       <div onClick={() => router.push(href)}
         style={{
