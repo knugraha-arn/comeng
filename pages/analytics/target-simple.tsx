@@ -383,46 +383,6 @@ export default function TargetSimplePage() {
                 </div>
               </div>
 
-              {/* Threshold Prediksi Target Mitra */}
-              <div style={{ padding: '14px 16px', backgroundColor: '#f9fafb', borderRadius: '10px', border: '1px solid #e5e7eb' }}>
-                <div style={{ fontSize: '13px', fontWeight: '600', color: '#111827', marginBottom: '4px', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  Threshold Prediksi Target Mitra
-                  <span {...tip('Menentukan label prediksi di tab Achievement Kekuatan Mitra dan tab Target Mitra. Proyeksi ≥ On Track = ✅, antara At Risk dan On Track = ⚠️, di bawah At Risk = ↓.')}
-                    style={{ fontSize: '11px', color: '#9ca3af', cursor: 'default' }}>ⓘ</span>
-                </div>
-                <div style={{ fontSize: '11px', color: '#6b7280', marginBottom: '12px' }}>
-                  Proyeksi akhir bulan dibandingkan dengan threshold ini untuk menentukan status prediksi.
-                </div>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', padding: '10px 12px', backgroundColor: '#fff', borderRadius: '8px', border: '1px solid #e5e7eb' }}>
-                    <div>
-                      <div style={{ fontSize: '12px', fontWeight: '600', color: '#166534' }}>✅ On Track</div>
-                      <div style={{ fontSize: '10px', color: '#9ca3af' }}>Proyeksi ≥ nilai ini</div>
-                    </div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                      <input type="number" min={50} max={100} value={ontrackPct}
-                        onChange={e => setOntrackPct(Math.max(50, Math.min(100, Number(e.target.value))))}
-                        style={{ width: '55px', padding: '6px 8px', borderRadius: '6px', border: '1px solid #e5e7eb', fontSize: '14px', fontWeight: '700', color: '#166534', textAlign: 'center', outline: 'none' }} />
-                      <span style={{ fontSize: '12px', color: '#6b7280' }}>%</span>
-                    </div>
-                  </div>
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', padding: '10px 12px', backgroundColor: '#fff', borderRadius: '8px', border: '1px solid #e5e7eb' }}>
-                    <div>
-                      <div style={{ fontSize: '12px', fontWeight: '600', color: '#92400e' }}>⚠️ At Risk</div>
-                      <div style={{ fontSize: '10px', color: '#9ca3af' }}>Proyeksi antara ini & On Track</div>
-                    </div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                      <input type="number" min={1} max={99} value={atriskPct}
-                        onChange={e => setAtriskPct(Math.max(1, Math.min(99, Number(e.target.value))))}
-                        style={{ width: '55px', padding: '6px 8px', borderRadius: '6px', border: '1px solid #e5e7eb', fontSize: '14px', fontWeight: '700', color: '#92400e', textAlign: 'center', outline: 'none' }} />
-                      <span style={{ fontSize: '12px', color: '#6b7280' }}>%</span>
-                    </div>
-                  </div>
-                </div>
-                <div style={{ marginTop: '8px', fontSize: '11px', color: '#9ca3af' }}>
-                  Di bawah {atriskPct}% → ↓ Jauh dari target &nbsp;·&nbsp; {atriskPct}–{ontrackPct}% → ⚠️ At risk &nbsp;·&nbsp; ≥ {ontrackPct}% → ✅ On track
-                </div>
-              </div>
             </div>
 
             {/* Derived Targets */}
@@ -658,6 +618,49 @@ export default function TargetSimplePage() {
                 Hari berjalan: {mitraProgress[0].days_elapsed} dari {mitraProgress[0].days_in_month} hari
               </div>
             )}
+
+            {/* Threshold Prediksi */}
+            <div style={{ marginTop: '20px', padding: '14px 16px', backgroundColor: '#f9fafb', borderRadius: '10px', border: '1px solid #e5e7eb' }}>
+              <div style={{ fontSize: '13px', fontWeight: '600', color: '#111827', marginBottom: '4px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                Threshold Prediksi
+                <span style={{ fontSize: '11px', color: '#9ca3af', cursor: 'default' }} title="Menentukan label prediksi di kolom PREDIKSI dan di tab Achievement Kekuatan Mitra. Proyeksi ≥ On Track = ✅, antara At Risk dan On Track = ⚠️, di bawah At Risk = ↓.">ⓘ</span>
+              </div>
+              <div style={{ fontSize: '11px', color: '#6b7280', marginBottom: '12px' }}>
+                Proyeksi akhir bulan (dekade-based) dibandingkan threshold ini untuk label prediksi. Simpan bersama target platform.
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', padding: '10px 12px', backgroundColor: '#fff', borderRadius: '8px', border: '1px solid #e5e7eb' }}>
+                  <div>
+                    <div style={{ fontSize: '12px', fontWeight: '600', color: '#166534' }}>✅ On Track</div>
+                    <div style={{ fontSize: '10px', color: '#9ca3af' }}>Proyeksi ≥ nilai ini</div>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                    <input type="number" min={50} max={100} value={ontrackPct}
+                      onChange={e => setOntrackPct(Math.max(50, Math.min(100, Number(e.target.value))))}
+                      style={{ width: '55px', padding: '6px 8px', borderRadius: '6px', border: '1px solid #e5e7eb', fontSize: '14px', fontWeight: '700', color: '#166534', textAlign: 'center', outline: 'none' }} />
+                    <span style={{ fontSize: '12px', color: '#6b7280' }}>%</span>
+                  </div>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', padding: '10px 12px', backgroundColor: '#fff', borderRadius: '8px', border: '1px solid #e5e7eb' }}>
+                  <div>
+                    <div style={{ fontSize: '12px', fontWeight: '600', color: '#92400e' }}>⚠️ At Risk</div>
+                    <div style={{ fontSize: '10px', color: '#9ca3af' }}>Proyeksi antara ini & On Track</div>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                    <input type="number" min={1} max={99} value={atriskPct}
+                      onChange={e => setAtriskPct(Math.max(1, Math.min(99, Number(e.target.value))))}
+                      style={{ width: '55px', padding: '6px 8px', borderRadius: '6px', border: '1px solid #e5e7eb', fontSize: '14px', fontWeight: '700', color: '#92400e', textAlign: 'center', outline: 'none' }} />
+                    <span style={{ fontSize: '12px', color: '#6b7280' }}>%</span>
+                  </div>
+                </div>
+              </div>
+              <div style={{ marginTop: '8px', fontSize: '11px', color: '#9ca3af' }}>
+                Di bawah {atriskPct}% → ↓ Jauh dari target &nbsp;·&nbsp; {atriskPct}–{ontrackPct}% → ⚠️ At risk &nbsp;·&nbsp; ≥ {ontrackPct}% → ✅ On track
+              </div>
+              <div style={{ marginTop: '8px', fontSize: '11px', color: '#6b7280' }}>
+                💡 Perubahan threshold disimpan saat klik "Simpan Target" di tab Target Platform.
+              </div>
+            </div>
           </div>
         )}
 
