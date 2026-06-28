@@ -54,6 +54,8 @@ export default function TargetSimplePage() {
   const [monthlyFee, setMonthlyFee] = useState<number | null>(null)
   const [rawFee, setRawFee] = useState('')
   const [agentGapThreshold, setAgentGapThreshold] = useState<number>(5)
+  const [ontrackPct, setOntrackPct]               = useState<number>(90)
+  const [atriskPct, setAtriskPct]                 = useState<number>(70)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
@@ -200,6 +202,8 @@ export default function TargetSimplePage() {
         setMonthlyFee(data.monthly_fee)
         setRawFee(data.monthly_fee.toLocaleString('id-ID'))
         setAgentGapThreshold(data.agent_gap_threshold ?? 5)
+        setOntrackPct(data.achievement_ontrack_pct ?? 90)
+        setAtriskPct(data.achievement_atrisk_pct ?? 70)
         setIsNew(false)
       } else {
         setMonthlyFee(null)
@@ -257,7 +261,9 @@ export default function TargetSimplePage() {
           daily_transfer_trx:   dailyTrx,
           daily_fee:            dailyFee,
           daily_active_agents:  dailyActiveAgents,
-          agent_gap_threshold:  agentGapThreshold,
+          agent_gap_threshold:        agentGapThreshold,
+          achievement_ontrack_pct:    ontrackPct,
+          achievement_atrisk_pct:     atriskPct,
         }),
       })
 
@@ -358,7 +364,7 @@ export default function TargetSimplePage() {
               <div style={{ fontSize: '14px', fontWeight: '700', color: '#111827', marginBottom: '16px' }}>⚙️ Pengaturan Agen</div>
 
               {/* Gap Threshold */}
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 16px', backgroundColor: '#f9fafb', borderRadius: '10px', border: '1px solid #e5e7eb' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 16px', backgroundColor: '#f9fafb', borderRadius: '10px', border: '1px solid #e5e7eb', marginBottom: '10px' }}>
                 <div>
                   <div style={{ fontSize: '13px', fontWeight: '600', color: '#111827', display: 'flex', alignItems: 'center', gap: '6px' }}>
                     Threshold Absen Agen
@@ -370,14 +376,51 @@ export default function TargetSimplePage() {
                   </div>
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <input
-                    type="number"
-                    min={1} max={14}
-                    value={agentGapThreshold}
+                  <input type="number" min={1} max={14} value={agentGapThreshold}
                     onChange={e => setAgentGapThreshold(Math.max(1, Math.min(14, Number(e.target.value))))}
-                    style={{ width: '60px', padding: '8px 12px', borderRadius: '8px', border: '1px solid #e5e7eb', fontSize: '16px', fontWeight: '700', color: '#111827', textAlign: 'center', outline: 'none' }}
-                  />
+                    style={{ width: '60px', padding: '8px 12px', borderRadius: '8px', border: '1px solid #e5e7eb', fontSize: '16px', fontWeight: '700', color: '#111827', textAlign: 'center', outline: 'none' }} />
                   <span style={{ fontSize: '13px', color: '#6b7280' }}>hari</span>
+                </div>
+              </div>
+
+              {/* Threshold Prediksi Target Mitra */}
+              <div style={{ padding: '14px 16px', backgroundColor: '#f9fafb', borderRadius: '10px', border: '1px solid #e5e7eb' }}>
+                <div style={{ fontSize: '13px', fontWeight: '600', color: '#111827', marginBottom: '4px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  Threshold Prediksi Target Mitra
+                  <span {...tip('Menentukan label prediksi di tab Achievement Kekuatan Mitra dan tab Target Mitra. Proyeksi ≥ On Track = ✅, antara At Risk dan On Track = ⚠️, di bawah At Risk = ↓.')}
+                    style={{ fontSize: '11px', color: '#9ca3af', cursor: 'default' }}>ⓘ</span>
+                </div>
+                <div style={{ fontSize: '11px', color: '#6b7280', marginBottom: '12px' }}>
+                  Proyeksi akhir bulan dibandingkan dengan threshold ini untuk menentukan status prediksi.
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', padding: '10px 12px', backgroundColor: '#fff', borderRadius: '8px', border: '1px solid #e5e7eb' }}>
+                    <div>
+                      <div style={{ fontSize: '12px', fontWeight: '600', color: '#166534' }}>✅ On Track</div>
+                      <div style={{ fontSize: '10px', color: '#9ca3af' }}>Proyeksi ≥ nilai ini</div>
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                      <input type="number" min={50} max={100} value={ontrackPct}
+                        onChange={e => setOntrackPct(Math.max(50, Math.min(100, Number(e.target.value))))}
+                        style={{ width: '55px', padding: '6px 8px', borderRadius: '6px', border: '1px solid #e5e7eb', fontSize: '14px', fontWeight: '700', color: '#166534', textAlign: 'center', outline: 'none' }} />
+                      <span style={{ fontSize: '12px', color: '#6b7280' }}>%</span>
+                    </div>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', padding: '10px 12px', backgroundColor: '#fff', borderRadius: '8px', border: '1px solid #e5e7eb' }}>
+                    <div>
+                      <div style={{ fontSize: '12px', fontWeight: '600', color: '#92400e' }}>⚠️ At Risk</div>
+                      <div style={{ fontSize: '10px', color: '#9ca3af' }}>Proyeksi antara ini & On Track</div>
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                      <input type="number" min={1} max={99} value={atriskPct}
+                        onChange={e => setAtriskPct(Math.max(1, Math.min(99, Number(e.target.value))))}
+                        style={{ width: '55px', padding: '6px 8px', borderRadius: '6px', border: '1px solid #e5e7eb', fontSize: '14px', fontWeight: '700', color: '#92400e', textAlign: 'center', outline: 'none' }} />
+                      <span style={{ fontSize: '12px', color: '#6b7280' }}>%</span>
+                    </div>
+                  </div>
+                </div>
+                <div style={{ marginTop: '8px', fontSize: '11px', color: '#9ca3af' }}>
+                  Di bawah {atriskPct}% → ↓ Jauh dari target &nbsp;·&nbsp; {atriskPct}–{ontrackPct}% → ⚠️ At risk &nbsp;·&nbsp; ≥ {ontrackPct}% → ✅ On track
                 </div>
               </div>
             </div>
