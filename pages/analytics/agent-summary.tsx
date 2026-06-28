@@ -17,6 +17,7 @@ interface AgentSummaryRow {
   prioritas: string
   active_days_14: number
   total_trx_14: number
+  trx_transfer_14: number
   window_start: string
   window_end: string
 }
@@ -174,6 +175,7 @@ export default function AgentSummaryPage() {
   }
 
   async function exportCSV() {
+    // Export SEMUA data sesuai filter yang aktif, limit 9999
     const { data } = await supabase.rpc('get_agent_reach_out', {
       p_mitra: filterMitra,
       p_kelompok: filterKel,
@@ -182,43 +184,47 @@ export default function AgentSummaryPage() {
     })
     if (!data || data.length === 0) return
 
+    // Sort untuk CSV: Mitra A-Z → Kelompok (Sehat → Baru Aktif → Kurang Sehat) → TRX Transfer DESC
+    const KEL_ORDER: Record<string, number> = { sehat: 0, baru_aktif: 1, kurang_sehat: 2 }
+    const sorted = [...data].sort((a: AgentSummaryRow, b: AgentSummaryRow) => {
+      const mitraComp = (a.mitra ?? '').localeCompare(b.mitra ?? '', 'id')
+      if (mitraComp !== 0) return mitraComp
+      const kelComp = (KEL_ORDER[a.kelompok] ?? 9) - (KEL_ORDER[b.kelompok] ?? 9)
+      if (kelComp !== 0) return kelComp
+      return b.trx_transfer_14 - a.trx_transfer_14
+    })
+
     const KELOMPOK_LABEL: Record<string, string> = {
-      sehat: 'SEHAT', baru_aktif: 'BARU AKTIF', kurang_sehat: 'KURANG SEHAT',
-    }
-    const PRIO_LABEL: Record<string, string> = {
-      tinggi: '🔴 Tinggi', sedang: '🟡 Sedang', dampingi: '🔵 Dampingi', '-': '-',
+      sehat: 'Sehat', baru_aktif: 'Baru Aktif', kurang_sehat: 'Kurang Sehat',
     }
 
     const header = [
       `# Agent Summary — Data 14H dari ${fmtDate(data[0].window_start)} sampai ${fmtDate(data[0].window_end)}`,
       `# Diekspor: ${new Date().toLocaleString('id-ID')}`,
-      `# Filter Mitra: ${filterMitra || 'Semua'} | Filter Kelompok: ${filterKel || 'Semua'}`,
+      `# Filter Mitra: ${filterMitra || 'Semua'} | Filter Kelompok: ${filterKel ? KELOMPOK_LABEL[filterKel] : 'Semua'}`,
+      `# Total: ${sorted.length} agen`,
       '',
-      'No,Nama Agen,Serial Number,Mitra,PIC,Bucket,Trend,Liquidity,W2 Status,Kelompok,Prioritas,Hari Aktif 14H,Total TRX 14H',
+      'No,Nama Agen,Serial Number,Mitra,PIC,Status,TRX Transfer 14H',
     ]
 
-    const rows = data.map((a: AgentSummaryRow, i: number) => [
+    const rows = sorted.map((a: AgentSummaryRow, i: number) => [
       i + 1,
-      `"${a.merchant_name ?? ''}"`,
+      `"${(a.merchant_name ?? '').replace(/"/g, '""')}"`,
       a.serial_number,
-      `"${a.mitra ?? ''}"`,
-      `"${a.pic ?? ''}"`,
-      a.bucket,
-      a.trend,
-      a.liquidity_status,
-      a.w2_status,
+      `"${(a.mitra ?? '').replace(/"/g, '""')}"`,
+      `"${(a.pic ?? '').replace(/"/g, '""')}"`,
       KELOMPOK_LABEL[a.kelompok] ?? a.kelompok,
-      PRIO_LABEL[a.prioritas]   ?? a.prioritas,
-      a.active_days_14,
-      a.total_trx_14,
+      a.trx_transfer_14,
     ].join(','))
 
-    const csv   = [...header, ...rows].join('\n')
-    const blob  = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
-    const url   = URL.createObjectURL(blob)
-    const link  = document.createElement('a')
-    link.href   = url
-    link.download = `agent-summary-${filterMitra || 'semua'}-${new Date().toISOString().slice(0, 10)}.csv`
+    const csv  = [...header, ...rows].join('\n')
+    const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' }) // BOM untuk Excel
+    const url  = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href  = url
+    const kelLabel = filterKel ? `-${KELOMPOK_LABEL[filterKel].toLowerCase().replace(' ', '-')}` : ''
+    const mitraLabel = filterMitra ? `-${filterMitra.split(' ')[0].toLowerCase()}` : ''
+    link.download = `agent-summary${mitraLabel}${kelLabel}-${new Date().toISOString().slice(0, 10)}.csv`
     link.click()
     URL.revokeObjectURL(url)
   }
