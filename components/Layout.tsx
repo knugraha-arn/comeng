@@ -28,6 +28,7 @@ const adminNavItems = [
   { href: '/upload',                   label: 'Upload WAG', icon: '◈',            strictAdmin: false },
   { href: '/analytics/target-simple',  label: 'Target Bisnis',       icon: '◎',  strictAdmin: true },
   { href: '/config',                   label: 'Konfigurasi',         icon: '◈',  strictAdmin: false },
+  { href: '/admin/usage',              label: 'Usage Monitor',       icon: '◈',  strictAdmin: true },
 ]
 
 // Cache di module level — persist selama session browser, tidak reset saat ganti halaman

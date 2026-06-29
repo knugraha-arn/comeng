@@ -59,6 +59,8 @@ export default function ConfigPage() {
   const [rangerDisplayName, setRangerDisplayName] = useState('')
   const [rangerPhone, setRangerPhone] = useState('')
   const [rangerWagId, setRangerWagId] = useState('')
+  const [rangerPicName, setRangerPicName] = useState('')
+  const [picNameList, setPicNameList] = useState<string[]>([])
   const [observerDisplayName, setObserverDisplayName] = useState('')
   const [observerNote, setObserverNote] = useState('')
   const [observerWagId, setObserverWagId] = useState('')
@@ -68,6 +70,10 @@ export default function ConfigPage() {
     loadSkill()
     supabase.auth.getSession().then(({ data: { session } }) => {
       if (session?.user?.email) setCurrentUserEmail(session.user.email)
+    })
+    // Load PIC list dari am_pic_config
+    supabase.from('am_pic_config').select('pic_name').order('pic_name').then(({ data }) => {
+      if (data) setPicNameList([...new Set(data.map((r: { pic_name: string }) => r.pic_name))].sort())
     })
   }, [])
 
@@ -151,12 +157,13 @@ export default function ConfigPage() {
       display_name: rangerDisplayName.trim(),
       phone_number: rangerPhone.trim(),
       wag_id: rangerWagId,
+      pic_name: rangerPicName || null,
       status: 'active',
     })
     setLoading(false)
     if (error) { showMsg(error.message, 'error'); return }
     showMsg('Ranger berhasil ditambahkan', 'success')
-    setRangerFullName(''); setRangerDisplayName(''); setRangerPhone(''); setRangerWagId('')
+    setRangerFullName(''); setRangerDisplayName(''); setRangerPhone(''); setRangerWagId(''); setRangerPicName('')
     setShowRangerForm(false); fetchAll()
   }
 
@@ -465,6 +472,15 @@ export default function ConfigPage() {
                     <option value="">— Pilih WAG —</option>
                     {wags.filter(w => w.status === 'active').map(w => (
                       <option key={w.id} value={w.id}>{w.name}</option>
+                    ))}
+                  </select>
+                </div>
+                <div style={{ gridColumn: '1 / -1' }}>
+                  <div style={{ fontSize: '11px', color: '#999', marginBottom: '5px' }}>PIC yang bertanggung jawab</div>
+                  <select style={inputStyle} value={rangerPicName} onChange={e => setRangerPicName(e.target.value)}>
+                    <option value="">— Pilih PIC (opsional) —</option>
+                    {picNameList.map(p => (
+                      <option key={p} value={p}>{p}</option>
                     ))}
                   </select>
                 </div>

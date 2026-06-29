@@ -1,7 +1,13 @@
 import type { AppProps } from 'next/app'
 import Head from 'next/head'
+import { useTracking } from '@/lib/useTracking'
 
-export default function App({ Component, pageProps }: AppProps) {
+function TrackingWrapper({ Component, pageProps }: AppProps) {
+  useTracking() // Track page_view + duration di setiap halaman
+  return <Component {...pageProps} />
+}
+
+export default function App(props: AppProps) {
   return (
     <>
       <Head>
@@ -10,7 +16,7 @@ export default function App({ Component, pageProps }: AppProps) {
         <link rel="icon" href="/LogoAmaris.png" />
         <link rel="apple-touch-icon" href="/LogoAmaris.png" />
       </Head>
-      <Component {...pageProps} />
+      <TrackingWrapper {...props} />
     </>
   )
 }
