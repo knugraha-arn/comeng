@@ -91,7 +91,12 @@ export default function Layout({ children, title }: { children: React.ReactNode;
 
       setRole(sessionRole)
 
-      if (!userData?.is_approved) {
+      // AMARIS berisi data transaksi/fee yang confidential — akses dibatasi
+      // bukan cuma is_approved, tapi juga role harus admin/ceo. Role lain
+      // (misal head_marketing) gak boleh masuk sama sekali, bukan cuma
+      // gak lihat menu admin.
+      const allowedRoles = ['admin', 'ceo']
+      if (!userData?.is_approved || !allowedRoles.includes(userData?.role ?? '')) {
         sessionApproved = false
         router.replace('/unauthorized')
         return
@@ -116,7 +121,9 @@ export default function Layout({ children, title }: { children: React.ReactNode;
   const now = new Date()
   const dateStr = now.toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })
 
-  const isSuperAdmin = true // TODO: restore role check after RLS fix
+  // Section ADMIN cuma tampil utk admin & ceo. Item strictAdmin (Target Bisnis,
+  // Usage Monitor) di-filter lebih lanjut di bawah jadi khusus ceo doang.
+  const isSuperAdmin = ['admin', 'ceo'].includes(role)
 
   if (!ready) return (
     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '100vh', fontFamily: 'system-ui, sans-serif', background: '#F8F9FB' }}>
@@ -198,7 +205,7 @@ export default function Layout({ children, title }: { children: React.ReactNode;
             <>
               <SectionLabel label="ADMIN" />
               {adminNavItems
-                .filter(item => !item.strictAdmin || ['admin', 'super_admin'].includes(role))
+                .filter(item => !item.strictAdmin || role === 'ceo')
                 .map(item => <NavItem key={item.href} {...item} />)}
             </>
           )}
