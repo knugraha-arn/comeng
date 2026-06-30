@@ -83,6 +83,8 @@ export default function TargetSimplePage() {
     baseline_trx: number
     avg_trx_current_dekade: number
     dekade_number: number
+    ontrack_threshold: number
+    atrisk_threshold: number
   }
   type MitraBaseline = {
     mitra: string
@@ -105,6 +107,8 @@ export default function TargetSimplePage() {
   const [deletingMitra, setDeletingMitra]   = useState('')
   const [snapshotting, setSnapshotting]     = useState(false)
   const [snapshotDone, setSnapshotDone]     = useState(false)
+  const [savingThreshold, setSavingThreshold] = useState(false)
+  const [savedThreshold, setSavedThreshold]   = useState(false)
 
   // Mitra yang sudah ada target (untuk exclude dari dropdown)
   const mitraWithTarget = mitraProgress.map(p => p.mitra)
@@ -190,6 +194,36 @@ export default function TargetSimplePage() {
     } catch (err) {
       console.error('Snapshot error:', err)
     } finally { setSnapshotting(false) }
+  }
+
+  // Simpan threshold prediksi (on track / at risk) langsung dari tab Mitra —
+  // sebelumnya cuma bisa disimpan lewat tombol "Simpan Target" di tab Platform,
+  // yang juga ke-disable kalau monthly_fee belum diisi. Endpoint upsert hanya
+  // mengubah kolom yang dikirim, jadi monthly_fee & field lain di am_targets
+  // tidak ikut tertimpa.
+  async function saveThreshold() {
+    setSavingThreshold(true)
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session) return
+
+      const res = await fetch('/api/analytics/targets', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
+        body: JSON.stringify({
+          period_year:             selectedYear,
+          period_month:            selectedMonth,
+          achievement_ontrack_pct: ontrackPct,
+          achievement_atrisk_pct:  atriskPct,
+        }),
+      })
+
+      if (res.ok) {
+        setSavedThreshold(true)
+        setTimeout(() => setSavedThreshold(false), 2000)
+        await loadMitraData() // refresh tabel — RPC baca threshold langsung dari am_targets
+      }
+    } finally { setSavingThreshold(false) }
   }
 
   async function loadTarget() {
@@ -461,9 +495,18 @@ export default function TargetSimplePage() {
 
             {/* Threshold Prediksi — di antara period selector dan Target TRX */}
             <div style={{ marginBottom: '20px', padding: '14px 16px', backgroundColor: '#f9fafb', borderRadius: '10px', border: '1px solid #e5e7eb' }}>
-              <div style={{ fontSize: '13px', fontWeight: '600', color: '#111827', marginBottom: '4px', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                Threshold Prediksi
-                <span style={{ fontSize: '11px', color: '#9ca3af', cursor: 'default' }} title="Menentukan label prediksi di kolom PREDIKSI dan di tab Achievement Kekuatan Mitra. Proyeksi ≥ On Track = ✅, antara At Risk dan On Track = ⚠️, di bawah At Risk = ↓.">ⓘ</span>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
+                <div style={{ fontSize: '13px', fontWeight: '600', color: '#111827', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  Threshold Prediksi
+                  <span style={{ fontSize: '11px', color: '#9ca3af', cursor: 'default' }} title="Menentukan label prediksi di kolom PREDIKSI dan di tab Achievement Kekuatan Mitra. Proyeksi ≥ On Track = ✅, antara At Risk dan On Track = ⚠️, di bawah At Risk = ↓.">ⓘ</span>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <button onClick={saveThreshold} disabled={savingThreshold}
+                    style={{ padding: '6px 14px', borderRadius: '7px', border: 'none', backgroundColor: savingThreshold ? '#e5e7eb' : '#0344D8', color: savingThreshold ? '#9ca3af' : '#fff', fontSize: '12px', fontWeight: '600', cursor: savingThreshold ? 'not-allowed' : 'pointer' }}>
+                    {savingThreshold ? 'Menyimpan...' : 'Simpan'}
+                  </button>
+                  {savedThreshold && <span style={{ fontSize: '11px', color: '#16a34a', fontWeight: '600' }}>✅ Tersimpan</span>}
+                </div>
               </div>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '8px' }}>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', padding: '10px 12px', backgroundColor: '#fff', borderRadius: '8px', border: '1px solid #e5e7eb' }}>
@@ -492,8 +535,7 @@ export default function TargetSimplePage() {
                 </div>
               </div>
               <div style={{ fontSize: '11px', color: '#9ca3af' }}>
-                Di bawah {atriskPct}% → ↓ Jauh dari target &nbsp;·&nbsp; {atriskPct}–{ontrackPct}% → ⚠️ At risk &nbsp;·&nbsp; ≥ {ontrackPct}% → ✅ On track &nbsp;·&nbsp;
-                <span style={{ color: '#6b7280' }}>💡 Disimpan bersama tombol "Simpan Target" di tab Platform</span>
+                Di bawah {atriskPct}% → ↓ Jauh dari target &nbsp;·&nbsp; {atriskPct}–{ontrackPct}% → ⚠️ At risk &nbsp;·&nbsp; ≥ {ontrackPct}% → ✅ On track
               </div>
             </div>
 
@@ -612,7 +654,20 @@ export default function TargetSimplePage() {
                   const projected = p.avg_trx_current_dekade > 0
                     ? Math.round(p.actual_trx_mtd + p.avg_trx_current_dekade * (p.days_in_month - p.days_elapsed))
                     : Math.round(p.actual_trx_mtd / Math.max(p.days_elapsed, 1) * p.days_in_month)
-                  const willAchieve = projected >= p.target_trx
+                  // 3-tier prediksi — pakai threshold tersimpan di am_targets (p.ontrack_threshold /
+                  // p.atrisk_threshold), bukan angka mentah projected >= target_trx, supaya sesuai
+                  // dengan threshold yang di-set admin di kotak Threshold Prediksi.
+                  const projectedPct = p.target_trx > 0 ? (projected / p.target_trx) * 100 : 0
+                  const ontrackThreshold = p.ontrack_threshold != null ? Number(p.ontrack_threshold) : 90
+                  const atriskThreshold  = p.atrisk_threshold  != null ? Number(p.atrisk_threshold)  : 70
+                  const prediction: 'on_track' | 'at_risk' | 'far' =
+                    projectedPct >= ontrackThreshold ? 'on_track' :
+                    projectedPct >= atriskThreshold  ? 'at_risk'  : 'far'
+                  const predictionCfg = {
+                    on_track: { label: '✅ On track',          bg: '#f0fdf4', color: '#166534' },
+                    at_risk:  { label: '⚠️ At risk',            bg: '#fef9c3', color: '#92400e' },
+                    far:      { label: '↓ Jauh dari target',   bg: '#fef2f2', color: '#dc2626' },
+                  }[prediction]
                   return (
                     <div key={p.mitra} style={{ display: 'grid', gridTemplateColumns: '1fr 120px 120px 100px 90px 28px', padding: '12px 16px', borderBottom: i < mitraProgress.length - 1 ? '1px solid #f3f4f6' : 'none', alignItems: 'center', backgroundColor: '#fff' }}>
                       <div>
@@ -637,8 +692,8 @@ export default function TargetSimplePage() {
                         </span>
                       </div>
                       <div style={{ textAlign: 'center' }}>
-                        <span style={{ padding: '3px 8px', borderRadius: '99px', fontSize: '11px', fontWeight: '600', backgroundColor: willAchieve ? '#f0fdf4' : '#fef9c3', color: willAchieve ? '#166534' : '#92400e' }}>
-                          {willAchieve ? '✅ On track' : '⚠️ At risk'}
+                        <span style={{ padding: '3px 8px', borderRadius: '99px', fontSize: '11px', fontWeight: '600', backgroundColor: predictionCfg.bg, color: predictionCfg.color }}>
+                          {predictionCfg.label}
                         </span>
                       </div>
                       <button onClick={() => deleteMitraTarget(p.mitra)} disabled={deletingMitra === p.mitra}
