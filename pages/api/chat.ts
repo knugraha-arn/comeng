@@ -1,5 +1,11 @@
 import type { NextApiRequest, NextApiResponse } from 'next'
+import { createClient } from '@supabase/supabase-js'
 import { buildContext } from '@/lib/context-builder'
+
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_ROLE_KEY!
+)
 
 export const config = {
   maxDuration: 30,
@@ -45,28 +51,23 @@ Data AMARIS saat ini:
 
 {{CONTEXT}}`
 
-// Simple in-memory rate limiter per session
-const rateLimiter = new Map<string, { count: number; resetAt: number }>()
 const MAX_PER_DAY = 30
 
-function checkRateLimit(userId: string): { allowed: boolean; remaining: number } {
-  const now = Date.now()
-  const midnight = new Date()
-  midnight.setHours(24, 0, 0, 0)
-  const resetAt = midnight.getTime()
-
-  const existing = rateLimiter.get(userId)
-  if (!existing || existing.resetAt < now) {
-    rateLimiter.set(userId, { count: 1, resetAt })
-    return { allowed: true, remaining: MAX_PER_DAY - 1 }
+// Rate limit persisten via Supabase RPC (increment_chat_usage) — sebelumnya
+// pakai Map in-memory yang gak reliable di Vercel serverless (reset tiap
+// cold start, gak shared antar instance, jadi kuota 30/hari gak pernah
+// benar-benar ditegakkan secara konsisten).
+async function checkRateLimit(identifier: string): Promise<{ allowed: boolean; remaining: number }> {
+  const { data, error } = await supabase.rpc('increment_chat_usage', {
+    p_identifier: identifier,
+    p_max: MAX_PER_DAY,
+  })
+  if (error) {
+    console.error('[chat] rate limit check failed, fail-open:', error.message)
+    return { allowed: true, remaining: MAX_PER_DAY } // fail-open — jangan block chat gara2 RPC error
   }
-
-  if (existing.count >= MAX_PER_DAY) {
-    return { allowed: false, remaining: 0 }
-  }
-
-  existing.count += 1
-  return { allowed: true, remaining: MAX_PER_DAY - existing.count }
+  const row = Array.isArray(data) ? data[0] : data
+  return { allowed: row?.allowed ?? true, remaining: row?.remaining ?? 0 }
 }
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
@@ -79,7 +80,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   // Rate limit check
   const uid = userId || req.headers['x-forwarded-for'] || 'anonymous'
-  const { allowed, remaining } = checkRateLimit(uid as string)
+  const { allowed, remaining } = await checkRateLimit(uid as string)
   if (!allowed) {
     return res.status(429).json({ error: 'Batas pertanyaan harian (30) sudah tercapai. Coba lagi besok.' })
   }
