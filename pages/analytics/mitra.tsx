@@ -368,11 +368,12 @@ export default function MitraPage() {
                 Achievement TRX Transfer vs target {bulan} {tahun}. Semua Mitra ditampilkan — yang belum ada target ditandai abu-abu.
               </div>
               <div style={{ border: '1px solid #e5e7eb', borderRadius: '10px', overflow: 'hidden' }}>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 70px 100px 100px 110px 110px', padding: '10px 16px', backgroundColor: '#f9fafb', borderBottom: '1px solid #e5e7eb', fontSize: '11px', fontWeight: '700', color: '#9ca3af', letterSpacing: '0.05em' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 70px 100px 100px 110px 110px 110px', padding: '10px 16px', backgroundColor: '#f9fafb', borderBottom: '1px solid #e5e7eb', fontSize: '11px', fontWeight: '700', color: '#9ca3af', letterSpacing: '0.05em' }}>
                   <div>MITRA</div>
                   <div style={{ textAlign: 'right' }}>AGEN</div>
                   <div style={{ textAlign: 'right' }}>TRX MTD</div>
                   <div style={{ textAlign: 'right' }}>TARGET</div>
+                  <div style={{ textAlign: 'right' }}>KURANG TRX</div>
                   <div style={{ textAlign: 'center' }}>ACHIEVEMENT</div>
                   <div style={{ textAlign: 'center' }}>PREDIKSI</div>
                 </div>
@@ -405,8 +406,12 @@ export default function MitraPage() {
                     : '#fef2f2'
                   const pc = pct === null ? '#9ca3af' : pct >= 80 ? '#166534' : pct >= 50 ? '#92400e' : '#dc2626'
                   const pb = pct === null ? '#f9fafb' : pct >= 80 ? '#f0fdf4' : pct >= 50 ? '#fefce8' : '#fef2f2'
+                  // Kekurangan TRX menuju target — gap > 0 berarti belum tercapai
+                  const gap = hasTarget ? tgt.target_trx - tgt.actual_trx_mtd : null
+                  const gapPct = hasTarget && tgt.target_trx > 0 ? Math.round((gap! / tgt.target_trx) * 1000) / 10 : null
+                  const gapColor = gap === null ? '#9ca3af' : gap > 0 ? (gapPct! >= 30 ? '#dc2626' : '#92400e') : '#166534'
                   return (
-                    <div key={m.mitra} style={{ display: 'grid', gridTemplateColumns: '1fr 70px 100px 100px 110px 110px', padding: '12px 16px', borderBottom: i < mitras.length - 1 ? '1px solid #f3f4f6' : 'none', alignItems: 'center', backgroundColor: '#fff' }}>
+                    <div key={m.mitra} style={{ display: 'grid', gridTemplateColumns: '1fr 70px 100px 100px 110px 110px 110px', padding: '12px 16px', borderBottom: i < mitras.length - 1 ? '1px solid #f3f4f6' : 'none', alignItems: 'center', backgroundColor: '#fff' }}>
                       <div>
                         <div style={{ fontSize: '13px', fontWeight: '600', color: '#111827' }}>{m.mitra}</div>
                         {!hasTarget
@@ -417,6 +422,19 @@ export default function MitraPage() {
                       <div style={{ textAlign: 'right', fontSize: '12px', color: '#374151' }}>{m.total_agents.toLocaleString('id')}</div>
                       <div style={{ textAlign: 'right', fontSize: '12px', color: '#374151' }}>{hasTarget ? tgt.actual_trx_mtd.toLocaleString('id') : <span style={{ color: '#d1d5db' }}>—</span>}</div>
                       <div style={{ textAlign: 'right', fontSize: '12px', fontWeight: '600', color: '#374151' }}>{hasTarget ? tgt.target_trx.toLocaleString('id') : <span style={{ color: '#d1d5db' }}>—</span>}</div>
+                      <div style={{ textAlign: 'right' }}>
+                        {!hasTarget ? <span style={{ color: '#d1d5db', fontSize: '12px' }}>—</span> : gap !== null && gap > 0 ? (
+                          <>
+                            <div style={{ fontSize: '12px', fontWeight: '600', color: gapColor }}>{gap.toLocaleString('id')} TRX</div>
+                            <div style={{ fontSize: '10px', color: gapColor, marginTop: '1px' }}>↓ {gapPct}% lagi</div>
+                          </>
+                        ) : (
+                          <>
+                            <div style={{ fontSize: '12px', fontWeight: '600', color: '#166534' }}>✓ Tercapai</div>
+                            <div style={{ fontSize: '10px', color: '#166534', marginTop: '1px' }}>+{Math.abs(gap ?? 0).toLocaleString('id')} TRX</div>
+                          </>
+                        )}
+                      </div>
                       <div style={{ textAlign: 'center' }}>{hasTarget && pct !== null ? <span style={{ padding: '3px 10px', borderRadius: '99px', fontSize: '12px', fontWeight: '700', backgroundColor: pb, color: pc }}>{pct}%</span> : <span style={{ color: '#d1d5db' }}>—</span>}</div>
                       <div style={{ textAlign: 'center' }}>{hasTarget && predLabel ? <span style={{ padding: '3px 8px', borderRadius: '99px', fontSize: '11px', fontWeight: '600', backgroundColor: predBg, color: predColor }}>{predLabel}</span> : <span style={{ color: '#d1d5db' }}>—</span>}</div>
                     </div>
