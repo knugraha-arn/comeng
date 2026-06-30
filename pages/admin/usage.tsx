@@ -101,10 +101,14 @@ export default function UsageMonitorPage() {
       const evts = data ?? []
       setEvents(evts)
 
-      // Agregasi per user
+      // Agregasi per user — event tanpa email (page_view pra-login di /login atau
+      // /auth/callback, sebelum session cookie ke-set) di-skip, bukan dilumpur jadi
+      // satu baris "unknown". Itu bukan satu user nyasar, tapi gabungan semua user
+      // sah pas baru mulai proses login, jadi gak representatif kalau ditampilkan.
       const byUser: Record<string, UsageEvent[]> = {}
       for (const e of evts) {
-        const key = e.email ?? 'unknown'
+        if (!e.email) continue
+        const key = e.email
         if (!byUser[key]) byUser[key] = []
         byUser[key].push(e)
       }
