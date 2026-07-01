@@ -170,7 +170,7 @@ export default function PulsePage() {
   async function loadAll() {
     setLoading(true)
     try {
-      const [s, d, v, h, c, a, fb, fbd] = await Promise.all([
+      const [s, d, v, h, c, a, fb] = await Promise.all([
         supabase.rpc('get_pulse_summary'),
         supabase.rpc('get_pulse_daily_fee'),
         supabase.rpc('get_pulse_network_velocity'),
@@ -178,7 +178,6 @@ export default function PulsePage() {
         supabase.rpc('get_pulse_card_types'),
         supabase.rpc('get_pulse_app_distribution'),
         supabase.rpc('get_pulse_fee_breakdown'),
-        supabase.rpc('get_pulse_fee_breakdown_detail'),
       ])
       setSummary(s.data?.[0] ?? null)
       setDailyFee(d.data ?? [])
@@ -187,10 +186,13 @@ export default function PulsePage() {
       setCardTypes(c.data ?? [])
       setAppDist(a.data ?? [])
       setFeeBreakdown(fb.data ?? [])
-      setFeeBreakdownDetail(fbd.data ?? [])
     } finally {
       setLoading(false)
     }
+    // Fetch breakdown detail terpisah — punya guard admin/ceo,
+    // dipisah supaya kalau gagal tidak mempengaruhi data utama di atas.
+    const fbd = await supabase.rpc('get_pulse_fee_breakdown_detail')
+    setFeeBreakdownDetail(fbd.data ?? [])
   }
 
   const tip = (text: string) => ({
