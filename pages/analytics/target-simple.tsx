@@ -550,11 +550,16 @@ export default function TargetSimplePage() {
                 </div>
               </div>
             <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-              <button onClick={snapshotNow} disabled={snapshotting}
-                title={`Simpan snapshot data ${MONTHS[selectedMonth-1]} ${selectedYear} ke riwayat bulanan — dipakai sebagai baseline target bulan depan`}
-                style={{ padding: '9px 14px', borderRadius: '8px', border: '1px solid #e5e7eb', backgroundColor: '#fff', color: snapshotting ? '#9ca3af' : '#374151', fontSize: '12px', fontWeight: '500', cursor: snapshotting ? 'not-allowed' : 'pointer' }}>
-                {snapshotting ? '⟳ Menyimpan...' : '📸 Snapshot Bulan Ini'}
-              </button>
+              <div>
+                <button onClick={snapshotNow} disabled={snapshotting}
+                  title={`Tutup bulan ${MONTHS[selectedMonth-1]} ${selectedYear} — simpan snapshot lengkap ke riwayat bulanan. Mencakup: breakdown TRX per tipe kartu (DIP/SWIPE/Lite&Plus/On Us), distribusi bucket agen (Productive/Moderate/Sporadic), dan efisiensi per Mitra. Data ini dipakai sebagai baseline target bulan depan dan ditampilkan di tab Historis Business Pulse.`}
+                  style={{ padding: '9px 14px', borderRadius: '8px', border: '1px solid #e5e7eb', backgroundColor: '#fff', color: snapshotting ? '#9ca3af' : '#374151', fontSize: '12px', fontWeight: '500', cursor: snapshotting ? 'not-allowed' : 'pointer', display: 'block' }}>
+                  {snapshotting ? '⟳ Menyimpan...' : `📸 Tutup Bulan & Snapshot`}
+                </button>
+                <div style={{ fontSize: '10px', color: '#9ca3af', marginTop: '3px', maxWidth: '160px', lineHeight: '1.3' }}>
+                  TRX · Revenue · Bucket agen · Efisiensi
+                </div>
+              </div>
               {snapshotDone && <span style={{ fontSize: '11px', color: '#16a34a', fontWeight: '600' }}>✅ Tersimpan</span>}
               <button onClick={() => setShowAddForm(!showAddForm)}
                 style={{ padding: '9px 16px', borderRadius: '8px', border: 'none', backgroundColor: '#0344D8', color: '#fff', fontSize: '13px', fontWeight: '600', cursor: 'pointer' }}>
