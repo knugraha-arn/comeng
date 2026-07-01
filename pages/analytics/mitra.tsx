@@ -705,6 +705,32 @@ export default function MitraPage() {
                         </tr>
                       ))}
                     </tbody>
+                    <tfoot>
+                      <tr style={{ backgroundColor: '#f1f5f9', borderTop: '2px solid #e5e7eb' }}>
+                        <td style={{ padding: '10px 14px', fontWeight: '700', color: '#374151', fontSize: '12px' }}>TOTAL</td>
+                        {months.map(m => {
+                          const rows = mitraList.map(mitra => idx.get(`${mitra}||${m}`)).filter(Boolean) as typeof historisData
+                          const sumActual = rows.reduce((s, d) => s + d.actual, 0)
+                          const sumTarget = rows.filter(d => d.target !== null && d.target! > 0).reduce((s, d) => s + d.target!, 0)
+                          if (sumActual === 0 && sumTarget === 0) {
+                            return <td key={m} style={{ textAlign: 'center', padding: '10px 12px', color: '#d1d5db' }}>—</td>
+                          }
+                          const pct = sumTarget > 0 ? Math.round(sumActual / sumTarget * 100) : null
+                          const color = pct === null ? '#374151' : pct >= 100 ? '#166534' : pct >= 85 ? '#92400e' : '#dc2626'
+                          return (
+                            <td key={m} style={{ textAlign: 'center', padding: '8px 12px' }}>
+                              {pct !== null && (
+                                <div style={{ fontSize: '13px', fontWeight: '800', color }}>{pct}%</div>
+                              )}
+                              <div style={{ fontSize: '10px', color: '#374151', fontWeight: '600', marginTop: pct !== null ? '1px' : 0 }}>
+                                {sumActual.toLocaleString('id')}
+                                {sumTarget > 0 && <span style={{ color: '#9ca3af', fontWeight: '400' }}> / {sumTarget.toLocaleString('id')}</span>}
+                              </div>
+                            </td>
+                          )
+                        })}
+                      </tr>
+                    </tfoot>
                   </table>
                   <div style={{ marginTop: '12px', display: 'flex', gap: '16px', fontSize: '11px', color: '#6b7280' }}>
                     <span><span style={{ display: 'inline-block', width: '10px', height: '10px', backgroundColor: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: '2px', marginRight: '4px' }} />≥100% Tercapai</span>
