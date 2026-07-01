@@ -117,13 +117,17 @@ export default function MitraPage() {
 
   const [mitras, setMitras]     = useState<MitraRow[]>([])
   const [loading, setLoading]   = useState(true)
-  const [pageTab, setPageTab]   = useState<'ranking' | 'achievement' | 'heatmap' | 'bubble' | 'kategori'>('ranking')
+  const [pageTab, setPageTab]   = useState<'ranking' | 'achievement' | 'heatmap' | 'bubble' | 'kategori' | 'historis'>('ranking')
   const [activeTab, setActiveTab] = useState<'accelerating' | 'stable' | 'decelerating' | ''>('')
   const [tooltip, setTooltip]   = useState<{ text: string, x: number, y: number } | null>(null)
   const [exporting, setExporting] = useState(false)
   const [windowStart, setWindowStart] = useState('')
   const [windowEnd, setWindowEnd]     = useState('')
   const [targetProgress, setTargetProgress] = useState<(MitraTarget & { mitra: string })[]>([])
+
+  // Tab Historis — achievement per bulan
+  const [historisData, setHistorisData] = useState<{ mitra: string; year: number; month: number; actual: number; target: number | null }[]>([])
+  const [loadingHistoris, setLoadingHistoris] = useState(false)
 
   const [selected, setSelected]           = useState<MitraRow | null>(null)
   const [detail, setDetail]               = useState<MitraDetail[]>([])
@@ -133,6 +137,40 @@ export default function MitraPage() {
   const [loadingDrawer, setLoadingDrawer] = useState(false)
 
   useEffect(() => { loadMitras() }, [router.asPath])
+  useEffect(() => { if (pageTab === 'historis') loadHistoris() }, [pageTab])
+
+  async function loadHistoris() {
+    setLoadingHistoris(true)
+    try {
+      const [snapRes, targetRes] = await Promise.all([
+        supabase.from('am_monthly_summary')
+          .select('mitra, period_year, period_month, trx_transfer')
+          .gte('period_year', 2026)
+          .order('period_year').order('period_month').order('mitra'),
+        supabase.from('am_mitra_targets')
+          .select('mitra, period_year, period_month, target_trx')
+          .gte('period_year', 2026)
+          .order('period_year').order('period_month'),
+      ])
+      const snaps  = snapRes.data  ?? []
+      const targets = targetRes.data ?? []
+      // Gabungkan — semua mitra yang punya snapshot atau target
+      const keys = new Map<string, { mitra: string; year: number; month: number; actual: number; target: number | null }>()
+      snaps.forEach(s => {
+        const k = `${s.mitra}||${s.period_year}||${s.period_month}`
+        keys.set(k, { mitra: s.mitra, year: s.period_year, month: s.period_month, actual: Number(s.trx_transfer), target: null })
+      })
+      targets.forEach(t => {
+        const k = `${t.mitra}||${t.period_year}||${t.period_month}`
+        const existing = keys.get(k)
+        if (existing) existing.target = Number(t.target_trx)
+        else keys.set(k, { mitra: t.mitra, year: t.period_year, month: t.period_month, actual: 0, target: Number(t.target_trx) })
+      })
+      setHistorisData(Array.from(keys.values()))
+    } finally {
+      setLoadingHistoris(false)
+    }
+  }
 
   async function loadMitras() {
     setLoading(true)
@@ -252,7 +290,8 @@ export default function MitraPage() {
             { key: 'heatmap',    label: '🔥 Heatmap' },
             { key: 'bubble',     label: '🫧 Volume vs Kualitas' },
             { key: 'kategori',   label: '⭐ Kategori' },
-          ] as { key: 'ranking'|'achievement'|'heatmap'|'bubble'|'kategori', label: string }[]).map(t => (
+            { key: 'historis',   label: '📅 Historis' },
+          ] as { key: 'ranking'|'achievement'|'heatmap'|'bubble'|'kategori'|'historis', label: string }[]).map(t => (
             <button key={t.key} onClick={() => setPageTab(t.key)}
               style={{ padding: '7px 14px', borderRadius: '8px', border: 'none', cursor: 'pointer', fontSize: '12px', fontWeight: pageTab === t.key ? '600' : '400', background: pageTab === t.key ? '#fff' : 'transparent', color: pageTab === t.key ? '#111827' : '#6b7280', boxShadow: pageTab === t.key ? '0 1px 3px rgba(0,0,0,0.08)' : 'none', transition: 'all 0.15s', whiteSpace: 'nowrap' }}>
               {t.label}
@@ -596,6 +635,82 @@ export default function MitraPage() {
                   <div style={{ fontSize: '11px', fontWeight: '600', color: '#9ca3af', marginBottom: '6px' }}>MITRA KECIL (dikecualikan)</div>
                   <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
                     {small.map(m => <span key={m.mitra} style={{ fontSize: '11px', padding: '2px 8px', borderRadius: '99px', backgroundColor: '#fff', border: '1px solid #e5e7eb', color: '#6b7280' }}>{m.mitra.split('(')[0].trim()} ({m.total_agents})</span>)}
+                  </div>
+                </div>
+              )}
+            </div>
+          )
+        })()}
+
+        {pageTab === 'historis' && (() => {
+          // Susun kolom bulan unik (sorted asc)
+          const months = Array.from(new Set(historisData.map(d => `${d.year}-${String(d.month).padStart(2,'0')}`)))
+            .sort()
+          // Susun baris mitra unik (sorted by nama)
+          const mitraList = Array.from(new Set(historisData.map(d => d.mitra))).sort()
+          // Index data untuk O(1) lookup
+          const idx = new Map(historisData.map(d => [`${d.mitra}||${d.year}-${String(d.month).padStart(2,'0')}`, d]))
+          const BULAN = ['','Jan','Feb','Mar','Apr','Mei','Jun','Jul','Agu','Sep','Okt','Nov','Des']
+
+          return (
+            <div>
+              <div style={{ fontSize: '13px', color: '#6b7280', marginBottom: '16px' }}>
+                Achievement TRX Transfer per bulan vs target yang ditetapkan. Data dari snapshot bulanan.
+              </div>
+              {loadingHistoris ? (
+                <div style={{ color: '#9ca3af', fontSize: '13px' }}>Memuat data historis...</div>
+              ) : (
+                <div style={{ overflowX: 'auto' }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px' }}>
+                    <thead>
+                      <tr style={{ backgroundColor: '#f9fafb' }}>
+                        <th style={{ textAlign: 'left', padding: '10px 14px', fontWeight: '700', color: '#374151', fontSize: '11px', letterSpacing: '0.05em', borderBottom: '2px solid #e5e7eb', whiteSpace: 'nowrap', minWidth: '180px' }}>MITRA</th>
+                        {months.map(m => {
+                          const [y, mo] = m.split('-')
+                          return (
+                            <th key={m} style={{ textAlign: 'center', padding: '10px 12px', fontWeight: '700', color: '#374151', fontSize: '11px', letterSpacing: '0.05em', borderBottom: '2px solid #e5e7eb', whiteSpace: 'nowrap' }}>
+                              {BULAN[parseInt(mo)]} {y}
+                            </th>
+                          )
+                        })}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {mitraList.map((mitra, ri) => (
+                        <tr key={mitra} style={{ backgroundColor: ri % 2 === 0 ? '#fff' : '#fafafa' }}>
+                          <td style={{ padding: '10px 14px', fontWeight: '600', color: '#111827', borderBottom: '1px solid #f3f4f6', whiteSpace: 'nowrap' }}>
+                            {mitra.length > 30 ? mitra.slice(0,30)+'…' : mitra}
+                          </td>
+                          {months.map(m => {
+                            const d = idx.get(`${mitra}||${m}`)
+                            if (!d || (d.actual === 0 && d.target === null)) {
+                              return <td key={m} style={{ textAlign: 'center', padding: '10px 12px', color: '#d1d5db', borderBottom: '1px solid #f3f4f6' }}>—</td>
+                            }
+                            const hasTarget = d.target !== null && d.target > 0
+                            const pct = hasTarget ? Math.round(d.actual / d.target! * 100) : null
+                            const bg    = pct === null ? 'transparent' : pct >= 100 ? '#f0fdf4' : pct >= 85 ? '#fefce8' : '#fef2f2'
+                            const color = pct === null ? '#374151'     : pct >= 100 ? '#166534' : pct >= 85 ? '#92400e' : '#dc2626'
+                            return (
+                              <td key={m} style={{ textAlign: 'center', padding: '8px 12px', borderBottom: '1px solid #f3f4f6', backgroundColor: bg }}>
+                                {pct !== null && (
+                                  <div style={{ fontSize: '13px', fontWeight: '700', color }}>{pct}%</div>
+                                )}
+                                <div style={{ fontSize: '10px', color: '#6b7280', marginTop: pct !== null ? '1px' : 0 }}>
+                                  {d.actual.toLocaleString('id')}
+                                  {hasTarget && <span style={{ color: '#9ca3af' }}> / {d.target!.toLocaleString('id')}</span>}
+                                </div>
+                              </td>
+                            )
+                          })}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                  <div style={{ marginTop: '12px', display: 'flex', gap: '16px', fontSize: '11px', color: '#6b7280' }}>
+                    <span><span style={{ display: 'inline-block', width: '10px', height: '10px', backgroundColor: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: '2px', marginRight: '4px' }} />≥100% Tercapai</span>
+                    <span><span style={{ display: 'inline-block', width: '10px', height: '10px', backgroundColor: '#fefce8', border: '1px solid #fde68a', borderRadius: '2px', marginRight: '4px' }} />85–99% Hampir</span>
+                    <span><span style={{ display: 'inline-block', width: '10px', height: '10px', backgroundColor: '#fef2f2', border: '1px solid #fecaca', borderRadius: '2px', marginRight: '4px' }} />{'<'}85% Meleset</span>
+                    <span style={{ color: '#9ca3af' }}>— Tidak ada target/data</span>
                   </div>
                 </div>
               )}
