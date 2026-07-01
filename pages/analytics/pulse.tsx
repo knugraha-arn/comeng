@@ -67,6 +67,42 @@ interface FeeBreakdown {
   pct:         number
 }
 
+interface FeeBreakdownDetail {
+  label:         string
+  sort_order:    number
+  total_trx:     number
+  total_revenue: number
+  unique_agents: number
+  pct_trx:       number
+}
+
+interface MonthlyHistoris {
+  mitra:                    string
+  period_year:              number
+  period_month:             number
+  trx_transfer_dip:         number
+  revenue_transfer_dip:     number
+  trx_transfer_swipe:       number
+  revenue_transfer_swipe:   number
+  trx_transfer_3500_dip:    number
+  revenue_transfer_3500_dip: number
+  trx_transfer_3500_swipe:  number
+  revenue_transfer_3500_swipe: number
+  trx_cek_saldo_dip:        number
+  revenue_cek_saldo_dip:    number
+  trx_cek_saldo_swipe:      number
+  revenue_cek_saldo_swipe:  number
+  trx_on_us:                number
+  trx_total:                number
+  total_fee:                number
+  active_agents:            number
+  agents_productive:        number
+  agents_moderate:          number
+  agents_sporadic:          number
+  avg_trx_per_agent:        number
+  fee_per_agent:            number
+}
+
 interface AppDistribution {
   app_name: string
   total_agents: number
@@ -107,15 +143,34 @@ export default function PulsePage() {
   const [cardTypes, setCardTypes] = useState<CardType[]>([])
   const [appDist, setAppDist] = useState<AppDistribution[]>([])
   const [feeBreakdown, setFeeBreakdown] = useState<FeeBreakdown[]>([])
+  const [feeBreakdownDetail, setFeeBreakdownDetail] = useState<FeeBreakdownDetail[]>([])
+  const [historisData, setHistorisData] = useState<MonthlyHistoris[]>([])
+  const [loadingHistoris, setLoadingHistoris] = useState(false)
+  const [pulseTab, setPulseTab] = useState<'mtd' | 'historis'>('mtd')
   const [loading, setLoading] = useState(true)
   const [tooltip, setTooltip] = useState<{ text: string, x: number, y: number } | null>(null)
 
   useEffect(() => { loadAll() }, [router.asPath])
+  useEffect(() => { if (pulseTab === 'historis') loadHistoris() }, [pulseTab])
+
+  async function loadHistoris() {
+    setLoadingHistoris(true)
+    try {
+      const { data } = await supabase
+        .from('am_monthly_summary')
+        .select('mitra,period_year,period_month,trx_transfer_dip,revenue_transfer_dip,trx_transfer_swipe,revenue_transfer_swipe,trx_transfer_3500_dip,revenue_transfer_3500_dip,trx_transfer_3500_swipe,revenue_transfer_3500_swipe,trx_cek_saldo_dip,revenue_cek_saldo_dip,trx_cek_saldo_swipe,revenue_cek_saldo_swipe,trx_on_us,trx_total,total_fee,active_agents,agents_productive,agents_moderate,agents_sporadic,avg_trx_per_agent,fee_per_agent')
+        .gte('period_year', 2026)
+        .order('period_year').order('period_month').order('mitra')
+      setHistorisData((data ?? []) as MonthlyHistoris[])
+    } finally {
+      setLoadingHistoris(false)
+    }
+  }
 
   async function loadAll() {
     setLoading(true)
     try {
-      const [s, d, v, h, c, a, fb] = await Promise.all([
+      const [s, d, v, h, c, a, fb, fbd] = await Promise.all([
         supabase.rpc('get_pulse_summary'),
         supabase.rpc('get_pulse_daily_fee'),
         supabase.rpc('get_pulse_network_velocity'),
@@ -123,6 +178,7 @@ export default function PulsePage() {
         supabase.rpc('get_pulse_card_types'),
         supabase.rpc('get_pulse_app_distribution'),
         supabase.rpc('get_pulse_fee_breakdown'),
+        supabase.rpc('get_pulse_fee_breakdown_detail'),
       ])
       setSummary(s.data?.[0] ?? null)
       setDailyFee(d.data ?? [])
@@ -131,6 +187,7 @@ export default function PulsePage() {
       setCardTypes(c.data ?? [])
       setAppDist(a.data ?? [])
       setFeeBreakdown(fb.data ?? [])
+      setFeeBreakdownDetail(fbd.data ?? [])
     } finally {
       setLoading(false)
     }
@@ -204,8 +261,21 @@ export default function PulsePage() {
           </button>
         </div>
 
+        {/* Tab switcher */}
+        <div style={{ display: 'flex', gap: '4px', marginBottom: '24px', backgroundColor: '#f3f4f6', padding: '4px', borderRadius: '10px', width: 'fit-content' }}>
+          {([['mtd', '⚡ MTD Bulan Ini'], ['historis', '📅 Historis']] as [string, string][]).map(([key, label]) => (
+            <button key={key} onClick={() => setPulseTab(key as 'mtd' | 'historis')} style={{
+              padding: '7px 18px', borderRadius: '7px', border: 'none', fontSize: '13px', fontWeight: '600', cursor: 'pointer',
+              backgroundColor: pulseTab === key ? '#fff' : 'transparent',
+              color: pulseTab === key ? '#111827' : '#6b7280',
+              boxShadow: pulseTab === key ? '0 1px 3px rgba(0,0,0,0.1)' : 'none',
+              transition: 'all 0.15s',
+            }}>{label}</button>
+          ))}
+        </div>
+
         {/* Signals */}
-        {signals.length > 0 && (
+        {pulseTab === 'mtd' && signals.length > 0 && (
           <div style={{ marginBottom: '24px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
             {signals.map((s, i) => (
               <div key={i} style={{
@@ -221,6 +291,9 @@ export default function PulsePage() {
             ))}
           </div>
         )}
+
+        {/* MTD Content */}
+        {pulseTab === 'mtd' && (<>
 
         {/* Summary Cards */}
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: '12px', marginBottom: '24px' }}>
@@ -631,7 +704,173 @@ export default function PulsePage() {
 
         </div>{/* end App Distribution + Fee 3500 Row */}
 
+        {/* Breakdown Detail per Tipe Kartu — MTD */}
+        <div style={{ backgroundColor: '#fff', border: '1px solid #e5e7eb', borderRadius: '12px', padding: '20px 24px', marginBottom: '24px' }}>
+          <div style={{ fontSize: '13px', fontWeight: '700', color: '#111827', marginBottom: '4px' }}>
+            Breakdown Revenue per Tipe Kartu
+            <span {...tip('Breakdown TRX dan revenue berdasarkan tipe transaksi dan jenis gesek kartu. DIP = chip, SWIPE = magnetic stripe. Lite & Plus = agen rekening Arranet fee Rp3.500.')}
+              style={{ marginLeft: '6px', fontSize: '11px', color: '#9ca3af', cursor: 'default', fontWeight: '400' }}>ⓘ</span>
+          </div>
+          <div style={{ fontSize: '11px', color: '#9ca3af', marginBottom: '16px' }}>Bulan berjalan (MTD)</div>
+          {loading ? <div style={{ color: '#9ca3af', fontSize: '12px' }}>Memuat...</div> : (
+            <div style={{ overflowX: 'auto' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px' }}>
+                <thead>
+                  <tr style={{ backgroundColor: '#f9fafb' }}>
+                    {['TIPE TRANSAKSI','TOTAL TRX','REVENUE','AGEN UNIK','% TRX'].map((h, i) => (
+                      <th key={h} style={{ padding: '8px 12px', textAlign: i === 0 ? 'left' : 'right', fontWeight: '700', color: '#9ca3af', fontSize: '10px', letterSpacing: '0.05em', borderBottom: '2px solid #e5e7eb', whiteSpace: 'nowrap' }}>{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {feeBreakdownDetail.map((row, i) => {
+                    const isOnUs = row.total_revenue === 0
+                    const color = isOnUs ? '#9ca3af' : row.sort_order <= 2 ? '#0344D8' : row.sort_order <= 4 ? '#7c3aed' : '#374151'
+                    return (
+                      <tr key={row.label} style={{ backgroundColor: i % 2 === 0 ? '#fff' : '#fafafa', borderBottom: '1px solid #f3f4f6' }}>
+                        <td style={{ padding: '10px 12px', fontWeight: '600', color: '#111827' }}>
+                          <span style={{ display: 'inline-block', width: '8px', height: '8px', borderRadius: '2px', backgroundColor: color, marginRight: '8px', verticalAlign: 'middle' }} />
+                          {row.label}
+                        </td>
+                        <td style={{ padding: '10px 12px', textAlign: 'right', color: '#374151' }}>{row.total_trx.toLocaleString('id')}</td>
+                        <td style={{ padding: '10px 12px', textAlign: 'right', color: '#374151', fontWeight: '600' }}>{isOnUs ? '—' : formatFee(row.total_revenue)}</td>
+                        <td style={{ padding: '10px 12px', textAlign: 'right', color: '#374151' }}>{row.unique_agents.toLocaleString('id')}</td>
+                        <td style={{ padding: '10px 12px', textAlign: 'right', fontWeight: '700', color }}>{row.pct_trx}%</td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+                <tfoot>
+                  <tr style={{ backgroundColor: '#f1f5f9', borderTop: '2px solid #e5e7eb' }}>
+                    <td style={{ padding: '10px 12px', fontWeight: '700', color: '#374151' }}>TOTAL</td>
+                    <td style={{ padding: '10px 12px', textAlign: 'right', fontWeight: '700', color: '#111827' }}>{feeBreakdownDetail.reduce((s,r) => s+r.total_trx, 0).toLocaleString('id')}</td>
+                    <td style={{ padding: '10px 12px', textAlign: 'right', fontWeight: '700', color: '#111827' }}>{formatFee(feeBreakdownDetail.reduce((s,r) => s+r.total_revenue, 0))}</td>
+                    <td style={{ padding: '10px 12px', textAlign: 'right', color: '#9ca3af' }}>—</td>
+                    <td style={{ padding: '10px 12px', textAlign: 'right', fontWeight: '700', color: '#374151' }}>100%</td>
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+          )}
+        </div>
 
+        </>)} {/* end MTD Content */}
+
+        {/* Historis Tab */}
+        {pulseTab === 'historis' && (() => {
+          const BULAN = ['','Jan','Feb','Mar','Apr','Mei','Jun','Jul','Agu','Sep','Okt','Nov','Des']
+          // Kolom bulan unik
+          const months = Array.from(new Set(historisData.map(d => `${d.period_year}-${String(d.period_month).padStart(2,'0')}`)))
+            .sort()
+          // Agregat per bulan (sum semua mitra)
+          const aggByMonth = (mk: string) => {
+            const [yr, mo] = mk.split('-').map(Number)
+            const rows = historisData.filter(d => d.period_year === yr && d.period_month === mo)
+            return {
+              trx_transfer_dip:           rows.reduce((s,r) => s + (r.trx_transfer_dip ?? 0), 0),
+              revenue_transfer_dip:       rows.reduce((s,r) => s + (r.revenue_transfer_dip ?? 0), 0),
+              trx_transfer_swipe:         rows.reduce((s,r) => s + (r.trx_transfer_swipe ?? 0), 0),
+              revenue_transfer_swipe:     rows.reduce((s,r) => s + (r.revenue_transfer_swipe ?? 0), 0),
+              trx_transfer_3500_dip:      rows.reduce((s,r) => s + (r.trx_transfer_3500_dip ?? 0), 0),
+              revenue_transfer_3500_dip:  rows.reduce((s,r) => s + (r.revenue_transfer_3500_dip ?? 0), 0),
+              trx_transfer_3500_swipe:    rows.reduce((s,r) => s + (r.trx_transfer_3500_swipe ?? 0), 0),
+              revenue_transfer_3500_swipe: rows.reduce((s,r) => s + (r.revenue_transfer_3500_swipe ?? 0), 0),
+              trx_cek_saldo_dip:          rows.reduce((s,r) => s + (r.trx_cek_saldo_dip ?? 0), 0),
+              revenue_cek_saldo_dip:      rows.reduce((s,r) => s + (r.revenue_cek_saldo_dip ?? 0), 0),
+              trx_cek_saldo_swipe:        rows.reduce((s,r) => s + (r.trx_cek_saldo_swipe ?? 0), 0),
+              revenue_cek_saldo_swipe:    rows.reduce((s,r) => s + (r.revenue_cek_saldo_swipe ?? 0), 0),
+              trx_on_us:                  rows.reduce((s,r) => s + (r.trx_on_us ?? 0), 0),
+              trx_total:                  rows.reduce((s,r) => s + (r.trx_total ?? 0), 0),
+              total_fee:                  rows.reduce((s,r) => s + Number(r.total_fee ?? 0), 0),
+              active_agents:              rows.reduce((s,r) => s + (r.active_agents ?? 0), 0),
+              agents_productive:          rows.reduce((s,r) => s + (r.agents_productive ?? 0), 0),
+              agents_moderate:            rows.reduce((s,r) => s + (r.agents_moderate ?? 0), 0),
+              agents_sporadic:            rows.reduce((s,r) => s + (r.agents_sporadic ?? 0), 0),
+            }
+          }
+          const aggs = months.map(mk => ({ mk, ...aggByMonth(mk) }))
+
+          const rows: { label: string; getValue: (a: ReturnType<typeof aggByMonth>) => { trx: number; rev: number | null } }[] = [
+            { label: 'Transfer DIP',              getValue: a => ({ trx: a.trx_transfer_dip,    rev: a.revenue_transfer_dip }) },
+            { label: 'Transfer SWIPE',             getValue: a => ({ trx: a.trx_transfer_swipe,  rev: a.revenue_transfer_swipe }) },
+            { label: 'Transfer DIP (Lite & Plus)', getValue: a => ({ trx: a.trx_transfer_3500_dip, rev: a.revenue_transfer_3500_dip }) },
+            { label: 'Transfer SWIPE (Lite+)',     getValue: a => ({ trx: a.trx_transfer_3500_swipe, rev: a.revenue_transfer_3500_swipe }) },
+            { label: 'Cek Saldo DIP',              getValue: a => ({ trx: a.trx_cek_saldo_dip,   rev: a.revenue_cek_saldo_dip }) },
+            { label: 'Cek Saldo SWIPE',            getValue: a => ({ trx: a.trx_cek_saldo_swipe, rev: a.revenue_cek_saldo_swipe }) },
+            { label: 'On Us (Nobu)',               getValue: a => ({ trx: a.trx_on_us,           rev: null }) },
+          ]
+
+          return (
+            <div>
+              <div style={{ fontSize: '13px', color: '#6b7280', marginBottom: '16px' }}>Breakdown TRX dan revenue per tipe kartu dari snapshot bulanan. Setiap sel: TRX di atas, Revenue di bawah.</div>
+              {loadingHistoris ? (
+                <div style={{ color: '#9ca3af', fontSize: '13px' }}>Memuat data historis...</div>
+              ) : months.length === 0 ? (
+                <div style={{ color: '#9ca3af', fontSize: '13px' }}>Belum ada data snapshot.</div>
+              ) : (
+                <div style={{ overflowX: 'auto' }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px' }}>
+                    <thead>
+                      <tr style={{ backgroundColor: '#f9fafb' }}>
+                        <th style={{ padding: '10px 14px', textAlign: 'left', fontWeight: '700', color: '#9ca3af', fontSize: '11px', letterSpacing: '0.05em', borderBottom: '2px solid #e5e7eb', whiteSpace: 'nowrap', minWidth: '180px' }}>TIPE TRANSAKSI</th>
+                        {months.map(mk => {
+                          const [yr, mo] = mk.split('-')
+                          return (
+                            <th key={mk} style={{ padding: '10px 16px', textAlign: 'center', fontWeight: '700', color: '#9ca3af', fontSize: '11px', letterSpacing: '0.05em', borderBottom: '2px solid #e5e7eb', whiteSpace: 'nowrap' }}>
+                              {BULAN[parseInt(mo)]} {yr}
+                            </th>
+                          )
+                        })}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {rows.map((row, ri) => (
+                        <tr key={row.label} style={{ backgroundColor: ri % 2 === 0 ? '#fff' : '#fafafa' }}>
+                          <td style={{ padding: '10px 14px', fontWeight: '600', color: '#111827', borderBottom: '1px solid #f3f4f6', whiteSpace: 'nowrap' }}>{row.label}</td>
+                          {aggs.map(a => {
+                            const val = row.getValue(a)
+                            return (
+                              <td key={a.mk} style={{ padding: '8px 16px', textAlign: 'center', borderBottom: '1px solid #f3f4f6' }}>
+                                <div style={{ fontSize: '13px', fontWeight: '600', color: '#111827' }}>{val.trx.toLocaleString('id')}</div>
+                                {val.rev !== null && <div style={{ fontSize: '10px', color: '#6b7280', marginTop: '1px' }}>{formatFee(val.rev)}</div>}
+                              </td>
+                            )
+                          })}
+                        </tr>
+                      ))}
+                    </tbody>
+                    <tfoot>
+                      <tr style={{ backgroundColor: '#f1f5f9', borderTop: '2px solid #e5e7eb' }}>
+                        <td style={{ padding: '10px 14px', fontWeight: '700', color: '#374151' }}>TOTAL TRX</td>
+                        {aggs.map(a => <td key={a.mk} style={{ padding: '10px 16px', textAlign: 'center', fontWeight: '700', color: '#111827' }}>{a.trx_total.toLocaleString('id')}</td>)}
+                      </tr>
+                      <tr style={{ backgroundColor: '#f1f5f9' }}>
+                        <td style={{ padding: '10px 14px', fontWeight: '700', color: '#374151' }}>TOTAL REVENUE</td>
+                        {aggs.map(a => <td key={a.mk} style={{ padding: '10px 16px', textAlign: 'center', fontWeight: '700', color: '#166534' }}>{formatFee(a.total_fee)}</td>)}
+                      </tr>
+                      <tr style={{ backgroundColor: '#f1f5f9' }}>
+                        <td style={{ padding: '10px 14px', fontWeight: '700', color: '#374151' }}>AGEN AKTIF</td>
+                        {aggs.map(a => <td key={a.mk} style={{ padding: '10px 16px', textAlign: 'center', color: '#374151' }}>{a.active_agents.toLocaleString('id')}</td>)}
+                      </tr>
+                      <tr style={{ backgroundColor: '#f1f5f9' }}>
+                        <td style={{ padding: '10px 14px', fontWeight: '700', color: '#374151' }}>Productive / Moderate / Sporadic</td>
+                        {aggs.map(a => (
+                          <td key={a.mk} style={{ padding: '10px 16px', textAlign: 'center', fontSize: '11px', color: '#374151' }}>
+                            <span style={{ color: '#166534' }}>{a.agents_productive}</span>
+                            {' / '}
+                            <span style={{ color: '#92400e' }}>{a.agents_moderate}</span>
+                            {' / '}
+                            <span style={{ color: '#6b7280' }}>{a.agents_sporadic}</span>
+                          </td>
+                        ))}
+                      </tr>
+                    </tfoot>
+                  </table>
+                </div>
+              )}
+            </div>
+          )
+        })()}
 
       </div>
     </Layout>
