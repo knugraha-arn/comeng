@@ -22,6 +22,8 @@ export async function buildContext(wagId?: string): Promise<string> {
     { data: mitraMtdStats },
     { data: topAgentsPerMitra },
     { data: mitraTargetProgress },
+    { data: mitraHistorisSnap },
+    { data: mitraHistorisTarget },
   ] = await Promise.all([
     supabase.from('wags').select('id, name, status, last_processed_at').eq('status', 'active'),
     supabase.from('rangers').select('id, full_name, display_name, phone_number, wag_id, wags(name)').eq('status', 'active'),
@@ -40,6 +42,9 @@ export async function buildContext(wagId?: string): Promise<string> {
     supabase.rpc('get_top_agents_per_mitra'),
     // Target Mitra bulan ini
     supabase.rpc('get_mitra_target_progress'),
+    // Achievement historis per Mitra (dari snapshot bulanan)
+    supabase.from('am_monthly_summary').select('mitra, period_year, period_month, trx_transfer').gte('period_year', 2026).order('period_year').order('period_month').order('mitra'),
+    supabase.from('am_mitra_targets').select('mitra, period_year, period_month, target_trx').gte('period_year', 2026).order('period_year').order('period_month'),
   ])
 
   // Build lookup MTD per Mitra dari RPC (sudah diagregasi di DB)
@@ -258,10 +263,52 @@ export async function buildContext(wagId?: string): Promise<string> {
         const projected = avgDekade > 0
           ? Math.round(t.actual_trx_mtd + avgDekade * (t.days_in_month - t.days_elapsed))
           : Math.round(t.actual_trx_mtd / Math.max(t.days_elapsed, 1) * t.days_in_month)
-        const willAchieve = projected >= t.target_trx
-        lines.push(`  ${t.mitra}: target ${t.target_trx.toLocaleString()} TRX | aktual MTD ${t.actual_trx_mtd.toLocaleString()} TRX | achievement ${t.achievement_pct}% | proyeksi akhir bulan ${projected.toLocaleString()} TRX (Dekade ${t.dekade_number}-based) | prediksi: ${willAchieve ? 'TERCAPAI ✅' : 'TIDAK TERCAPAI ⚠️'} | hari berjalan ${t.days_elapsed}/${t.days_in_month}`)
+        const ontrackPct = Number(t.ontrack_threshold ?? 90)
+        const atriskPct  = Number(t.atrisk_threshold ?? 70)
+        const projPct    = t.target_trx > 0 ? (projected / t.target_trx) * 100 : 0
+        const prediksi   = projPct >= ontrackPct ? 'ON TRACK ✅' : projPct >= atriskPct ? 'AT RISK ⚠️' : 'JAUH DARI TARGET 🔴'
+        lines.push(`  ${t.mitra}: target ${t.target_trx.toLocaleString()} TRX | aktual MTD ${t.actual_trx_mtd.toLocaleString()} TRX | achievement ${t.achievement_pct}% | proyeksi akhir bulan ${projected.toLocaleString()} TRX (${Math.round(projPct)}% dari target) | prediksi: ${prediksi} | hari berjalan ${t.days_elapsed}/${t.days_in_month}`)
       }
       lines.push('')
+    }
+
+    // Achievement historis per Mitra — dari snapshot bulanan (am_monthly_summary) + target (am_mitra_targets)
+    if (mitraHistorisSnap && mitraHistorisSnap.length > 0) {
+      // Gabungkan snapshot + target per mitra+bulan
+      const histMap = new Map<string, { mitra: string; year: number; month: number; actual: number; target: number | null }>()
+      for (const s of mitraHistorisSnap) {
+        const k = `${s.mitra}||${s.period_year}||${s.period_month}`
+        histMap.set(k, { mitra: s.mitra, year: s.period_year, month: s.period_month, actual: Number(s.trx_transfer), target: null })
+      }
+      for (const t of mitraHistorisTarget ?? []) {
+        const k = `${t.mitra}||${t.period_year}||${t.period_month}`
+        const ex = histMap.get(k)
+        if (ex) ex.target = Number(t.target_trx)
+        else histMap.set(k, { mitra: t.mitra, year: t.period_year, month: t.period_month, actual: 0, target: Number(t.target_trx) })
+      }
+      // Kelompokkan per bulan supaya ringkas
+      const byMonth = new Map<string, typeof histMap extends Map<string, infer V> ? V[] : never>()
+      for (const v of histMap.values()) {
+        const mk = `${v.year}-${String(v.month).padStart(2,'0')}`
+        if (!byMonth.has(mk)) byMonth.set(mk, [])
+        byMonth.get(mk)!.push(v)
+      }
+      const BULAN = ['','Jan','Feb','Mar','Apr','Mei','Jun','Jul','Agu','Sep','Okt','Nov','Des']
+      lines.push('Achievement historis TRX Transfer per Mitra (dari snapshot bulanan):')
+      for (const [mk, rows] of Array.from(byMonth.entries()).sort()) {
+        const [yr, mo] = mk.split('-')
+        lines.push(`  ${BULAN[parseInt(mo)]} ${yr}:`)
+        const sumActual = rows.reduce((s,r) => s + r.actual, 0)
+        const sumTarget = rows.filter(r => r.target !== null).reduce((s,r) => s + (r.target ?? 0), 0)
+        for (const r of rows.sort((a,b) => a.mitra.localeCompare(b.mitra))) {
+          const pctStr = r.target ? ` (${Math.round(r.actual/r.target*100)}% dari target ${r.target.toLocaleString()})` : ' (tidak ada target)'
+          lines.push(`    ${r.mitra}: ${r.actual.toLocaleString()} TRX${pctStr}`)
+        }
+        if (sumTarget > 0) {
+          lines.push(`    → TOTAL: ${sumActual.toLocaleString()} / ${sumTarget.toLocaleString()} TRX = ${Math.round(sumActual/sumTarget*100)}% overall achievement`)
+        }
+        lines.push('')
+      }
     }
   }
 
