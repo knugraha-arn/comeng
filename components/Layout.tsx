@@ -84,7 +84,7 @@ export default function Layout({ children, title }: { children: React.ReactNode;
         .from('users')
         .select('is_approved, role')
         .eq('id', session.user.id)
-        .single()
+        .maybeSingle()
 
       sessionChecked = true
       sessionEmail = userEmail
