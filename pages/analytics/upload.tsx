@@ -92,6 +92,8 @@ export default function UploadCenter() {
   const [isDragging, setIsDragging] = useState(false)
   const [computeStatus, setComputeStatus] = useState<ComputeStatus>('idle')
   const [computeMessage, setComputeMessage] = useState('')
+  const [emailStatus, setEmailStatus] = useState<'idle' | 'sending' | 'sent' | 'error'>('idle')
+  const [emailMessage, setEmailMessage] = useState('')
   const inputRef = useRef<HTMLInputElement>(null)
 
   const isBusy = !['idle', 'success', 'error'].includes(stage)
@@ -342,6 +344,8 @@ export default function UploadCenter() {
   async function handleComputeMetrics() {
     setComputeStatus('running')
     setComputeMessage('')
+    setEmailStatus('idle')
+    setEmailMessage('')
     try {
       const { data: { session } } = await supabase.auth.getSession()
       if (!session) {
@@ -372,6 +376,30 @@ export default function UploadCenter() {
         `${data.summary?.agents_computed ?? 0} agen dihitung` +
         (b ? ` (${b.productive ?? 0} productive, ${b.moderate ?? 0} moderate, ${b.sporadic ?? 0} sporadic)` : '')
       )
+
+      // Auto-trigger email Pulse setelah compute berhasil
+      setEmailStatus('sending')
+      setEmailMessage('')
+      try {
+        const emailRes = await fetch('/api/notify/pulse-email', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${session.access_token}`,
+          },
+        })
+        const emailData = await emailRes.json()
+        if (!emailRes.ok) {
+          setEmailStatus('error')
+          setEmailMessage(emailData.error ?? 'Gagal mengirim email Pulse')
+        } else {
+          setEmailStatus('sent')
+          setEmailMessage(`Email Pulse terkirim ke ${emailData.recipients ?? '?'} penerima`)
+        }
+      } catch (emailErr) {
+        setEmailStatus('error')
+        setEmailMessage(emailErr instanceof Error ? emailErr.message : 'Gagal mengirim email Pulse')
+      }
     } catch (err) {
       setComputeStatus('error')
       setComputeMessage(err instanceof Error ? err.message : 'Terjadi kesalahan')
@@ -613,6 +641,24 @@ export default function UploadCenter() {
               )}
               {computeStatus === 'error' && (
                 <div style={{ fontSize: '12px', color: '#b00020', fontWeight: '600' }}>⚠️ {computeMessage}</div>
+              )}
+
+              {/* Notif email — muncul otomatis setelah compute berhasil */}
+              {emailStatus !== 'idle' && (
+                <div style={{ marginTop: '8px', paddingTop: '8px', borderTop: '1px solid rgba(0,0,0,0.06)', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  {emailStatus === 'sending' && (
+                    <>
+                      <span style={{ display: 'inline-block', width: '10px', height: '10px', border: '2px solid #bfdbfe', borderTopColor: '#0344D8', borderRadius: '50%', animation: 'spin 0.8s linear infinite', flexShrink: 0 }} />
+                      <span style={{ fontSize: '11px', color: '#0344D8' }}>Mengirim email Pulse MTD...</span>
+                    </>
+                  )}
+                  {emailStatus === 'sent' && (
+                    <span style={{ fontSize: '11px', color: '#166534', fontWeight: '600' }}>📧 {emailMessage}</span>
+                  )}
+                  {emailStatus === 'error' && (
+                    <span style={{ fontSize: '11px', color: '#92400e', fontWeight: '600' }}>⚠️ Email gagal: {emailMessage}</span>
+                  )}
+                </div>
               )}
               <style>{'@keyframes spin { to { transform: rotate(360deg) } }'}</style>
             </div>
