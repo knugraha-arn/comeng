@@ -714,7 +714,19 @@ export default function PulsePage() {
               style={{ marginLeft: '6px', fontSize: '11px', color: '#9ca3af', cursor: 'default', fontWeight: '400' }}>ⓘ</span>
           </div>
           <div style={{ fontSize: '11px', color: '#9ca3af', marginBottom: '16px' }}>Bulan berjalan (MTD)</div>
-          {loading ? <div style={{ color: '#9ca3af', fontSize: '12px' }}>Memuat...</div> : (
+          {loading ? (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              {[1,2,3,4,5,6,7].map(i => (
+                <div key={i} style={{ display: 'grid', gridTemplateColumns: '1fr 100px 120px 100px 70px', gap: '12px', padding: '10px 12px', borderBottom: '1px solid #f3f4f6', alignItems: 'center' }}>
+                  <Skeleton width="60%" />
+                  <Skeleton width="100%" />
+                  <Skeleton width="100%" />
+                  <Skeleton width="100%" />
+                  <Skeleton width="100%" />
+                </div>
+              ))}
+            </div>
+          ) : (
             <div style={{ overflowX: 'auto' }}>
               <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px' }}>
                 <thead>
