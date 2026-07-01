@@ -113,14 +113,14 @@ export default function TargetSimplePage() {
   // Mitra yang sudah ada target (untuk exclude dari dropdown)
   const mitraWithTarget = mitraProgress.map(p => p.mitra)
 
-  // Auth check — hanya admin/super_admin yang boleh akses
+  // Auth check — admin & ceo yang boleh akses
   useEffect(() => {
     async function checkRole() {
       const { data: { session } } = await supabase.auth.getSession()
       if (!session) { router.replace('/login'); return }
       const { data: userData } = await supabase
-        .from('users').select('role').eq('id', session.user.id).single()
-      if (!['admin', 'super_admin'].includes(userData?.role ?? '')) {
+        .from('users').select('role').eq('id', session.user.id).maybeSingle()
+      if (!['admin', 'ceo'].includes(userData?.role ?? '')) {
         router.replace('/unauthorized')
       }
     }
