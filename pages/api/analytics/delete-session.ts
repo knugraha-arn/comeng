@@ -15,7 +15,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   const { data: userData } = await supabase
     .from('users').select('role').eq('id', user.id).single()
-  if (!['admin', 'super_admin'].includes(userData?.role ?? '')) {
+  if (!['admin', 'ceo'].includes(userData?.role ?? '')) {
     return res.status(403).json({ error: 'Hanya admin yang dapat menghapus data' })
   }
 
