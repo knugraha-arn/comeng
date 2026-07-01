@@ -69,13 +69,16 @@ export default function Layout({ children, title }: { children: React.ReactNode;
       setName(userName)
       setAvatar(userAvatar)
 
+      // upsert profil login — sengaja TIDAK mengirim role/is_approved supaya
+      // ON CONFLICT DO UPDATE tidak pernah menimpa dua kolom itu. Supabase
+      // upsert hanya mengupdate kolom yang ada di payload.
       supabase.from('users').upsert({
         id: session.user.id,
         email: userEmail,
         full_name: userName,
         avatar_url: userAvatar,
         last_login_at: new Date().toISOString(),
-      }, { onConflict: 'id' }).then(() => {})
+      }, { onConflict: 'id', ignoreDuplicates: false }).then(() => {})
 
       const { data: userData } = await supabase
         .from('users')
